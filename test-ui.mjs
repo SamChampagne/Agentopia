@@ -1,4 +1,5 @@
 // Test de l'interface plein écran : rend l'App, simule clavier ET clics souris
+process.env.CLAUDETOPIA_SANS_REPRISE = '1';
 import React from 'react';
 import { render } from 'ink-testing-library';
 import { App } from './dist/ui/App.js';

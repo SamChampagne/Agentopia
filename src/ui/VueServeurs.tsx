@@ -10,7 +10,7 @@ import { chargerConfig, sauverConfig } from '../config.js';
 import { nomDossierClaude } from '../usage.js';
 import { ouvrirOnglet } from '../lanceurs.js';
 import { getProjets } from '../commandes.js';
-import { theme } from '../theme.js';
+import { theme, fond } from '../theme.js';
 import { bus } from './bus.js';
 
 // Un bloc de 4 lignes + 1 vide par serveur
@@ -131,7 +131,7 @@ export function VueServeurs({ fermer, initial }: { fermer: () => void; initial?:
                     const connexions = d.connexions.map((cx) => decrireConnexion(cx, d)).filter((x) => x.serveur === s);
                     const usage = d.usage.get(s) ?? [];
                     const docker = d.docker.find((h) => h.nom === s.nom);
-                    const bord = actif ? theme.accent : '#334155';
+                    const bord = actif ? theme.accent : fond.bordure;
                     return (
                         <Box key={s.nom} flexDirection="column" height={BLOC} flexShrink={0}>
                             {/* 1. Nom, adresse, état du port */}
@@ -139,7 +139,7 @@ export function VueServeurs({ fermer, initial }: { fermer: () => void; initial?:
                                 <Text wrap="truncate-end">
                                     <Text color={bord}>{actif ? '▌ ' : '  '}</Text>
                                     <Text color={ok === undefined ? 'gray' : ok ? '#4ade80' : '#f87171'}>● </Text>
-                                    <Text bold color={actif ? 'white' : undefined}>{s.nom}</Text>
+                                    <Text bold color={actif ? fond.texte : undefined}>{s.nom}</Text>
                                     <Text color="gray">{`   ${s.ip ?? s.hote}`}</Text>
                                     <Text color={ok === undefined ? 'gray' : ok ? '#4ade80' : '#f87171'}>
                                         {ok === undefined ? '   vérification…' : ok ? '   en ligne' : '   hors ligne'}

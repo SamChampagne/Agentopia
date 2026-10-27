@@ -1,4 +1,5 @@
 // Mesure de réactivité en plein écran : délai entre un événement (clic, molette) et l'écriture à l'écran
+process.env.CLAUDETOPIA_SANS_REPRISE = '1';
 process.env.NODE_ENV ??= 'production';
 const { default: React } = await import('react');
 const { render } = await import('ink');

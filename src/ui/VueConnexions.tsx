@@ -3,7 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import { useTailleVue, useClicsVue, Separateur, Titre } from './Vues.js';
 import { bus } from './bus.js';
 import { Element, Etat, etatConnexions } from '../connexions.js';
-import { theme } from '../theme.js';
+import { theme, fond } from '../theme.js';
 
 // Centre de connexions : tout ce qui se connecte, son état, et un clic pour le régler
 
@@ -11,8 +11,8 @@ const SYMBOLES: Record<Etat, { s: string; couleur: string }> = {
     ok: { s: '✓', couleur: '#4ade80' },
     avert: { s: '!', couleur: '#facc15' },
     manque: { s: '✕', couleur: '#f87171' },
-    neutre: { s: '○', couleur: '#64748b' },
-    verification: { s: '…', couleur: '#64748b' },
+    neutre: { s: '○', couleur: fond.eteint },
+    verification: { s: '…', couleur: fond.eteint },
 };
 // Ces commandes ouvrent une vue : on n'y revient pas ensuite (les autres rouvrent ce centre une fois finies)
 const VUES = new Set(['/ssh', '/docker', '/sftp']);
@@ -86,12 +86,12 @@ export function VueConnexions({ fermer }: { fermer: () => void }) {
                 const sym = SYMBOLES[l.e.etat];
                 return (
                     <Box key={i} height={1} overflow="hidden">
-                        <Text wrap="truncate-end" backgroundColor={actif ? '#1e293b' : undefined}>
+                        <Text wrap="truncate-end" backgroundColor={actif ? fond.selection : undefined}>
                             <Text color={actif ? theme.accent : 'gray'}>{actif ? ' ❯ ' : '   '}</Text>
                             <Text color={sym.couleur}>{`${sym.s} `}</Text>
                             <Text bold={actif}>{ajuste(l.e.nom, colNom)}</Text>
                             <Text color={l.e.etat === 'ok' ? theme.secondaire : sym.couleur}>{ajuste(l.e.detail, colDetail)}</Text>
-                            <Text color={l.e.etat === 'manque' || l.e.etat === 'avert' ? theme.accent : actif ? theme.accent : '#475569'}>
+                            <Text color={l.e.etat === 'manque' || l.e.etat === 'avert' ? theme.accent : actif ? theme.accent : fond.discret}>
                                 {l.e.action ? `${l.e.action} ›` : ''}
                             </Text>
                         </Text>

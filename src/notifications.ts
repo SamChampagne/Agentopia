@@ -1,15 +1,70 @@
 import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { spawnSync } from 'child_process';
+import { EventEmitter } from 'events';
+import { fileURLToPath } from 'url';
 import { sessionsActives } from './systeme.js';
+
+// ─── Lien claudetopia: (clic sur une notification) ───────────────────────────
+// Enregistré pour ce compte Windows seulement (HKCU, sans droits admin) : il lance outils/protocole.vbs,
+// qui écrit la demande dans ~/.claudetopia-ouvrir et met la fenêtre Claudetopia au premier plan.
+
+const SCRIPT_LIEN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'outils', 'protocole.vbs');
+const FICHIER_DEMANDE = path.join(os.homedir(), '.claudetopia-ouvrir');
+const CLE = 'HKCU\\Software\\Classes\\claudetopia';
+
+// Activé par l'utilisateur (centre de connexions), jamais en douce : c'est une entrée dans son registre
+export function lienEnregistre(): boolean {
+    if (process.platform !== 'win32') return false;
+    const actuelle = spawnSync('reg', ['query', `${CLE}\\shell\\open\\command`, '/ve'], { encoding: 'utf-8' }).stdout ?? '';
+    return actuelle.includes(SCRIPT_LIEN);
+}
+
+export function retirerLien(): void {
+    spawnSync('reg', ['delete', CLE, '/f']);
+}
+
+export function enregistrerLien(): void {
+    if (process.platform !== 'win32' || !fs.existsSync(SCRIPT_LIEN) || lienEnregistre()) return;
+    const commande = `wscript.exe "${SCRIPT_LIEN}" "%1"`;
+    spawnSync('reg', ['add', CLE, '/ve', '/d', 'URL:Claudetopia', '/f']);
+    spawnSync('reg', ['add', CLE, '/v', 'URL Protocol', '/d', '', '/f']);
+    spawnSync('reg', ['add', `${CLE}\\shell\\open\\command`, '/ve', '/d', commande, '/f']);
+}
+
+// Les demandes arrivent par un fichier : on le surveille et on émet « demande » (le lien complet)
+export const liens = new EventEmitter();
+export function surveillerLiens(): void {
+    try {
+        fs.writeFileSync(FICHIER_DEMANDE, '', 'utf-8');
+        fs.watch(FICHIER_DEMANDE, () => {
+            let texte = '';
+            try {
+                texte = fs.readFileSync(FICHIER_DEMANDE, 'utf-8').trim();
+            } catch {
+                return;
+            }
+            if (!texte) return;
+            fs.writeFileSync(FICHIER_DEMANDE, '', 'utf-8');
+            liens.emit('demande', texte);
+        }).on('error', () => undefined);
+    } catch {
+        // pas de liens cliquables : les notifications restent informatives
+    }
+}
 
 // Toast Windows natif via Windows PowerShell 5.1 (WinRT n'est pas dispo dans pwsh 7).
 // On l'envoie au nom de Windows Terminal : l'ID de PowerShell est filtré silencieusement sur ce poste.
-export function toast(titre: string, message: string): void {
+// lien : « claudetopia:session/<id> »… un clic sur la notification ouvre ça dans Claudetopia (voir enregistrerLien)
+export function toast(titre: string, message: string, lien?: string): void {
     const echapper = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, "''");
     const script = `
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
 $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-$xml.LoadXml('<toast><visual><binding template="ToastGeneric"><text>${echapper(titre)}</text><text>${echapper(message)}</text></binding></visual><audio src="ms-winsoundevent:Notification.Default"/></toast>')
+$xml.LoadXml('<toast${lien ? ` activationType="protocol" launch="${echapper(lien)}"` : ''}><visual><binding template="ToastGeneric"><text>${echapper(titre)}</text><text>${echapper(message)}</text></binding></visual><audio src="ms-winsoundevent:Notification.Default"/></toast>')
 $app = 'Microsoft.WindowsTerminal_8wekyb3d8bbwe!App'
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($app).Show([Windows.UI.Notifications.ToastNotification]::new($xml))
 `;

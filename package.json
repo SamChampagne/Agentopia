@@ -20,7 +20,8 @@
     "test:equipe": "node test-equipe.mjs",
     "test:vitesse": "node bench-ui.mjs",
     "test:maitre": "node test-maitre.mjs",
-    "test:ssh": "node test-ssh.mjs"
+    "test:ssh": "node test-ssh.mjs",
+    "test:plus": "node test-plus.mjs"
   },
   "keywords": [],
   "author": "",

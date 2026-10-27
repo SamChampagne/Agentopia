@@ -8,7 +8,7 @@ import { placerBoutons, boutonA } from './mise.js';
 import { ilYa } from './Panneau.js';
 import { Sftp, ConnexionSftp, Entree, dossierTemporaire, tailleLisible } from '../sftp.js';
 import { lancerDetache } from '../lanceurs.js';
-import { theme } from '../theme.js';
+import { theme, fond } from '../theme.js';
 
 const posix = path.posix;
 const ajuste = (s: string, n: number) => (s.length > n - 1 ? s.slice(0, Math.max(0, n - 2)) + '… ' : s.padEnd(n));
@@ -201,7 +201,7 @@ export function VueSftp({ fermer, cible }: { fermer: () => void; cible: Connexio
                     const actif = premier + i === index;
                     return (
                         <Box key={e.nom} height={1} overflow="hidden">
-                            <Text wrap="truncate-end" backgroundColor={actif ? '#1e293b' : undefined}>
+                            <Text wrap="truncate-end" backgroundColor={actif ? fond.selection : undefined}>
                                 <Text color={actif ? theme.accent : 'gray'}>{actif ? '❯ ' : '  '}</Text>
                                 <Text color={e.dossier ? theme.primaire : undefined} bold={e.dossier}>{ajuste(`${e.dossier ? '▸ ' : e.lien ? '↪ ' : '· '}${e.nom}${e.dossier ? '/' : ''}`, largeurNom)}</Text>
                                 <Text color="gray">{ajuste(e.dossier ? '—' : tailleLisible(e.taille), 12)}</Text>

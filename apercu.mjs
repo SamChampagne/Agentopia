@@ -1,4 +1,5 @@
 // Aperçu de l'écran à une taille donnée : COLS=115 ROWS=48 node apercu.mjs
+process.env.CLAUDETOPIA_SANS_REPRISE = '1';
 process.env.NODE_ENV ??= 'production';
 const { default: React } = await import('react');
 const { render } = await import('ink');

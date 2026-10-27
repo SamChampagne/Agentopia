@@ -10,18 +10,21 @@ import { SECTIONS, Section, sectionMasquee } from './sections.js';
 import { arreterEquipe, terminerEquipe } from '../equipe.js';
 import { copier } from '../lanceurs.js';
 import { appuyer } from './appui.js';
+import { dollars } from '../cout.js';
+import { liens } from '../notifications.js';
+import { CHEMINS } from '../chemins.js';
 import { depotDe } from '../synchro.js';
 import { etatClaude, lireEtatClaude, verifierClaude } from '../etatClaude.js';
 import { maitre, etatMaitre, prechauffer, demanderAuMaitre, DESTRUCTRICES } from '../maitre.js';
 import { Selecteur, Saisie } from './Selecteur.js';
 import { Laterale, cartesLaterales, X_TERMINAL } from './Laterale.js';
-import { VueJournal, VueSession, BarreHaut, largeurTitre } from './Zones.js';
+import { VueJournal, VueSession, BarreHaut, largeurTitre, toutesLesLignes, lignesTranscript } from './Zones.js';
 import { useDonnees, demarrerCollecte, rafraichirAgents } from './donnees.js';
 import { serveursLateraux, miseLateraleDe, basculerRepli } from './sections.js';
 import { souris, Souris } from './terminal.js';
 import { quitterEcran } from './ecran.js';
 import { journal, lignesJournal, avecRetrait, vider } from './journal.js';
-import { imageDuPressePapiers, joindreImages } from './pressePapiers.js';
+import { imageDuPressePapiers, joindreImages, fichiersDeposes, EST_IMAGE } from './pressePapiers.js';
 import { calculerMise, miseLaterale, placerBoutons, boutonA, choisirLargeurLaterale, HAUT, CARTE, LATERAL_MIN } from './mise.js';
 import { COMMANDES, config, executerLigne, getProjets, rafraichirProjets, trouverCommande } from '../commandes.js';
 import { chargerHistorique, ajouterHistorique, sauverConfig } from '../config.js';
@@ -29,7 +32,7 @@ import { etatGitAsync, correspond, EtatGit } from '../projets.js';
 import { cpuMachine, formatRam } from '../systeme.js';
 import { projetsRecents } from '../dashboard.js';
 import { Message, SessionVue, lireTranscript } from '../agents.js';
-import { theme, couleurProjet, c } from '../theme.js';
+import { theme, couleurProjet, c, fond } from '../theme.js';
 
 const SPINNER = ['✻', '✼', '✽', '✾', '✿', '❀', '✿', '✾', '✽', '✼'];
 
@@ -49,7 +52,7 @@ export const BOUTONS_HAUT = [
 
 // Boutons de la conversation ouverte. Revue et Commit agissent sur le projet de la session.
 function boutonsSession(s: SessionVue) {
-    const projet = [{ label: '⌕ Revue', action: 'revue' }, { label: '✓ Commit', action: 'commit' }, { label: '◧ VS Code', action: 'code' }];
+    const projet = [{ label: '⎘ Copier', action: 'copier-code' }, { label: '⌕ Revue', action: 'revue' }, { label: '✓ Commit', action: 'commit' }, { label: '◧ VS Code', action: 'code' }];
     return s.arrierePlan
         ? [{ label: '← Retour', action: 'fermer' }, { label: '↵ Rejoindre', action: 'rejoindre' }, { label: '★ Favori', action: 'favori' }, ...projet, { label: '✕ Fermer la session', action: 'fermer-session' }]
         : [{ label: '← Retour', action: 'fermer' }, { label: '⑂ Continuer ici', action: 'copie' }, ...projet, { label: '✕ Fermer la session', action: 'fermer-session' }];
@@ -62,6 +65,7 @@ function commandeSession(action: string, s: SessionVue): string | undefined {
     if (action === 'code') return `/code ${s.cwd}`;
     if (action === 'favori') return `/favori-session ${s.sessionId}`;
     if (action === 'revue') return `/revue ${s.cwd}`;
+    if (action === 'copier-code') return `/copier-code ${s.sessionId}`;
     if (action === 'commit') return `/commit ${s.cwd}`;
     return undefined;
 }
@@ -139,6 +143,7 @@ function transcriptModifie(fichier: string): boolean {
 
 // La session ouverte survit au remontage de l'interface (après claude attach)
 let selectionMemo: string | undefined;
+const debutApp = Date.now();
 
 export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: string; auDemarrage?: string }) {
     const { stdout } = useStdout();
@@ -172,6 +177,38 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     const [heure, setHeure] = useState(new Date());
     const [notice, setNotice] = useState<string>();          // message bref au-dessus de la saisie (envoi réussi…)
     const [aSelectionner, setASelectionner] = useState<string>();   // id d'une session qui vient d'être lancée
+
+    // ─── Reprendre là où on en était : la conversation ouverte et la vue affichée ───
+    const sansReprise = !!process.env.CLAUDETOPIA_SANS_REPRISE;   // tests : ni lecture ni écriture
+    useEffect(() => {
+        if (sansReprise) return;
+        const t = setTimeout(() => {
+            try {
+                fs.writeFileSync(CHEMINS.etat, JSON.stringify({ session: selection, vue: demande?.type === 'vue' ? vueActive : undefined }), 'utf-8');
+            } catch {
+                // pas grave
+            }
+        }, 400);
+        return () => clearTimeout(t);
+    }, [selection, demande, vueActive]);
+    const repris = useRef(false);
+    useEffect(() => {
+        if (repris.current || commandeInitiale || auDemarrage || sansReprise) return;
+        // On attend que les sessions soient lues (ou 4 s), puis on rouvre une seule fois
+        if (!donnees.agents.length && Date.now() - debutApp < 4000) return;
+        repris.current = true;
+        let etat: { session?: string; vue?: string } = {};
+        try {
+            etat = JSON.parse(fs.readFileSync(CHEMINS.etat, 'utf-8'));
+        } catch {
+            return;
+        }
+        if (etat.session && donnees.agents.some((a) => a.cle === etat.session)) setSelection(etat.session);
+        else if (etat.vue) {
+            setVueActive(etat.vue);
+            void lancer(etat.vue, false, true);
+        }
+    }, [donnees.agents]);
 
     const setSelection = (cle?: string) => {
         selectionMemo = cle;
@@ -229,6 +266,15 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                 || etatMaitre().enCours) setTic((t) => t + 1);
         }, 800);
         const idHeure = setInterval(() => setHeure(new Date()), 30_000);
+        // Clic sur une notification Windows : claudetopia:session/<id>, claudetopia:equipe/<id>, claudetopia:questions
+        const surLien = (lien: string) => {
+            const [quoi, id] = lien.replace(/^claudetopia:\/*/i, '').replace(/\/$/, '').split('/');
+            if (quoi === 'session' && id) bus.emit('selectionner', id);
+            else if (quoi === 'equipe' && id) void etatRef.current.lancer(`/equipe ${id}`, false, true);
+            else if (quoi === 'questions') void etatRef.current.lancer('/questions', false, true);
+            else if (quoi === 'surveillances') void etatRef.current.lancer('/surveillances', false, true);
+        };
+        liens.on('demande', surLien);
         const surMaitre = () => setVersionMaitre((v) => v + 1);
         maitre.on('maj', surMaitre);
         // Le maître démarre en arrière-plan : sa première réponse sera rapide
@@ -265,6 +311,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             clearTimeout(idConnexions);
             maitre.off('maj', surMaitre);
             etatClaude.off('maj', surClaude);
+            liens.off('demande', surLien);
         };
     }, []);
 
@@ -296,7 +343,29 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         };
     }, [session?.cwd]);
 
-    const suggestions = useMemo(() => calculerSuggestions(saisie), [saisie]);
+    // ─── Ctrl+F : chercher dans la conversation ouverte ───
+    // La barre du bas devient le champ de recherche ; Entrée = occurrence suivante (en remontant le temps)
+    const [recherche, setRecherche] = useState(false);
+    const [occurrence, setOccurrence] = useState(0);
+    const trouvees = useMemo(() => {
+        if (!recherche || !session || saisie.trim().length < 2) return [];
+        const terme = saisie.trim().toLowerCase();
+        const lignes = toutesLesLignes(lignesTranscript(messages, m.principal - 2), m.principal - 2);
+        const indices: number[] = [];
+        lignes.forEach((l, i) => l.replace(/\x1b\[[0-9;]*m/g, '').toLowerCase().includes(terme) && indices.push(i));
+        return indices.reverse().map((i) => lignes.length - i);   // distance depuis la fin, la plus récente d'abord
+    }, [recherche, saisie, messages, m.principal, session?.cle]);
+    useEffect(() => setOccurrence(0), [saisie, recherche]);
+    useEffect(() => {
+        if (!trouvees.length) return;
+        const depuisLaFin = trouvees[occurrence % trouvees.length];
+        setDefilement(Math.max(0, depuisLaFin - Math.floor((m.corps - 3) / 2)));
+    }, [trouvees, occurrence]);
+    useEffect(() => {
+        if (!session) setRecherche(false);
+    }, [session?.cle]);
+
+    const suggestions = useMemo(() => (recherche ? [] : calculerSuggestions(saisie)), [saisie, recherche]);
     const sugg = Math.min(indexSugg, Math.max(0, suggestions.length - 1));
     const nbSugg = Math.min(8, suggestions.length);
 
@@ -344,6 +413,20 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         }
     }
 
+    // Saisie : un fichier glissé dans la fenêtre (son chemin collé) devient une pièce jointe « [fichier 2: rapport.pdf] »
+    function surSaisie(v: string) {
+        const ajout = v.length > saisie.length + 3 && v.startsWith(saisie) ? v.slice(saisie.length) : '';
+        const fichiers = ajout && !recherche ? fichiersDeposes(ajout) : undefined;
+        if (fichiers) {
+            const debut = images.length;
+            setImages([...images, ...fichiers]);
+            const etiquettes = fichiers.map((f, i) => (EST_IMAGE.test(f) ? `[image ${debut + i + 1}]` : `[fichier ${debut + i + 1}: ${path.basename(f)}]`));
+            return remplacer(`${saisie}${saisie && !saisie.endsWith(' ') ? ' ' : ''}${etiquettes.join(' ')} `);
+        }
+        setSaisie(v);
+        setIndexSugg(0);
+    }
+
     function remplacer(texte: string) {
         setSaisie(texte);
         setCleSaisie((k) => k + 1);
@@ -351,6 +434,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     }
 
     function soumettre(valeur: string) {
+        if (recherche) return setOccurrence((o) => o + 1);
         const s = suggestions[sugg];
         if (s) {
             if (s.executer) {
@@ -414,6 +498,10 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     function destination(): { texte: string; couleur: string } {
         const t = saisie.trim();
         if (t.startsWith('/')) return { texte: 'commande du CLI', couleur: 'gray' };
+        if (recherche) {
+            const n = trouvees.length;
+            return { texte: `⌕ chercher dans la conversation : ${t.length < 2 ? 'tape au moins 2 lettres' : n ? `${(occurrence % n) + 1}/${n} · Entrée = suivante` : 'aucun résultat'} · Échap fermer`, couleur: theme.secondaire };
+        }
         if (t.startsWith('!')) return { texte: `commande PowerShell dans ${path.basename(statut.cwd)}`, couleur: theme.accent };
         if (modeMaitre) {
             return etatMaitre().enCours
@@ -472,6 +560,8 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                 ...(s.arrierePlan
                     ? [{ label: '⤢ Rejoindre (plein écran)', valeur: `/rejoindre ${s.id}` }, { label: '★ Mettre en favori', valeur: `/favori-session ${s.sessionId}` }]
                     : [{ label: '⑂ Continuer ici', valeur: `/copie ${s.sessionId}` }]),
+                { label: '⎘ Copier le dernier bloc de code', valeur: `/copier-code ${s.sessionId}` },
+                { label: '⎘ Copier la dernière réponse', valeur: `/copier-reponse ${s.sessionId}` },
                 { label: '⌕ Revue du diff', valeur: `/revue ${s.cwd}` },
                 { label: '✓ Commit avec message IA', valeur: `/commit ${s.cwd}` },
                 { label: '◧ VS Code', valeur: `/code ${s.cwd}` },
@@ -608,6 +698,8 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                 if (!e.appui || e.bouton !== 'gauche') return;
                 const debut = Math.max(0, Math.min(decalage, cartesLaterales(donnees).length - ml.nbCartes));
                 if (by >= 1 && by < ml.ligneNouvelle) return ouvrirCarte(debut + Math.floor((by - 1) / CARTE));
+                // En-tête « Sessions Claude · N en attente » : ce que les sessions attendent de toi
+                if (by === 0 && libre) return void lancer('/questions', false, true);
                 if (by === ml.ligneNouvelle && libre) return void lancer(e.x >= X_TERMINAL - 1 ? '/terminal' : '/nouvelle', false, true);
                 if (ml.hauteurMaitre >= 2 && by >= ml.ligneMaitre && by < ml.ligneMaitre + ml.hauteurMaitre) {
                     const claude = lireEtatClaude().etat;
@@ -686,6 +778,13 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             setImages([...images, chemin]);
             return remplacer(`${saisie}${saisie && !saisie.endsWith(' ') ? ' ' : ''}[image ${n}] `);
         }
+        // Ctrl+F : chercher dans la conversation ouverte
+        if (key.ctrl && input === 'f' && session) {
+            setRecherche(true);
+            return setSaisie('');
+        }
+        // Ctrl+K : la palette (chercher et lancer n'importe quoi)
+        if (key.ctrl && input === 'k') return void lancer('/palette', false, true);
         // Alt+T : ouvrir un terminal (PowerShell, cmd, Git Bash…)
         if (key.meta && input === 't') return void lancer('/terminal', false, true);
         // Alt+M : parler au maître (ou revenir)
@@ -706,6 +805,10 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         if (key.pageUp) return setDefilement((d) => d + Math.max(5, m.corps - 4));
         if (key.pageDown) return setDefilement((d) => Math.max(0, d - Math.max(5, m.corps - 4)));
         if (key.tab && suggestions[sugg]) return remplacer(suggestions[sugg].texte);
+        if (key.escape && recherche) {
+            setRecherche(false);
+            return setSaisie('');
+        }
         if (key.escape) {
             if (saisie) return setSaisie('');
             if (images.length) return setImages([]);
@@ -746,7 +849,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     } else if (demande?.type === 'vue') {
         principal = demande.rendu(demande.resoudre);
     } else if (session) {
-        principal = <VueSession s={session} messages={messages} boutons={boutonsS} largeur={m.principal} hauteur={hauteurPrincipale} defilement={defilement} git={gitSession} />;
+        principal = <VueSession s={session} messages={messages} boutons={boutonsS} largeur={m.principal} hauteur={hauteurPrincipale} defilement={defilement} git={gitSession} surligne={recherche ? saisie.trim() : undefined} cout={donnees.cout.parSession[session.sessionId]} />;
     } else {
         principal = <VueJournal lignes={lignesJournal()} largeur={m.principal} hauteur={hauteurPrincipale} defilement={defilement} />;
     }
@@ -755,7 +858,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         <Box flexDirection="column" width={m.largeur} height={m.hauteur} overflow="hidden">
             <BarreHaut boutons={boutonsHaut} largeur={m.largeur} vueActive={demande?.type === 'vue' ? vueActive : undefined}
                 droite={`${config.prenom || os.userInfo().username} · ${heure.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}`} />
-            <Box height={1} flexShrink={0}><Text color="#334155">{'─'.repeat(m.largeur)}</Text></Box>
+            <Box height={1} flexShrink={0}><Text color={fond.bordure}>{'─'.repeat(m.largeur)}</Text></Box>
             <Box height={m.corps} flexShrink={0} overflow="hidden">
                 <Laterale donnees={donnees} largeur={m.lateral} hauteur={m.corps} selection={selection} decalage={decalage} tic={tic} maitre={etatMaitre()} modeMaitre={modeMaitre} claude={lireEtatClaude().etat} />
                 <Box flexDirection="column" width={m.principal} height={m.corps}>
@@ -765,7 +868,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                             {suggestions.slice(debutSugg, debutSugg + 8).map((s, i) => {
                                 const actif = debutSugg + i === sugg;
                                 return (
-                                    <Text key={s.label} wrap="truncate-end" backgroundColor={actif ? '#1e293b' : undefined}>
+                                    <Text key={s.label} wrap="truncate-end" backgroundColor={actif ? fond.selection : undefined}>
                                         <Text color={actif ? theme.accent : theme.secondaire} bold={actif}>{s.label.padEnd(30) + ' '}</Text>
                                         <Text color="gray">{s.description}</Text>
                                     </Text>
@@ -790,7 +893,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                             <TextInput
                                 key={cleSaisie}
                                 value={saisie}
-                                onChange={(v) => { setSaisie(v); setIndexSugg(0); }}
+                                onChange={surSaisie}
                                 onSubmit={soumettre}
                                 placeholder={session?.arrierePlan
                                     ? `Entrée pour rejoindre ${session.nom} · Échap pour fermer`
@@ -818,7 +921,12 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                 <Box flexShrink={0}>
                     <Text color="gray">
                         {ssh ? <Text color={theme.accent}>⇄ {ssh} SSH · </Text> : null}
-                        {`CPU ${statut.cpu.toFixed(0)}% · RAM ${formatRam(ram)}/${formatRam(os.totalmem())} · Alt+V image`}
+                        {donnees.cout.total > 0 ? (
+                            <Text color={(config.budgetJour ?? 0) > 0 && donnees.cout.total >= (config.budgetJour ?? 0) ? '#fb923c' : 'gray'}>
+                                {`≈ ${dollars(donnees.cout.total)} auj.${config.budgetJour ? ` / ${dollars(config.budgetJour)}` : ''} · `}
+                            </Text>
+                        ) : null}
+                        {`CPU ${statut.cpu.toFixed(0)}% · RAM ${formatRam(ram)}/${formatRam(os.totalmem())} · Ctrl+K`}
                     </Text>
                 </Box>
             </Box>

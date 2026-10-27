@@ -1,4 +1,5 @@
 // Mémoire de Claudetopia (interface complète) et du maître, après démarrage
+process.env.CLAUDETOPIA_SANS_REPRISE = '1';
 process.env.NODE_ENV ??= 'production';
 const { default: React } = await import('react');
 const { render } = await import('ink-testing-library');

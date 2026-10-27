@@ -21,6 +21,8 @@ export interface SessionVue {
     statut: Statut;
     debut: Date;
     fichier: string;               // transcript .jsonl
+    question?: string;             // arrière-plan bloquée : ce que Claude attend de toi (Claude Code l'enregistre)
+    suggestion?: string;           // et la réponse qu'il propose
 }
 
 interface BrutAgent {
@@ -33,6 +35,8 @@ interface BrutAgent {
     name?: string;
     status?: string;
     state?: string;
+    needs?: string;
+    suggestedReply?: string;
 }
 
 function statut(a: BrutAgent): Statut {
@@ -54,6 +58,8 @@ const vue = (a: BrutAgent): SessionVue => ({
     statut: statut(a),
     debut: new Date(a.startedAt),
     fichier: path.join(dossierSessions(a.cwd), `${a.sessionId}.jsonl`),
+    question: a.state === 'blocked' ? a.needs || undefined : undefined,
+    suggestion: a.state === 'blocked' ? a.suggestedReply || undefined : undefined,
 });
 
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
@@ -93,7 +99,7 @@ function lireFichiersAgents(): SessionVue[] | undefined {
         const j = lireJson(path.join(jobs, id, 'state.json'));
         if (!j) continue;
         if (!j.sessionId || !j.cwd || !j.state) return undefined;   // format inconnu : on laisse faire `claude agents`
-        brut.push({ id, cwd: j.cwd, kind: 'background', startedAt: Date.parse(j.createdAt) || 0, sessionId: j.sessionId, name: j.name, state: j.state });
+        brut.push({ id, cwd: j.cwd, kind: 'background', startedAt: Date.parse(j.createdAt) || 0, sessionId: j.sessionId, name: j.name, state: j.state, needs: j.needs, suggestedReply: j.suggestedReply });
     }
     return brut.map(vue).sort((a, b) => a.debut.getTime() - b.debut.getTime());
 }
@@ -124,6 +130,21 @@ export function listerAgentsCommande(): Promise<SessionVue[]> {
             }
         });
     });
+}
+
+// Le dernier bloc de code (```…```) écrit par Claude, sinon undefined
+export function dernierBlocCode(messages: Message[]): string | undefined {
+    for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role !== 'assistant') continue;
+        const blocs = [...messages[i].texte.matchAll(/```[^\n]*\n([\s\S]*?)```/g)];
+        if (blocs.length) return blocs[blocs.length - 1][1].replace(/\n$/, '');
+    }
+    return undefined;
+}
+
+export function derniereReponse(messages: Message[]): string | undefined {
+    for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'assistant' && messages[i].texte.trim()) return messages[i].texte.trim();
+    return undefined;
 }
 
 // ─── Transcript ──────────────────────────────────────────────────────────────
@@ -289,7 +310,7 @@ export async function fermerArrierePlan(id: string): Promise<{ ok: boolean; mess
 export async function envoyerMessage(s: SessionVue, texte: string): Promise<{ ok: boolean; message: string; id?: string }> {
     if (!s.arrierePlan || !s.id) return { ok: false, message: 'cette session est dans un onglet : écris-y directement, ou « Continuer ici »' };
     if (s.statut === 'travaille') return { ok: false, message: 'Claude est en train de travailler : attends qu\'il ait fini, ou « Rejoindre »' };
-    if (s.statut === 'bloquee') return { ok: false, message: 'Claude attend une permission : « Rejoindre » pour répondre' };
+    if (s.statut === 'bloquee' && (!s.question || /permission/i.test(s.question))) return { ok: false, message: 'Claude attend une permission : « Rejoindre » pour répondre' };
     // claude rm supprime aussi un éventuel worktree de la session : on ne prend pas ce risque
     if (/[\\/]\.claude[\\/]worktrees[\\/]/i.test(s.cwd)) return { ok: false, message: 'session dans un worktree : utilise « Rejoindre »' };
     const retrait = await claude(['rm', s.id]);

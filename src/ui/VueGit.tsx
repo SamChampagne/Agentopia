@@ -8,7 +8,7 @@ import { Depot, DepotDistant, pousser, tirer, commitsAPousser, etatPR } from '..
 import { lireSynchro, synchro, fetchMaintenant, relireProjet } from '../synchro.js';
 import { jetonsConfigures } from '../jetons.js';
 import { lancerDetache } from '../lanceurs.js';
-import { theme, couleurProjet } from '../theme.js';
+import { theme, couleurProjet, fond } from '../theme.js';
 
 const DETAIL = 6;   // lignes du panneau de détail en bas
 
@@ -71,6 +71,8 @@ export function VueGit({ fermer }: { fermer: () => void }) {
         { label: '⇣ Tirer', action: 'pull' },
         { label: '⤓ Cloner', action: 'clone' },
         { label: '◷ PR', action: 'pr' },
+        { label: '✎ Corriger la revue', action: 'pr-corriger' },
+        { label: '↯ Réparer la CI', action: 'ci' },
         { label: '⧉ Web', action: 'web' },
         { label: '⚿ Jetons', action: 'jetons' },
         { label: '✕ Fermer', action: 'fermer' },
@@ -79,11 +81,17 @@ export function VueGit({ fermer }: { fermer: () => void }) {
         ...(local?.avance || (local && !local.amont && local.remote) ? ['push'] : []),
         ...(local?.retard ? ['pull'] : []),
         ...(distant ? ['clone', 'web'] : []),
-        ...(local?.pagePR ? ['pr'] : []), ...(local?.web ? ['web'] : [])]);
+        ...(local?.pagePR ? ['pr'] : []), ...(local?.web ? ['web'] : []),
+        // GitHub : Claude corrige les commentaires d'une PR, ou répare le pipeline en échec
+        ...(local?.hebergeur === 'GitHub' && local.prs?.length ? ['pr-corriger'] : []), ...(local?.hebergeur === 'GitHub' ? ['ci'] : [])]);
 
     async function agir(action: string) {
         if (action === 'fermer') return fermer();
         if (!actifs.has(action)) return;
+        if (action === 'pr-corriger' || action === 'ci') {
+            fermer();
+            return void bus.emit('lancer', `/${action === 'ci' ? 'ci-reparer' : 'pr-corriger'} ${local!.projet.chemin}`);
+        }
         if (action === 'fetch') {
             setMessage('git fetch sur tous les dépôts…');
             const erreurs = await fetchMaintenant((n) => setMessage(`git fetch… ${n} dépôt(s)`));
@@ -166,9 +174,9 @@ export function VueGit({ fermer }: { fermer: () => void }) {
                     if (l.type === 'distant') {
                         return (
                             <Box key={l.r.url} height={1} overflow="hidden">
-                                <Text wrap="truncate-end" backgroundColor={actif ? '#1e293b' : undefined}>
+                                <Text wrap="truncate-end" backgroundColor={actif ? fond.selection : undefined}>
                                     <Text color={actif ? theme.accent : 'gray'}>{actif ? '❯ ' : '  '}</Text>
-                                    <Text color="#64748b">☁ </Text>
+                                    <Text color={fond.eteint}>☁ </Text>
                                     {ajuste(l.r.nom, 34)}
                                     <Text color="gray">{ajuste(l.r.hebergeur, 14)}</Text>
                                     <Text color="gray">{l.r.date ? `activité il y a ${ilYa(l.r.date)}` : ''}</Text>
@@ -177,12 +185,12 @@ export function VueGit({ fermer }: { fermer: () => void }) {
                         );
                     }
                     const d = l.d;
-                    const couleur = !d.remote || !d.amont ? '#64748b' : d.retard ? '#f87171' : d.avance || d.modifs ? '#facc15' : '#4ade80';
+                    const couleur = !d.remote || !d.amont ? fond.eteint : d.retard ? '#f87171' : d.avance || d.modifs ? '#facc15' : '#4ade80';
                     const etat = [d.retard ? `↓${d.retard}` : '', d.avance ? `↑${d.avance}` : '', d.modifs ? `✎${d.modifs}` : '',
                         !d.remote ? 'local' : !d.amont ? 'pas suivie' : ''].filter(Boolean).join(' ') || 'à jour';
                     return (
                         <Box key={d.projet.chemin} height={1} overflow="hidden">
-                            <Text wrap="truncate-end" backgroundColor={actif ? '#1e293b' : undefined}>
+                            <Text wrap="truncate-end" backgroundColor={actif ? fond.selection : undefined}>
                                 <Text color={actif ? theme.accent : 'gray'}>{actif ? '❯ ' : '  '}</Text>
                                 <Text color={couleur}>● </Text>
                                 <Text color={couleurProjet(d.projet.nom)}>{ajuste(d.projet.nom, 24)}</Text>

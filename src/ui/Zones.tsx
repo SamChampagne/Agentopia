@@ -3,12 +3,13 @@ import stringWidth from 'string-width';
 import { chargerConfig } from '../config.js';
 import { useMemo } from 'react';
 import { useAppui } from './appui.js';
+import { dollars } from '../cout.js';
 import { Box, Text } from 'ink';
 import { Message } from '../agents.js';
 import { SessionVue } from '../agents.js';
 import { EtatGit } from '../projets.js';
 import { Bouton } from './mise.js';
-import { theme, couleurProjet, c } from '../theme.js';
+import { theme, couleurProjet, c, fond } from '../theme.js';
 import { ligneMarkdown } from '../affichage.js';
 
 // Découpe des lignes (avec couleurs) à la largeur, puis garde la fenêtre visible selon le défilement
@@ -32,6 +33,15 @@ function couper(l: string, largeur: number): string[] {
         cache.set(l, r);
     }
     return r;
+}
+
+export const toutesLesLignes = (lignes: string[], largeur: number) => lignes.flatMap((l) => couper(l, largeur));
+
+// Surligne un mot dans une ligne colorée (inversion vidéo, les couleurs restent) ; les codes couleur ne sont pas touchés
+export function surligner(ligne: string, terme: string): string {
+    if (terme.length < 2) return ligne;
+    const motif = new RegExp(terme.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    return ligne.split(/(\x1b\[[0-9;]*m)/).map((morceau) => (morceau.startsWith('\x1b[') ? morceau : morceau.replace(motif, (m) => `\x1b[7m${m}\x1b[27m`))).join('');
 }
 
 export function fenetre(lignes: string[], largeur: number, hauteur: number, defilement: number): { visibles: string[]; max: number } {
@@ -86,11 +96,12 @@ export function lignesTranscript(messages: Message[], largeur: number): string[]
 }
 
 // Conversation d'une session, en direct, avec ses boutons (positions fournies par l'appelant)
-export function VueSession({ s, messages, boutons, largeur, hauteur, defilement, git }:
-    { s: SessionVue; messages: Message[]; boutons: Bouton[]; largeur: number; hauteur: number; defilement: number; git?: EtatGit }) {
+export function VueSession({ s, messages, boutons, largeur, hauteur, defilement, git, surligne, cout }:
+    { s: SessionVue; messages: Message[]; boutons: Bouton[]; largeur: number; hauteur: number; defilement: number; git?: EtatGit; surligne?: string; cout?: number }) {
     const appui = useAppui();
     const lignes = useMemo(() => lignesTranscript(messages, largeur - 2), [messages, largeur]);
-    const { visibles } = fenetre(lignes, largeur - 2, hauteur - 3, defilement);
+    const fen = fenetre(lignes, largeur - 2, hauteur - 3, defilement);
+    const visibles = surligne ? fen.visibles.map((l) => surligner(l, surligne)) : fen.visibles;
     return (
         <Box flexDirection="column" width={largeur} height={hauteur}>
             <Box height={1} flexShrink={0} paddingX={1} justifyContent="space-between" overflow="hidden">
@@ -98,7 +109,7 @@ export function VueSession({ s, messages, boutons, largeur, hauteur, defilement,
                     <Text wrap="truncate-end">
                         <Text color={couleurProjet(s.nom)}>● </Text>
                         <Text bold>{s.nom}</Text>
-                        <Text color="gray">{`  ${s.arrierePlan ? `⧉ arrière-plan ${s.id}` : '▭ onglet'} · ${s.titre}`}</Text>
+                        <Text color="gray">{`  ${s.arrierePlan ? `⧉ arrière-plan ${s.id}` : '▭ onglet'} · ${s.titre}${cout ? ` · ≈ ${dollars(cout)} auj.` : ''}`}</Text>
                     </Text>
                 </Box>
                 {/* Ce que la session a changé dans son projet : modifs, commits à pousser */}
@@ -116,14 +127,14 @@ export function VueSession({ s, messages, boutons, largeur, hauteur, defilement,
             <Box height={1} flexShrink={0} overflow="hidden">
                 {boutons.map((b) => (
                     <Box key={b.action} marginRight={1} flexShrink={0}>
-                        <Text backgroundColor={appui === `session:${b.action}` ? theme.secondaire : b.action === 'rejoindre' || b.action === 'copie' ? theme.accent : b.action === 'fermer-session' ? '#7f1d1d' : '#1e293b'}
-                            color={appui === `session:${b.action}` ? 'black' : 'white'} bold>
+                        <Text backgroundColor={appui === `session:${b.action}` ? theme.secondaire : b.action === 'rejoindre' || b.action === 'copie' ? theme.accent : b.action === 'fermer-session' ? '#7f1d1d' : fond.selection}
+                            color={appui === `session:${b.action}` ? 'black' : b.action === 'fermer-session' || b.action === 'rejoindre' || b.action === 'copie' ? 'white' : fond.texte} bold>
                             {` ${b.label} `}
                         </Text>
                     </Box>
                 ))}
             </Box>
-            <Box height={1} flexShrink={0}><Text color="#334155">{'─'.repeat(largeur)}</Text></Box>
+            <Box height={1} flexShrink={0}><Text color={fond.bordure}>{'─'.repeat(largeur)}</Text></Box>
             <Box paddingLeft={1}>
                 <Lignes lignes={visibles} hauteur={hauteur - 3} largeur={largeur - 2} />
             </Box>
@@ -147,7 +158,7 @@ export function BarreHaut({ boutons, largeur, droite, vueActive }: { boutons: Bo
                     const ouvert = vueActive === b.action;
                     return (
                         <Box key={b.action} marginRight={1} flexShrink={0}>
-                            <Text backgroundColor={appuye ? theme.accent : ouvert ? theme.primaire : '#1e293b'}
+                            <Text backgroundColor={appuye ? theme.accent : ouvert ? theme.primaire : fond.selection}
                                 color={appuye || ouvert ? 'black' : theme.secondaire} bold={appuye || ouvert}>{` ${b.label} `}</Text>
                         </Box>
                     );

@@ -8,7 +8,7 @@ import { getProjets } from '../commandes.js';
 import { Projet, correspond, derniereSessionClaude } from '../projets.js';
 import { Depot } from '../git.js';
 import { depotDe } from '../synchro.js';
-import { theme, couleurProjet } from '../theme.js';
+import { theme, couleurProjet, fond } from '../theme.js';
 
 type Ligne = { type: 'groupe'; texte: string; nb: number } | { type: 'projet'; p: Projet };
 
@@ -16,15 +16,15 @@ const ajuste = (s: string, n: number) => (s.length > n - 1 ? s.slice(0, n - 2) +
 
 // État git en mots plutôt qu'en symboles
 export function etatLisible(d?: Pick<Depot, 'retard' | 'avance' | 'modifs' | 'remote' | 'amont'>): { texte: string; couleur: string } {
-    if (!d) return { texte: 'pas un dépôt git', couleur: '#64748b' };
+    if (!d) return { texte: 'pas un dépôt git', couleur: fond.eteint };
     const morceaux = [
         d.retard ? `${d.retard} à tirer` : '',
         d.avance ? `${d.avance} à pousser` : '',
         d.modifs ? `${d.modifs} modifié${d.modifs > 1 ? 's' : ''}` : '',
     ].filter(Boolean);
     if (morceaux.length) return { texte: morceaux.join(' · '), couleur: d.retard ? '#f87171' : '#facc15' };
-    if (!d.remote) return { texte: 'local seulement', couleur: '#64748b' };
-    if (!d.amont) return { texte: 'branche non suivie', couleur: '#64748b' };
+    if (!d.remote) return { texte: 'local seulement', couleur: fond.eteint };
+    if (!d.amont) return { texte: 'branche non suivie', couleur: fond.eteint };
     return { texte: 'à jour', couleur: '#4ade80' };
 }
 
@@ -103,7 +103,7 @@ export function VueProjets({ fermer, filtreInitial = '' }: { fermer: () => void;
                 const session = derniereSessionClaude(l.p.chemin);
                 return (
                     <Box key={l.p.chemin} height={1} overflow="hidden">
-                        <Text wrap="truncate-end" backgroundColor={actif ? '#1e293b' : undefined}>
+                        <Text wrap="truncate-end" backgroundColor={actif ? fond.selection : undefined}>
                             <Text color={actif ? theme.accent : 'gray'}>{actif ? ' ❯ ' : '   '}</Text>
                             <Text color={couleurProjet(l.p.nom)}>● </Text>
                             <Text bold={actif}>{ajuste(l.p.nom, colNom - 2)}</Text>

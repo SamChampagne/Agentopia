@@ -5,7 +5,11 @@ import stringWidth from 'string-width';
 
 export const HAUT = 2;              // barre du haut + ligne de séparation
 export const BAS = 5;               // destination du texte (1) + saisie (3) + barre de statut (1)
-export const CARTE = 4;             // hauteur d'une carte de session (bordures comprises) : 2 lignes de contenu
+// Hauteur d'une carte de session (bordures comprises) : 2 lignes de contenu, 3 en mode détaillé (/cartes)
+export let CARTE = 4;
+export function choisirTailleCartes(detaillees: boolean): void {
+    CARTE = detaillees ? 5 : 4;
+}
 export const MAX_SERVEURS = 5;
 export const LATERAL_MIN = 28;
 

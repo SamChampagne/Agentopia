@@ -1,4 +1,5 @@
 // Test du maître : vraies sessions, vraies réponses, mais AUCUNE commande exécutée
+process.env.CLAUDETOPIA_SANS_REPRISE = '1';
 import { demarrerCollecte, lireDonnees } from './dist/ui/donnees.js';
 import { prechauffer, demanderAuMaitre, arreterMaitre } from './dist/maitre.js';
 import { getProjets } from './dist/commandes.js';

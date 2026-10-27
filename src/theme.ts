@@ -5,6 +5,16 @@ const config = chargerConfig();
 // Copie modifiable : le menu Configuration change le thème en direct (appliquerTheme)
 export const theme = { ...config.theme };
 
+// Fonds, bordures et textes discrets : sombres par défaut, clairs pour un terminal à fond blanc (/mode clair)
+const FONDS = {
+    sombre: { selection: '#1e293b', entete: '#172033', bordure: '#334155', discret: '#475569', eteint: '#64748b', texte: 'white' },
+    clair: { selection: '#dbeafe', entete: '#e2e8f0', bordure: '#cbd5e1', discret: '#94a3b8', eteint: '#94a3b8', texte: '#0f172a' },
+};
+export const fond = { ...FONDS[config.modeClair ? 'clair' : 'sombre'] };
+export function appliquerMode(clair: boolean): void {
+    Object.assign(fond, FONDS[clair ? 'clair' : 'sombre']);
+}
+
 export const c = {
     primaire: chalk.hex(theme.primaire),
     secondaire: chalk.hex(theme.secondaire),
@@ -17,6 +27,8 @@ export const c = {
 };
 
 export const PALETTES: Record<string, typeof theme> = {
+    // Couleurs foncées : lisibles sur un terminal à fond blanc (avec /mode clair)
+    'Clair': { primaire: '#0369a1', secondaire: '#0e7490', accent: '#be185d' },
     'Océan': { primaire: '#00b4d8', secondaire: '#90e0ef', accent: '#f72585' },
     'Forêt': { primaire: '#4ade80', secondaire: '#a7f3d0', accent: '#facc15' },
     'Coucher de soleil': { primaire: '#fb923c', secondaire: '#fcd34d', accent: '#f472b6' },

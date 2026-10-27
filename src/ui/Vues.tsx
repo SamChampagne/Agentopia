@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Box, Text, useStdout } from 'ink';
 import { bus } from './bus.js';
 import { Bouton, calculerMise } from './mise.js';
-import { theme } from '../theme.js';
+import { theme, fond } from '../theme.js';
 
 // Outils communs aux vues plein cadre (Docker, Serveurs) : taille, clics, boutons
 
@@ -36,7 +36,7 @@ export function LigneBoutons({ boutons, actifs }: { boutons: Bouton[]; actifs?: 
                 const actif = !actifs || actifs.has(b.action);
                 return (
                     <Box key={b.action} marginRight={1} flexShrink={0}>
-                        <Text backgroundColor={actif ? '#1e293b' : undefined} color={actif ? theme.secondaire : '#475569'} bold={actif}>{` ${b.label} `}</Text>
+                        <Text backgroundColor={actif ? fond.selection : undefined} color={actif ? theme.secondaire : fond.discret} bold={actif}>{` ${b.label} `}</Text>
                     </Box>
                 );
             })}
@@ -45,7 +45,7 @@ export function LigneBoutons({ boutons, actifs }: { boutons: Bouton[]; actifs?: 
 }
 
 export function Separateur({ largeur }: { largeur: number }) {
-    return <Box height={1} flexShrink={0}><Text color="#334155">{'─'.repeat(largeur)}</Text></Box>;
+    return <Box height={1} flexShrink={0}><Text color={fond.bordure}>{'─'.repeat(largeur)}</Text></Box>;
 }
 
 export function Titre({ texte, droite }: { texte: string; droite?: string }) {

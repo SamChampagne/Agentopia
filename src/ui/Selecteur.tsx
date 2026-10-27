@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { Choix, bus } from './bus.js';
@@ -22,7 +22,32 @@ export function Selecteur({ message, choix, recherche, multiple, onFin }: Props)
     const [index, setIndex] = useState(0);
     const [coches, setCoches] = useState(() => new Set(choix.filter((x) => x.coche).map((x) => x.valeur)));
 
-    const filtres = choix.filter((x) => !filtre || correspond(visible(x.label) + ' ' + (x.description ?? ''), filtre));
+    // Chaque mot tapé doit se retrouver (lettres dans l'ordre), dans n'importe quel ordre : « sani com » trouve « Commit · SaniPlan »
+    // Classement : un mot trouvé en début de mot du libellé vaut plus qu'au milieu, qu'en description, qu'une suite de lettres
+    // Préparé une fois par liste (pas à chaque touche) : une saisie rapide ne doit jamais perdre de lettre
+    const prepares = useMemo(() => choix.map((x, i) => {
+        const label = visible(x.label).toLowerCase();
+        return { x, i, label, tout: `${label} ${(x.description ?? '').toLowerCase()}` };
+    }), [choix]);
+    const filtres = useMemo(() => {
+        const mots = filtre.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        if (!mots.length) return choix;
+        const debuts = mots.map((m) => new RegExp(`(^|[^a-zà-ÿ0-9])${m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+        const score = (p: typeof prepares[number]) => {
+            let total = 0;
+            for (let k = 0; k < mots.length; k++) {
+                const m = mots[k];
+                if (debuts[k].test(p.label)) total += 8;
+                else if (p.label.includes(m)) total += 5;
+                else if (p.tout.includes(m)) total += 3;
+                else if (correspond(p.tout, m)) total += 1;
+                else return -1;
+            }
+            return total;
+        };
+        return prepares.map((p) => ({ p, s: score(p) })).filter((r) => r.s >= 0)
+            .sort((a, b) => b.s - a.s || a.p.i - b.p.i).map((r) => r.p.x);
+    }, [prepares, filtre]);
     const courant = Math.min(index, Math.max(0, filtres.length - 1));
     const debut = Math.max(0, Math.min(courant - Math.floor(HAUTEUR / 2), filtres.length - HAUTEUR));
     const visibles = filtres.slice(debut, debut + HAUTEUR);

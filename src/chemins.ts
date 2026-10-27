@@ -18,7 +18,9 @@ export const CHEMINS = {
     trace: fichier('-trace'),
     equipes: fichier('-equipes.json'),
     maitre: fichier('-maitre'),
-    sftpEmpreintes: fichier('-sftp-empreintes.json'),   // empreintes des serveurs SFTP déjà vus          // dossier de travail du maître (ses sessions n'ont pas de carte)
+    sftpEmpreintes: fichier('-sftp-empreintes.json'),
+    etat: fichier('-etat.json'),
+    planifications: fichier('-planifications.json'),   // dernier lancement de chaque tâche planifiée   // où on en était : conversation ouverte, vue affichée (reprise au lancement)   // empreintes des serveurs SFTP déjà vus          // dossier de travail du maître (ses sessions n'ont pas de carte)
 };
 
 const ANCIENS: [string, string][] = [

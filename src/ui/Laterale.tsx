@@ -8,7 +8,7 @@ import { Donnees, decrireConnexion } from './donnees.js';
 import { ilYa } from './Panneau.js';
 import stringWidth from 'string-width';
 import { CARTE } from './mise.js';
-import { theme, couleurProjet, c } from '../theme.js';
+import { theme, couleurProjet, c, fond } from '../theme.js';
 import { Serveur } from '../ssh.js';
 import { grouperConteneurs, portsCourts } from '../docker.js';
 import { Equipe, avancement, agentsDesEquipes } from '../equipe.js';
@@ -63,10 +63,10 @@ function Carte({ s, a, active, largeur, tic }: { s: SessionVue; a?: Activite; ac
     const interieur = largeur - 4;
     // Ligne 2 : l'action en cours (outil) ou la dernière réponse de Claude
     // Ligne 2 : l'action en cours (outil), sinon la dernière réponse de Claude, sinon le titre de la session
-    const action = a?.outil ? `▸ ${une(a.outil)}` : a?.dernierTexte ? une(a.dernierTexte) : s.titre || 'pas encore d\'activité';
+    const action = s.question ? `? ${une(s.question)}` : a?.outil ? `▸ ${une(a.outil)}` : a?.dernierTexte ? une(a.dernierTexte) : s.titre || 'pas encore d\'activité';
     return (
         <Box height={CARTE} flexShrink={0} width={largeur} flexDirection="column" borderStyle="round" paddingX={1}
-            borderColor={active ? theme.accent : s.statut === 'travaille' ? '#166534' : s.statut === 'bloquee' ? '#9a3412' : '#334155'}>
+            borderColor={active ? theme.accent : s.statut === 'travaille' ? '#166534' : s.statut === 'bloquee' ? '#9a3412' : fond.bordure}>
             {/* Lignes de hauteur 1 fixe, la partie droite ne rétrécit jamais : une carte ne déborde pas */}
             <Box height={1} width={interieur} overflow="hidden">
                 <Box flexGrow={1} flexShrink={1} overflow="hidden">
@@ -80,10 +80,15 @@ function Carte({ s, a, active, largeur, tic }: { s: SessionVue; a?: Activite; ac
             </Box>
             <Box height={1} width={interieur} overflow="hidden">
                 <Box flexGrow={1} flexShrink={1} overflow="hidden">
-                    <Text wrap="truncate-end" color={a?.outil ? theme.secondaire : 'gray'}>{action}</Text>
+                    <Text wrap="truncate-end" color={s.question ? '#fb923c' : a?.outil ? theme.secondaire : 'gray'}>{action}</Text>
                 </Box>
-                <Box flexShrink={0}><Text color="#475569">{a?.date ? ` ${ilYa(a.date)}` : ''}</Text></Box>
+                <Box flexShrink={0}><Text color={fond.discret}>{a?.date ? ` ${ilYa(a.date)}` : ''}</Text></Box>
             </Box>
+            {CARTE > 4 && (
+                <Box height={1} width={interieur} overflow="hidden">
+                    <Text wrap="truncate-end" color={fond.eteint}>{a?.dernierUser ? `» ${une(a.dernierUser)}` : s.titre}</Text>
+                </Box>
+            )}
         </Box>
     );
 }
@@ -119,7 +124,7 @@ function CarteEquipe({ e, largeur, tic }: { e: Equipe; largeur: number; tic: num
             </Box>
             <Box height={1} width={interieur} overflow="hidden">
                 <Text color="#7c3aed">{'━'.repeat(plein)}</Text>
-                <Text color="#334155">{'━'.repeat(barre - plein)}</Text>
+                <Text color={fond.bordure}>{'━'.repeat(barre - plein)}</Text>
                 <Text color="gray">{legende}</Text>
             </Box>
         </Box>
@@ -140,7 +145,7 @@ function Entete({ titre, droite = '', largeur, couleur = theme.primaire, couleur
         </Box>
     );
 }
-const FOND_ENTETE = '#172033';
+const FOND_ENTETE = fond.entete;
 const vide = <Box height={1} flexShrink={0} />;
 
 // ─── Le maître ───────────────────────────────────────────────────────────────
@@ -217,7 +222,7 @@ export function Laterale({ donnees: d, largeur, hauteur, selection, decalage, ti
 
     return (
         <Box width={largeur} height={hauteur} flexDirection="column" overflow="hidden"
-            borderStyle="single" borderTop={false} borderBottom={false} borderLeft={false} borderColor="#334155">
+            borderStyle="single" borderTop={false} borderBottom={false} borderLeft={false} borderColor={fond.bordure}>
             {/* Chaque ligne a une hauteur fixe : la géométrie doit correspondre à miseLaterale() pour les clics */}
             <Entete titre="SESSIONS CLAUDE" largeur={interieur}
                 droite={`${d.agents.length}${enAttente ? ` · ${enAttente} en attente` : ''}`} couleurDroite={enAttente ? '#facc15' : 'gray'} />

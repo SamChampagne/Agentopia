@@ -10,6 +10,8 @@ import { Hote, listerConteneurs } from '../docker.js';
 import { chargerConfig } from '../config.js';
 import { toast } from '../notifications.js';
 import { bus } from './bus.js';
+import { mettreAJourCout, dollars } from '../cout.js';
+import { verifierPlanifications } from '../planificateur.js';
 import { Equipe, equipes, lireEquipes, avancerEquipes, agentsDesEquipes, suivreFichierEquipes } from '../equipe.js';
 import {
     Serveur, UsageProjet, ConnexionActive, Acces, inventaire, usageParServeur, joignable, connexionsActives, lireAcces,
@@ -30,9 +32,11 @@ export interface Donnees {
     activites: Map<string, Activite>;       // ce qui se passe dans chacune (fin du transcript)
     docker: Hote[];                         // local d'abord, puis les serveurs surveillés
     equipes: Equipe[];                      // équipes d'agents (une carte chacune)
+    cout: { total: number; jetons: number; parSession: Record<string, number> };   // équivalent API du jour ($)
 }
 
 const donnees: Donnees = {
+    cout: { total: 0, jetons: 0, parSession: {} },
     equipes: lireEquipes(),
     agents: [],
     activites: new Map(),
@@ -108,11 +112,11 @@ function signalerChangements(avant: Map<string, string>): void {
         debutTravail.delete(a.sessionId);
         if (precedent !== 'travaille') continue;
         if (a.statut === 'bloquee') {
-            toast(`⚠ ${a.nom} attend ta permission`, a.titre || 'Clique sa carte puis « Rejoindre » pour répondre');
+            toast(`⚠ ${a.nom} attend ${a.question ? 'ta réponse' : 'ta permission'}`, a.question || a.titre || 'Clique pour ouvrir la session', `claudetopia:session/${a.id ?? a.sessionId}`);
             bus.emit('notice', `! ${a.nom} attend ta permission · clique sa carte`);
         } else if (duree >= 15_000 && !membres.has(a.id ?? '')) {
             const minutes = Math.round(duree / 60_000);
-            toast(`✓ ${a.nom} a fini`, `${a.titre || 'Claude t\'attend'}${minutes ? ` · ${minutes} min de travail` : ''}`);
+            toast(`✓ ${a.nom} a fini`, `${a.titre || 'Claude t\'attend'}${minutes ? ` · ${minutes} min de travail` : ''} · clic pour ouvrir`, `claudetopia:session/${a.id ?? a.sessionId}`);
             bus.emit('notice', `✓ ${a.nom} a fini${minutes ? ` (${minutes} min)` : ''} · clique sa carte pour voir`);
         }
     }
@@ -165,6 +169,20 @@ export function demarrerCollecte(): void {
         donnees.joignables = new Map(donnees.serveurs.map((s, i) => [s, etats[i]]));
     }, 60_000);
     boucle(async () => { donnees.connexions = await connexionsActives(); }, 15_000);
+    // Tâches planifiées : vérifiées toutes les minutes
+    setTimeout(() => boucle(() => verifierPlanifications(), 60_000), 15_000);
+    // Coût du jour (équivalent API) et alerte de budget, une fois par jour
+    let alerteBudget = '';
+    setTimeout(() => boucle(async () => {
+        const c = await mettreAJourCout();
+        donnees.cout = { total: c.total, jetons: c.jetons, parSession: Object.fromEntries([...c.parSession].map(([k, v]) => [k, v.cout])) };
+        const budget = chargerConfig().budgetJour ?? 0;
+        if (budget > 0 && c.total >= budget && alerteBudget !== c.jour) {
+            alerteBudget = c.jour;
+            toast(`! Budget du jour dépassé : ${dollars(c.total)}`, `Ton budget est de ${dollars(budget)} (équivalent API) · /budget pour le changer`);
+            bus.emit('notice', `! Budget du jour dépassé : ${dollars(c.total)} sur ${dollars(budget)} (équivalent API)`);
+        }
+    }, 30_000), 5000);
     boucle(() => rafraichirDocker(false), 15_000);
     suivreFichierEquipes();
     equipes.on('maj', () => {

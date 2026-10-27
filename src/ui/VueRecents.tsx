@@ -8,7 +8,7 @@ import { projetsRecents } from '../dashboard.js';
 import { Projet, EtatGit, etatGit } from '../projets.js';
 import { depotDe } from '../synchro.js';
 import { etatLisible as etatDepot } from './VueProjets.js';
-import { theme, couleurProjet } from '../theme.js';
+import { theme, couleurProjet, fond } from '../theme.js';
 
 interface Ligne {
     projet: Projet;
@@ -20,7 +20,7 @@ const ajuste = (s: string, n: number) => (s.length > n - 1 ? s.slice(0, n - 2) +
 
 // État git en mots plutôt qu'en symboles
 function etatLisible(g?: EtatGit): { texte: string; couleur: string } {
-    if (!g) return { texte: 'pas un dépôt git', couleur: '#64748b' };
+    if (!g) return { texte: 'pas un dépôt git', couleur: fond.eteint };
     const morceaux = [
         g.enRetard ? `${g.enRetard} à tirer` : '',
         g.enAvance ? `${g.enAvance} à pousser` : '',
@@ -80,7 +80,7 @@ export function VueRecents({ fermer }: { fermer: () => void }) {
                 const etat = depot ? etatDepot(depot) : etatLisible(l.git);
                 return (
                     <Box key={l.projet.chemin} height={1} overflow="hidden">
-                        <Text wrap="truncate-end" backgroundColor={actif ? '#1e293b' : undefined}>
+                        <Text wrap="truncate-end" backgroundColor={actif ? fond.selection : undefined}>
                             <Text color={actif ? theme.accent : 'gray'}>{actif ? '❯ ' : '  '}</Text>
                             <Text color={couleurProjet(l.projet.nom)}>● </Text>
                             <Text bold={actif}>{ajuste(l.projet.nom, largeurNom - 2)}</Text>

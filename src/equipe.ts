@@ -39,6 +39,16 @@ export const ROLES: Record<string, Role> = {
 
 export const role = (cle: string): Role => ROLES[cle] ?? ROLES.dev;
 
+// Modèles d'équipe : des objectifs prêts à l'emploi (modifiables avant de lancer)
+export const MODELES_EQUIPE: { nom: string; objectif: string }[] = [
+    { nom: '! Audit de sécurité', objectif: 'Audite la sécurité du projet (secrets dans le code, injections SQL/XSS, authentification et droits, validation des entrées, dépendances vulnérables) et corrige ce qui est trouvé, avec un test pour chaque correction.' },
+    { nom: '⇡ Mise à jour des dépendances', objectif: 'Mets à jour les dépendances du projet vers leurs dernières versions compatibles, adapte le code aux changements, et vérifie que la compilation et les tests passent. Liste dans CHANGELOG.md ce qui a changé.' },
+    { nom: '✓ Couverture de tests', objectif: 'Augmente la couverture de tests sur les parties critiques du projet (logique métier, API, accès aux données) ; corrige les bugs que les nouveaux tests révèlent.' },
+    { nom: '▲ Revue avant mise en production', objectif: 'Prépare une mise en production : revue du code récent (bugs, cas limites), vérification de la configuration et des migrations, gestion des erreurs et des journaux, puis une liste de vérification dans RELEASE.md.' },
+    { nom: '≡ Documentation', objectif: 'Documente le projet : README (installation, configuration, commandes), architecture et flux de données, et commentaires utiles sur le code complexe.' },
+    { nom: '◎ Performance', objectif: 'Trouve et corrige les problèmes de performance du projet (requêtes lentes ou en boucle, calculs répétés, chargements inutiles), en mesurant avant et après.' },
+];
+
 export type EtatTache = 'attente' | 'en cours' | 'bloquee' | 'faite' | 'erreur' | 'arretee';
 
 export interface Tache {
@@ -57,6 +67,7 @@ export interface Tache {
     fin?: number;
     vuTravailler?: boolean;
     absentDepuis?: number;
+    ecartee?: boolean;           // écartée après lecture du diff : l'intégrateur ne fusionne pas sa branche
 }
 
 export type EtatEquipe = 'planification' | 'plan' | 'en cours' | 'prete' | 'integration' | 'finie' | 'erreur';
@@ -259,7 +270,7 @@ Règles :
 }
 
 function consigneIntegration(e: Equipe): string {
-    const branches = e.taches.filter((t) => t.branche).map((t) => `- ${t.branche} : ${t.titre}${t.resultat ? ` — ${t.resultat.replace(/\s+/g, ' ').slice(0, 200)}` : ''}`).join('\n');
+    const branches = e.taches.filter((t) => t.branche && !t.ecartee).map((t) => `- ${t.branche} : ${t.titre}${t.resultat ? ` — ${t.resultat.replace(/\s+/g, ' ').slice(0, 200)}` : ''}`).join('\n');
     return `OBJECTIF DE L'ÉQUIPE : ${e.objectif}
 
 Les agents ont terminé ; chacun a commité son travail sur sa branche :
@@ -353,7 +364,7 @@ export function avancerEquipes(agents: SessionVue[]): void {
             if (e.taches.every((t) => t.etat === 'faite')) {
                 e.etat = 'prete';
                 change = true;
-                toast(`✓ Équipe ${e.nomProjet} : tout est fait`, 'Ouvre l\'équipe et clique « Intégrer » pour fusionner les branches');
+                toast(`✓ Équipe ${e.nomProjet} : tout est fait`, 'Clic pour ouvrir l\'équipe, puis « Intégrer » pour fusionner les branches', `claudetopia:equipe/${e.id}`);
             } else if (!actives && !e.taches.some(prete) && !enLancement.size) {
                 e.etat = 'erreur';
                 e.message = 'Des tâches ont échoué ou ont été arrêtées : relance-les, ou intègre ce qui est fait';
@@ -364,7 +375,7 @@ export function avancerEquipes(agents: SessionVue[]): void {
             if (e.integrateur.etat === 'faite') {
                 e.etat = 'finie';
                 change = true;
-                toast(`✓ Équipe ${e.nomProjet} : intégration finie`, e.integrateur.resultat?.split('\n')[0] ?? 'Les branches sont fusionnées');
+                toast(`✓ Équipe ${e.nomProjet} : intégration finie`, e.integrateur.resultat?.split('\n')[0] ?? 'Les branches sont fusionnées', `claudetopia:equipe/${e.id}`);
             } else if (e.integrateur.etat === 'erreur' || e.integrateur.etat === 'arretee') {
                 e.etat = 'prete';
                 e.message = `Intégration interrompue : ${e.integrateur.resultat ?? ''}`;
@@ -383,7 +394,7 @@ export function modifsLocales(e: Equipe): number {
 export async function integrer(id: string): Promise<string | undefined> {
     const e = equipeDe(id);
     if (!e) return 'équipe introuvable';
-    if (!e.taches.some((t) => t.branche)) return 'aucune branche à fusionner';
+    if (!e.taches.some((t) => t.branche && !t.ecartee)) return 'aucune branche à fusionner (toutes écartées ?)';
     e.integrateur = { id: 'integration', titre: 'Intégration', role: 'integrateur', consigne: '', dependances: [], etat: 'attente' };
     e.etat = 'integration';
     e.message = undefined;
@@ -410,6 +421,24 @@ export function relancerTache(id: string, tache: string): string | undefined {
     if (!e || !t) return 'tâche introuvable';
     Object.assign(t, { etat: 'attente', agentId: undefined, resultat: undefined, vuTravailler: false, absentDepuis: undefined });
     return lancerEquipe(id);
+}
+
+// Écarter une tâche (son diff ne convient pas) ou la garder de nouveau
+export function basculerEcart(id: string, tache: string): boolean {
+    const t = equipeDe(id)?.taches.find((x) => x.id === tache);
+    if (!t?.branche) return false;
+    t.ecartee = !t.ecartee;
+    sauver();
+    return t.ecartee;
+}
+
+// Ce que la branche d'une tâche change par rapport au dossier du projet (depuis leur point commun)
+export function diffTache(id: string, tache: string): { resume: string; diff: string } | undefined {
+    const e = equipeDe(id);
+    const t = e?.taches.find((x) => x.id === tache);
+    if (!e || !t?.branche) return undefined;
+    const lire = (args: string[]) => spawnSync('git', args, { cwd: e.projet, encoding: 'utf-8', maxBuffer: 20_000_000 }).stdout ?? '';
+    return { resume: lire(['diff', '--stat', `HEAD...${t.branche}`]), diff: lire(['diff', '--color=always', `HEAD...${t.branche}`]) };
 }
 
 export function retirerTache(id: string, tache: string): void {

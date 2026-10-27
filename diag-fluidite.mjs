@@ -1,4 +1,5 @@
 // Mesure de fluidité : rafraîchissements d'écran et retard de la boucle d'événements au repos
+process.env.CLAUDETOPIA_SANS_REPRISE = '1';
 import React from 'react';
 import { render } from 'ink-testing-library';
 import { App } from './dist/ui/App.js';

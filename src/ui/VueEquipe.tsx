@@ -9,9 +9,9 @@ import { ilYa } from './Panneau.js';
 import { bus } from './bus.js';
 import {
     Equipe, Tache, role, avancement, lancerEquipe, planifier, integrer, arreterEquipe, terminerEquipe,
-    relancerTache, retirerTache, modifsLocales, estDeConfiance,
+    relancerTache, retirerTache, modifsLocales, estDeConfiance, basculerEcart,
 } from '../equipe.js';
-import { theme } from '../theme.js';
+import { theme, fond } from '../theme.js';
 
 const ajuste = (s: string, n: number) => (s.length > n - 1 ? s.slice(0, Math.max(0, n - 2)) + '… ' : s.padEnd(n));
 const ANIM = ['✻', '✼', '✽', '✾', '✿', '❀'];
@@ -22,7 +22,7 @@ function etatTache(t: Tache, tic: number): { texte: string; couleur: string } {
         case 'attente': return { texte: t.dependances.length ? `○ attend ${t.dependances.join(', ')}` : '○ en attente', couleur: 'gray' };
         case 'en cours': return { texte: `${ANIM[tic % ANIM.length]} travaille${depuis}`, couleur: '#4ade80' };
         case 'bloquee': return { texte: '! attend ta permission', couleur: '#fb923c' };
-        case 'faite': return { texte: '✓ faite', couleur: '#94a3b8' };
+        case 'faite': return t.ecartee ? { texte: '✕ écartée (pas fusionnée)', couleur: '#f87171' } : { texte: '✓ faite', couleur: '#94a3b8' };
         case 'arretee': return { texte: '■ arrêtée', couleur: '#facc15' };
         default: return { texte: '✕ erreur', couleur: '#f87171' };
     }
@@ -63,7 +63,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
                 const etat = e ? etatEquipe(e, tic()) : undefined;
                 return (
                     <Box key={e?.id ?? 'nouvelle'} height={1} overflow="hidden">
-                        <Text wrap="truncate-end" backgroundColor={actif ? '#1e293b' : undefined}>
+                        <Text wrap="truncate-end" backgroundColor={actif ? fond.selection : undefined}>
                             <Text color={actif ? theme.accent : 'gray'}>{actif ? '❯ ' : '  '}</Text>
                             {e ? (
                                 <>
@@ -85,13 +85,16 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
 
 function boutonsEquipe(e: Equipe, t?: Tache) {
     const fermer = { label: '✕ Fermer', action: 'fermer' };
+    // Une tâche finie avec sa branche : lire son diff avant de fusionner, et l'écarter si besoin
+    const revue = t?.branche && t.etat === 'faite' && (e.etat === 'prete' || e.etat === 'erreur')
+        ? [{ label: '≠ Voir le diff', action: 'diff' }, { label: t.ecartee ? '↺ Garder' : '✕ Écarter', action: 'ecarter' }] : [];
     const ouvrirAgent = t?.agentId ? [{ label: '↵ Voir l\'agent', action: 'agent' }] : [];
     switch (e.etat) {
         case 'planification': return [{ label: '− Abandonner', action: 'ranger' }, fermer];
         case 'plan': return [...(estDeConfiance(e.projet) ? [] : [{ label: '▭ Accepter le dossier', action: 'confiance' }]), { label: '▶ Lancer l\'équipe', action: 'lancer' }, { label: '↻ Refaire le plan', action: 'replan' }, { label: '− Retirer la tâche', action: 'retirer' }, { label: '− Abandonner', action: 'ranger' }, fermer];
         case 'en cours': return [...ouvrirAgent, { label: '■ Arrêter', action: 'arreter' }, fermer];
-        case 'erreur': return [{ label: '↻ Relancer', action: 'lancer' }, ...ouvrirAgent, { label: '⇄ Intégrer ce qui est fait', action: 'integrer' }, { label: '↻ Refaire le plan', action: 'replan' }, { label: '− Ranger', action: 'ranger' }, fermer];
-        case 'prete': return [{ label: '⇄ Intégrer', action: 'integrer' }, ...ouvrirAgent, { label: '✓ Ranger l\'équipe', action: 'ranger' }, fermer];
+        case 'erreur': return [{ label: '↻ Relancer', action: 'lancer' }, ...ouvrirAgent, ...revue, { label: '⇄ Intégrer ce qui est fait', action: 'integrer' }, { label: '↻ Refaire le plan', action: 'replan' }, { label: '− Ranger', action: 'ranger' }, fermer];
+        case 'prete': return [{ label: '⇄ Intégrer', action: 'integrer' }, ...revue, ...ouvrirAgent, { label: '✓ Ranger l\'équipe', action: 'ranger' }, fermer];
         case 'integration': return [{ label: '↵ Voir l\'intégrateur', action: 'integrateur' }, { label: '■ Arrêter', action: 'arreter' }, fermer];
         default: return [{ label: '↵ Voir l\'intégrateur', action: 'integrateur' }, ...ouvrirAgent, { label: '✓ Ranger l\'équipe', action: 'ranger' }, fermer];
     }
@@ -138,6 +141,14 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
         if (action === 'fermer') return retour ? retour() : fermer();
         if (action === 'agent') return ouvrirSession(courante?.agentId);
         if (action === 'integrateur') return ouvrirSession(e.integrateur?.agentId);
+        if (action === 'diff' && courante) {
+            fermer();
+            return void bus.emit('lancer', `/equipe-diff ${e.id} ${courante.id}`);
+        }
+        if (action === 'ecarter' && courante) {
+            const ecartee = basculerEcart(e.id, courante.id);
+            return setMessage(ecartee ? `✕ ${courante.titre} est écartée : l'intégrateur ne fusionnera pas sa branche` : `↺ ${courante.titre} sera fusionnée`);
+        }
         if (action === 'lancer') {
             const erreur = courante && (courante.etat === 'erreur' || courante.etat === 'arretee') && e.etat !== 'erreur'
                 ? relancerTache(e.id, courante.id) : lancerEquipe(e.id);
@@ -231,7 +242,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
                     const et = etatTache(t, t0);
                     return (
                         <Box key={t.id} height={1} overflow="hidden">
-                            <Text wrap="truncate-end" backgroundColor={actif ? '#1e293b' : undefined}>
+                            <Text wrap="truncate-end" backgroundColor={actif ? fond.selection : undefined}>
                                 <Text color={actif ? theme.accent : 'gray'}>{actif ? '❯ ' : '  '}</Text>
                                 <Text bold={actif}>{ajuste(`${t.id === 'integration' ? '⇄' : t.id} ${t.titre}`, largeurTitre)}</Text>
                                 <Text color={rt.couleur}>{ajuste(`${rt.icone} ${rt.nom}`, 17)}</Text>

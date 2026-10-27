@@ -18,6 +18,10 @@ import { scan } from './scanCommande.js';
 import { commandesConfig } from './configCommandes.js';
 import { commandesSsh } from './sshGestion.js';
 import { commandesConnexions } from './connexionsCommandes.js';
+import { commandesPlus } from './plus.js';
+import { commandesPrCi } from './prci.js';
+import { commandesSurveillance } from './surveillanceLogs.js';
+import { commandesExport } from './exportImport.js';
 import { ajusterProjets } from './synchro.js';
 import { cloner as clonerDepot } from './git.js';
 import { afficherServeurs, testerServeurs, ouvrirSsh, serveursDuProjet } from './sshCommandes.js';
@@ -179,6 +183,9 @@ function afficherAide(): void {
     console.log(tableau([
         [c.accent('clic'), 'carte de session → sa conversation · boutons · menus · serveurs · Docker'],
         [c.accent('molette'), 'faire défiler la conversation, la sortie, les cartes'],
+        [c.accent('Ctrl+K'), "palette : chercher et lancer n'importe quoi (« proj com » → Commit · mon-projet)"],
+        [c.accent('Ctrl+F'), 'chercher dans la conversation ouverte (Entrée = occurrence suivante)'],
+        [c.accent('glisser un fichier'), 'dans la fenêtre : il devient une pièce jointe du message'],
         [c.accent('clic droit'), 'actions de ce qui est sous la souris : session, équipe, Docker, serveur, journal · masquer une section'],
         [c.accent('⇅ SFTP'), 'vue SSH → Fichiers, ou /sftp : parcourir un serveur · /ssh-ajouter, /sftp-ajouter pour configurer'],
         [c.accent('Alt+M'), 'parler au maître : il gère tes sessions (fermer, relancer, écrire, créer, résumer) · aussi clic sur sa zone à gauche'],
@@ -347,7 +354,14 @@ export const COMMANDES: Commande[] = [
             const cle = avant[0] === 'nouvelle' ? avant[1] : avant[0];
             const projet = cle ? resoudreProjet(cle) : await demanderProjet('Équipe sur quel projet ?');
             if (!projet) return;
-            objectif ||= (await saisir(`Objectif de l'équipe sur ${projet.nom} (ce que tu veux obtenir, le chef d'équipe découpe)`)).trim();
+            if (!objectif) {
+                const { MODELES_EQUIPE } = await import('./equipe.js');
+                const depart = await choisir(`Équipe sur ${projet.nom} : quel objectif ?`, [
+                    { label: '✎ Objectif libre', valeur: '', description: 'tu décris ce que tu veux obtenir' },
+                    ...MODELES_EQUIPE.map((m) => ({ label: m.nom, valeur: m.objectif, description: m.objectif })),
+                ], false);
+                objectif = (await saisir(`Objectif de l'équipe sur ${projet.nom} (le chef d'équipe découpe en tâches)`, depart)).trim();
+            }
             if (!objectif) return;
             let e;
             try {
@@ -482,7 +496,8 @@ export const COMMANDES: Commande[] = [
         description: 'Ouvrir un terminal (PowerShell, cmd, Git Bash, WSL) dans un projet ou le dossier courant',
         executer: async ({ args }) => {
             const { terminaux, terminal, ouvrirTerminal } = await import('./terminaux.js');
-            let t = args[0] ? terminal(args[0]) : undefined;
+            // « defaut » : le premier terminal détecté (PowerShell 7 s'il est là)
+            let t = args[0] === 'defaut' ? terminaux()[0] : args[0] ? terminal(args[0]) : undefined;
             const cle = t ? args.slice(1).join(' ') : args.join(' ');
             const projet = cle ? resoudreProjet(cle) : undefined;
             if (cle && !projet) return;
@@ -756,7 +771,7 @@ export const COMMANDES: Commande[] = [
         nom: 'notifs', args: '[on|off|test]', groupe: 'Système',
         description: 'Notification quand une session t\'attend',
         executer: ({ args }) => {
-            if (args[0] === 'test') return toast('🤖 Claudetopia', 'Les notifications fonctionnent.');
+            if (args[0] === 'test') return toast('🤖 Claudetopia', 'Les notifications fonctionnent · clic pour ouvrir les questions', 'claudetopia:questions');
             config.notifications = args[0] !== 'off';
             sauverConfig(config);
             demarrerNotifications();
@@ -792,6 +807,10 @@ export const COMMANDES: Commande[] = [
     ...commandesConfig(config),
     ...commandesSsh(config),
     ...commandesConnexions(),
+    ...commandesPlus(config),
+    ...commandesPrCi(),
+    ...commandesSurveillance(),
+    ...commandesExport(config),
     { nom: 'aide', alias: ['help', '?'], groupe: 'Config', description: 'Cette aide', executer: afficherAide },
     { nom: 'clear', alias: ['cls'], groupe: 'Config', description: 'Effacer l\'écran', executer: () => { /* géré par l'interface */ } },
     { nom: 'exit', alias: ['quit', 'q'], groupe: 'Config', description: 'Quitter', executer: () => { /* géré par l'interface */ } },

@@ -24,6 +24,10 @@ export interface Config {
     equipe: { parallele: number; permissions: string };   // équipes d'agents : agents en même temps, mode de permissions
     sectionsMasquees: string[];         // sections de la colonne de gauche masquées (docker, ssh)
     sectionsRepliees?: string[];        // sections repliées (en-tête seul) ; par défaut : ssh
+    modeClair?: boolean;                // terminal à fond blanc : fonds et bordures clairs
+    cartesDetaillees?: boolean;         // cartes de session sur 3 lignes (avec ta dernière demande)
+    planifications?: import('./planificateur.js').Planification[];   // tâches planifiées (/planifier)
+    budgetJour?: number;                // alerte au-delà de ce coût du jour en $ (équivalent API) ; 0 = aucune
     maitre: { actif: boolean; modele: string; veille?: number };   // veille : minutes d'inactivité avant de libérer sa mémoire (0 = jamais)
     sftp: import('./sftp.js').ConnexionSftp[];   // connexions SFTP (le mot de passe est chiffré à part)   // l'agent maître (gère les sessions) : haiku = rapide
 }

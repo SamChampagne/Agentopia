@@ -101,6 +101,27 @@ Claudetopia occupe ~110 Mo et ~3 % d'un cœur au repos. Le maître (~250 Mo) s'e
 (5 min sous 12 Go de RAM, où il ne démarre d'ailleurs qu'au premier besoin) ; réglable avec `maitre.veille` (minutes, 0 = jamais).
 Si Claude Code n'est pas installé ou pas connecté, la zone du maître le dit : un clic l'installe ou ouvre la connexion.
 
+## Confort et outils
+
+| | |
+|---|---|
+| **Ctrl+K** | palette : tout chercher et lancer (« proj com » → Commit · mon-projet) |
+| **Ctrl+F** | chercher dans la conversation ouverte |
+| **`/questions`** | ce que les sessions attendent de toi, avec la réponse proposée (clic sur « en attente ») |
+| **⎘ Copier** | le dernier bloc de code de Claude (bouton de la conversation, clic droit) |
+| **glisser un fichier** | dans la fenêtre : pièce jointe du message |
+| **`/cout`, `/budget`** | coût du jour en équivalent API (barre du bas), alerte au-delà d'un budget |
+| **`/planifier`** | une session chaque jour à heure fixe (tant que Claudetopia est ouvert) |
+| **`/pr-corriger`, `/ci-reparer`** | GitHub : corriger les commentaires d'une PR, réparer un pipeline en échec |
+| **`/surveiller-logs`** | notification à chaque erreur dans les logs d'un conteneur ; analyse par Claude |
+| **`/exporter`, `/importer`** | emporter sa configuration sur un autre poste (sans aucun secret) |
+| **`/mode clair`, `/cartes detaillees`** | terminal à fond blanc, cartes sur 3 lignes |
+| **`/notifications-cliquables`** | un clic sur une notification ouvre la session (lien enregistré pour ton compte) |
+
+Au lancement, Claudetopia rouvre la conversation ou la vue où tu en étais.
+Les équipes ont des modèles prêts (audit sécurité, dépendances, tests, mise en prod…) et, avant de fusionner,
+chaque tâche se relit (≠ Voir le diff) et peut être écartée.
+
 ## Fichiers sur le poste
 
 | Fichier | Contenu |

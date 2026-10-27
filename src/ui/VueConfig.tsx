@@ -6,7 +6,7 @@ import { bus } from './bus.js';
 import { compteClaude, CompteClaude, identiteGit, cheminRaccourci } from '../configCommandes.js';
 import { chargerConfig } from '../config.js';
 import { jetonsConfigures } from '../jetons.js';
-import { nomPalette, theme } from '../theme.js';
+import { nomPalette, theme, fond } from '../theme.js';
 
 type Ligne =
     | { type: 'section'; texte: string }
@@ -45,6 +45,8 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
         })),
         { type: 'section', texte: 'INTERFACE' },
         { type: 'reglage', label: 'Thème', valeur: nomPalette(), couleur: theme.accent, commande: '/theme', aide: 'changer' },
+        { type: 'reglage', label: 'Fond du terminal', valeur: config.modeClair ? 'clair' : 'sombre', commande: `/mode ${config.modeClair ? 'sombre' : 'clair'}`, aide: 'basculer' },
+        { type: 'reglage', label: 'Cartes de session', valeur: config.cartesDetaillees ? 'détaillées (3 lignes)' : 'compactes (2 lignes)', commande: `/cartes ${config.cartesDetaillees ? 'compactes' : 'detaillees'}`, aide: 'basculer' },
         { type: 'reglage', label: 'Nom en haut à gauche', valeur: (config.banniere || 'CLAUDETOPIA').toUpperCase(), commande: '/nom', aide: 'modifier' },
         { type: 'reglage', label: 'Prénom', valeur: config.prenom || '(non défini)', commande: '/prenom', aide: 'modifier' },
         { type: 'reglage', label: 'Colonne de gauche', valeur: config.largeurLaterale ? `${config.largeurLaterale} colonnes` : 'automatique', commande: '/largeur', aide: 'changer (ou glisse la ligne)' },
@@ -106,11 +108,11 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
                 const actif = i === courant;
                 return (
                     <Box key={i} height={1} overflow="hidden">
-                        <Text wrap="truncate-end" backgroundColor={actif ? '#1e293b' : undefined}>
+                        <Text wrap="truncate-end" backgroundColor={actif ? fond.selection : undefined}>
                             <Text color={actif ? theme.accent : 'gray'}>{actif ? ' ❯ ' : '   '}</Text>
                             {ajuste(l.label, colLabel)}
                             <Text color={l.couleur ?? theme.secondaire}>{ajuste(l.valeur, colValeur)}</Text>
-                            <Text color={actif ? theme.accent : '#475569'}>{`${l.aide} ›`}</Text>
+                            <Text color={actif ? theme.accent : fond.discret}>{`${l.aide} ›`}</Text>
                         </Text>
                     </Box>
                 );

@@ -99,6 +99,20 @@ export function commandesConnexions(): Commande[] {
             },
         },
         {
+            nom: 'notifications-cliquables', args: '[oui|non]', groupe: 'Config',
+            description: 'Un clic sur une notification Windows ouvre la session concernée (lien claudetopia: pour ton compte)',
+            executer: async ({ args }) => {
+                const n = await import('./notifications.js');
+                if (args[0] === 'non') {
+                    n.retirerLien();
+                    return console.log(c.succes('Notifications cliquables désactivées (lien claudetopia: retiré)'));
+                }
+                if (!await confirmer('Enregistrer le lien « claudetopia: » pour ton compte Windows (registre HKCU, sans droits admin) ? Un clic sur une notification ouvrira la session.')) return;
+                n.enregistrerLien();
+                console.log(n.lienEnregistre() ? c.succes('✓ Notifications cliquables activées · /notifs test pour essayer') : c.erreur('✕ Impossible d\'enregistrer le lien'));
+            },
+        },
+        {
             nom: 'ssh-creer-cle', groupe: 'Système', cache: true,
             description: 'Créer une clé SSH (si tu n\'en as pas)',
             executer: () => {

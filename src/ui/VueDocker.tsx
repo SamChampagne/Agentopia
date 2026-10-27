@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { useDonnees, rafraichirDocker } from './donnees.js';
+import { bus } from './bus.js';
 import { useTailleVue, useClicsVue, LigneBoutons, Separateur, Titre } from './Vues.js';
 import { placerBoutons, boutonA } from './mise.js';
 import { passerLaMain } from './ecran.js';
 import { Conteneur, Hote, grouperConteneurs, portsCourts, actionConteneur, commandeInteractive } from '../docker.js';
-import { theme } from '../theme.js';
+import { theme, fond } from '../theme.js';
 
 type Ligne =
     | { type: 'hote'; hote: Hote }
@@ -17,6 +18,7 @@ const BOUTONS = [
     { label: '■ Arrêter', action: 'stop' },
     { label: '↻ Redémarrer', action: 'restart' },
     { label: '≡ Logs', action: 'logs' },
+    { label: '◉ Surveiller', action: 'surveiller' },
     { label: '❯ Shell', action: 'shell' },
     { label: '✕ Fermer', action: 'fermer' },
 ];
@@ -52,12 +54,16 @@ export function VueDocker({ fermer }: { fermer: () => void }) {
     if (debutFenetre !== debut) setTimeout(() => setDebut(debutFenetre), 0);
 
     const boutons = placerBoutons(BOUTONS, 0);
-    const actifs = new Set(['fermer', ...(courant ? (courant.c.enMarche ? ['stop', 'restart', 'logs', 'shell'] : ['start', 'logs']) : [])]);
+    const actifs = new Set(['fermer', ...(courant ? (courant.c.enMarche ? ['stop', 'restart', 'logs', 'shell', 'surveiller'] : ['start', 'logs']) : [])]);
 
     async function agir(action: string) {
         if (action === 'fermer') return fermer();
         if (!courant || !actifs.has(action)) return;
         const { c, hote } = courant;
+        if (action === 'surveiller') {
+            fermer();
+            return void bus.emit('lancer', `/surveiller-logs ${c.id}`);
+        }
         if (action === 'logs' || action === 'shell') {
             const [programme, args] = commandeInteractive(action, c.id, hote.serveur);
             passerLaMain(programme, args);
@@ -124,10 +130,10 @@ export function VueDocker({ fermer }: { fermer: () => void }) {
                     }
                     const c = l.c;
                     const actif = c.id === courant?.c.id;
-                    const etat = c.enMarche ? (c.sante === 'unhealthy' ? '#facc15' : '#4ade80') : '#64748b';
+                    const etat = c.enMarche ? (c.sante === 'unhealthy' ? '#facc15' : '#4ade80') : fond.eteint;
                     return (
                         <Box key={c.id + l.hote.nom} height={1} overflow="hidden">
-                            <Text wrap="truncate-end" backgroundColor={actif ? '#1e293b' : undefined}>
+                            <Text wrap="truncate-end" backgroundColor={actif ? fond.selection : undefined}>
                                 <Text color={actif ? theme.accent : 'gray'}>{actif ? '  ❯ ' : '    '}</Text>
                                 <Text color={etat}>● </Text>
                                 {ajuste(c.service ?? c.nom, 22)}

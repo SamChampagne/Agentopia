@@ -1,4 +1,5 @@
 // Programmes lancés en fond par Claudetopia pendant 60 s au repos (après le démarrage)
+process.env.CLAUDETOPIA_SANS_REPRISE = '1';
 import { syncBuiltinESMExports } from 'module';
 import cp from 'child_process';
 const compte = new Map();

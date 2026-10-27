@@ -5,7 +5,7 @@ import { Projet, brancheGit } from '../projets.js';
 import { Instantane, SessionActive, instantane, arbre, cpuGroupe, cpuMachine, sessionsActives, fermerArbre, formatRam } from '../systeme.js';
 import { ServeurDev, serveursDev } from '../serveurs.js';
 import { Usage, calculerUsage, formatTokens, sparkline, nomDossierClaude } from '../usage.js';
-import { theme, couleurProjet } from '../theme.js';
+import { theme, couleurProjet, fond } from '../theme.js';
 import { lancerDetache } from '../lanceurs.js';
 
 interface LigneSession {
@@ -139,7 +139,7 @@ export function Moniteur({ projets, fermer }: { projets: Projet[]; fermer: () =>
                     const actif = section === 'sessions' && i === sel;
                     const s = l.session;
                     return (
-                        <Text key={s.pid} backgroundColor={actif ? '#1e293b' : undefined}>
+                        <Text key={s.pid} backgroundColor={actif ? fond.selection : undefined}>
                             <Text color={actif ? theme.accent : 'gray'}>{actif ? '❯ ' : '  '}</Text>
                             <Text color={couleurProjet(s.nom)}>● </Text>
                             {ajuste(s.nom, 22)}
@@ -163,7 +163,7 @@ export function Moniteur({ projets, fermer }: { projets: Projet[]; fermer: () =>
                 {serveurs.map((sv, i) => {
                     const actif = section === 'ports' && i === sel;
                     return (
-                        <Text key={sv.port} backgroundColor={actif ? '#1e293b' : undefined}>
+                        <Text key={sv.port} backgroundColor={actif ? fond.selection : undefined}>
                             <Text color={actif ? theme.accent : 'gray'}>{actif ? '❯ ' : '  '}</Text>
                             <Text color={theme.accent}>{(':' + sv.port).padEnd(8)}</Text>
                             {ajuste(sv.projet ?? '—', 24)}

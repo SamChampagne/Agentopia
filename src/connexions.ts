@@ -152,6 +152,11 @@ export async function etatConnexions(): Promise<Element[]> {
             ? { groupe: 'SERVEURS', nom: 'Docker', etat: 'avert', detail: local.erreur, action: 'démarrer', commande: '/docker-demarrer' }
             : { groupe: 'SERVEURS', nom: 'Docker', etat: 'ok', detail: `${local?.conteneurs.filter((c) => c.enMarche).length ?? 0} conteneur(s) en marche`, action: 'ouvrir', commande: '/docker' });
 
+    const { lienEnregistre } = await import('./notifications.js');
+    elements.push(lienEnregistre()
+        ? { groupe: 'OUTILS', nom: 'Notifications cliquables', etat: 'ok', detail: 'un clic sur une notification ouvre la session', action: 'désactiver', commande: '/notifications-cliquables non' }
+        : { groupe: 'OUTILS', nom: 'Notifications cliquables', etat: 'neutre', detail: 'un clic sur une notification ouvrirait la session concernée', action: 'activer', commande: '/notifications-cliquables oui' });
+
     // Outils
     for (const cle of ['wt', 'code', 'rg']) {
         const o = OUTILS[cle];

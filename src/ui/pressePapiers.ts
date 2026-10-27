@@ -25,9 +25,23 @@ if ($f) { "fichier:$f" }`;
 }
 
 // Remplace les jetons [image N] d'un texte par une consigne que Claude sait suivre (outil Read)
-export function joindreImages(texte: string, images: string[]): string {
-    if (!images.length) return texte;
-    const nettoye = texte.replace(/\[image (\d+)\]/g, (_, n) => `[image ${n}]`);
-    const liste = images.map((p, i) => `[image ${i + 1}] : ${p}`).join('\n');
-    return `${nettoye}\n\nImages jointes (lis-les avec l'outil Read) :\n${liste}`;
+export const EST_IMAGE = /\.(png|jpe?g|gif|webp|bmp)$/i;
+
+// Pièces jointes (images collées avec Alt+V, fichiers glissés dans la fenêtre) : listées à la fin du message
+export function joindreImages(texte: string, pieces: string[]): string {
+    if (!pieces.length) return texte;
+    const liste = pieces.map((p, i) => `[${EST_IMAGE.test(p) ? 'image' : 'fichier'} ${i + 1}] : ${p}`).join('\n');
+    return `${texte}\n\nPièces jointes (lis-les avec l'outil Read) :\n${liste}`;
+}
+
+// Un fichier glissé dans Windows Terminal arrive comme son chemin collé (entre guillemets s'il a des espaces).
+// Renvoie les fichiers si TOUT le texte collé est une liste de fichiers existants.
+export function fichiersDeposes(colle: string): string[] | undefined {
+    const morceaux = [...colle.trim().matchAll(/"([^"]+)"|(\S+)/g)].map((m) => m[1] ?? m[2]);
+    if (!morceaux.length || !morceaux.every((p) => /^([A-Za-z]:\\|\\\\)/.test(p))) return undefined;
+    try {
+        return morceaux.every((p) => fs.statSync(p).isFile()) ? morceaux : undefined;
+    } catch {
+        return undefined;
+    }
 }
