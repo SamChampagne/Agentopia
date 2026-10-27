@@ -1,0 +1,53 @@
+{
+  "name": "claudetopia",
+  "version": "1.0.0",
+  "description": "Claudetopia : piloter ses projets et des équipes d'agents Claude Code depuis le terminal",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "claudetopia": "./dist/index.js",
+    "ct": "./dist/index.js",
+    "sp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "node test-ui.mjs base,projets,equipe && node test-synchro.mjs",
+    "test:ui": "node test-ui.mjs base",
+    "test:synchro": "node test-synchro.mjs",
+    "test:fluidite": "node diag-fluidite.mjs",
+    "test:equipe": "node test-equipe.mjs",
+    "test:vitesse": "node bench-ui.mjs",
+    "test:maitre": "node test-maitre.mjs",
+    "test:ssh": "node test-ssh.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "@types/react": "^18.3.12",
+    "@types/ssh2": "^1.15.1",
+    "ink-testing-library": "^4.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "ink": "^5.2.1",
+    "ink-text-input": "^6.0.0",
+    "pg": "^8.16.3",
+    "react": "^18.3.1",
+    "ssh2": "^1.16.0",
+    "string-width": "file:./vendor/string-width",
+    "wrap-ansi": "^9.0.0"
+  },
+  "type": "module",
+  "overrides": {
+    "string-width": "$string-width"
+  }
+}

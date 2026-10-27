@@ -1,0 +1,302 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { spawn } from 'child_process';
+import { CLAUDE } from './claude.js';
+import { dossierSessions } from './sessions.js';
+
+// Toutes les sessions Claude actives (onglets interactifs + arrière-plan)
+
+export type Statut = 'travaille' | 'attend' | 'bloquee' | 'terminee';
+
+export interface SessionVue {
+    cle: string;                   // id stable pour React
+    id?: string;                   // id court d'une session d'arrière-plan (claude attach <id>)
+    sessionId: string;
+    pid?: number;
+    arrierePlan: boolean;
+    cwd: string;
+    nom: string;                   // dossier du projet
+    titre: string;                 // nom de la session
+    statut: Statut;
+    debut: Date;
+    fichier: string;               // transcript .jsonl
+}
+
+interface BrutAgent {
+    id?: string;
+    pid?: number;
+    cwd: string;
+    kind: 'interactive' | 'background';
+    startedAt: number;
+    sessionId: string;
+    name?: string;
+    status?: string;
+    state?: string;
+}
+
+function statut(a: BrutAgent): Statut {
+    if (a.state === 'blocked') return 'bloquee';
+    if (a.state === 'done') return 'terminee';
+    if (a.status === 'busy' || a.state === 'working' || a.state === 'running') return 'travaille';
+    return 'attend';
+}
+
+const vue = (a: BrutAgent): SessionVue => ({
+    cle: a.sessionId,
+    id: a.id,
+    sessionId: a.sessionId,
+    pid: a.pid,
+    arrierePlan: a.kind === 'background',
+    cwd: a.cwd,
+    nom: path.basename(a.cwd),
+    titre: a.name ?? '',
+    statut: statut(a),
+    debut: new Date(a.startedAt),
+    fichier: path.join(dossierSessions(a.cwd), `${a.sessionId}.jsonl`),
+});
+
+const CLAUDE_DIR = path.join(os.homedir(), '.claude');
+export const DOSSIERS_AGENTS = [path.join(CLAUDE_DIR, 'sessions'), path.join(CLAUDE_DIR, 'jobs')];
+
+const lireJson = (f: string) => {
+    try {
+        return JSON.parse(fs.readFileSync(f, 'utf-8'));
+    } catch {
+        return undefined;
+    }
+};
+
+const vivant = (pid: number) => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (e) {
+        return (e as NodeJS.ErrnoException).code === 'EPERM';
+    }
+};
+
+// Lecture directe des fichiers de Claude Code (quelques ms) au lieu de lancer `claude agents` (plus d'une seconde
+// et un processus Claude complet à chaque fois) : ~/.claude/sessions/<pid>.json pour les sessions interactives,
+// ~/.claude/jobs/<id>/state.json pour celles d'arrière-plan. undefined si le format n'est pas reconnu.
+function lireFichiersAgents(): SessionVue[] | undefined {
+    const [sessions, jobs] = DOSSIERS_AGENTS;
+    if (!fs.existsSync(sessions) || !fs.existsSync(jobs)) return undefined;
+    const brut: BrutAgent[] = [];
+    for (const f of fs.readdirSync(sessions)) {
+        if (!/^\d+\.json$/.test(f)) continue;
+        const j = lireJson(path.join(sessions, f));
+        if (!j?.sessionId || !j.cwd || !j.pid || j.kind === 'background' || !vivant(j.pid)) continue;
+        brut.push({ pid: j.pid, cwd: j.cwd, kind: 'interactive', startedAt: j.startedAt, sessionId: j.sessionId, name: j.name, status: j.status });
+    }
+    for (const id of fs.readdirSync(jobs)) {
+        const j = lireJson(path.join(jobs, id, 'state.json'));
+        if (!j) continue;
+        if (!j.sessionId || !j.cwd || !j.state) return undefined;   // format inconnu : on laisse faire `claude agents`
+        brut.push({ id, cwd: j.cwd, kind: 'background', startedAt: Date.parse(j.createdAt) || 0, sessionId: j.sessionId, name: j.name, state: j.state });
+    }
+    return brut.map(vue).sort((a, b) => a.debut.getTime() - b.debut.getTime());
+}
+
+export async function listerAgents(): Promise<SessionVue[]> {
+    try {
+        const parFichiers = lireFichiersAgents();
+        if (parFichiers) return parFichiers;
+    } catch {
+        // on passe par la commande
+    }
+    return listerAgentsCommande();
+}
+
+export function listerAgentsCommande(): Promise<SessionVue[]> {
+    return new Promise((ok) => {
+        const proc = spawn(CLAUDE, ['agents', '--json'], { shell: CLAUDE === 'claude' });
+        let sortie = '';
+        proc.stdout.setEncoding('utf-8');
+        proc.stdout.on('data', (d: string) => (sortie += d));
+        proc.on('error', () => ok([]));
+        proc.on('close', () => {
+            try {
+                const brut = JSON.parse(sortie) as BrutAgent[];
+                ok(brut.map(vue).sort((a, b) => a.debut.getTime() - b.debut.getTime()));
+            } catch {
+                ok([]);
+            }
+        });
+    });
+}
+
+// ─── Transcript ──────────────────────────────────────────────────────────────
+
+export interface Message {
+    role: 'user' | 'assistant' | 'outil' | 'resultat';
+    texte: string;
+    date?: Date;
+}
+
+// Résumé d'un appel d'outil : "Bash  npm test", "Edit  App.tsx"…
+function resumerOutil(nom: string, entree: Record<string, unknown> = {}): string {
+    const v = (k: string) => (typeof entree[k] === 'string' ? (entree[k] as string) : '');
+    const detail = v('command') || (v('file_path') && path.basename(v('file_path'))) || v('pattern') || v('description')
+        || v('url') || v('query') || v('prompt') || v('skill') || '';
+    return `${nom}  ${detail.replace(/\s+/g, ' ')}`.trim();
+}
+
+// Lit la fin du fichier (les transcripts font parfois plusieurs Mo)
+function lireFin(fichier: string, octets: number): string {
+    try {
+        const taille = fs.statSync(fichier).size;
+        const debut = Math.max(0, taille - octets);
+        const fd = fs.openSync(fichier, 'r');
+        const tampon = Buffer.alloc(taille - debut);
+        fs.readSync(fd, tampon, 0, tampon.length, debut);
+        fs.closeSync(fd);
+        const texte = tampon.toString('utf-8');
+        return debut > 0 ? texte.slice(texte.indexOf('\n') + 1) : texte;   // ligne coupée au début
+    } catch {
+        return '';
+    }
+}
+
+// Les sessions commencent par un gros contexte (~450 Ko) : on lit assez loin pour garder le début de la conversation
+export function lireTranscript(fichier: string, octets = 2_000_000): Message[] {
+    const messages: Message[] = [];
+    for (const ligne of lireFin(fichier, octets).split('\n')) {
+        if (!ligne.includes('"type":"user"') && !ligne.includes('"type":"assistant"')) continue;
+        let o;
+        try {
+            o = JSON.parse(ligne);
+        } catch {
+            continue;
+        }
+        if (o.isMeta || o.isSidechain) continue;
+        const date = o.timestamp ? new Date(o.timestamp) : undefined;
+        const contenu = o.message?.content;
+        if (o.type === 'user') {
+            if (typeof contenu === 'string') {
+                if (!contenu.startsWith('<')) messages.push({ role: 'user', texte: contenu, date });
+                continue;
+            }
+            for (const bloc of contenu ?? []) {
+                if (bloc.type === 'text' && !bloc.text.startsWith('<')) messages.push({ role: 'user', texte: bloc.text, date });
+                if (bloc.type === 'image') messages.push({ role: 'user', texte: '[image]', date });
+                if (bloc.type === 'tool_result') {
+                    const t = typeof bloc.content === 'string' ? bloc.content
+                        : (bloc.content ?? []).map((x: { text?: string }) => x.text ?? '').join(' ');
+                    messages.push({ role: 'resultat', texte: (bloc.is_error ? '✗ ' : '') + t.trim().split('\n')[0], date });
+                }
+            }
+        } else {
+            for (const bloc of contenu ?? []) {
+                if (bloc.type === 'text' && bloc.text.trim()) messages.push({ role: 'assistant', texte: bloc.text.trim(), date });
+                if (bloc.type === 'tool_use') messages.push({ role: 'outil', texte: resumerOutil(bloc.name, bloc.input), date });
+            }
+        }
+    }
+    return messages;
+}
+
+export interface Activite {
+    dernierUser?: string;
+    dernierTexte?: string;
+    outil?: string;              // dernier outil appelé, s'il est postérieur au dernier texte
+    date?: Date;
+}
+
+export function activite(messages: Message[]): Activite {
+    const a: Activite = {};
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        a.date ??= m.date;
+        if (m.role === 'outil' && !a.outil && !a.dernierTexte) a.outil = m.texte;
+        if (m.role === 'assistant' && !a.dernierTexte) a.dernierTexte = m.texte;
+        if (m.role === 'user' && m.texte !== '[image]') {
+            a.dernierUser = m.texte;
+            break;
+        }
+    }
+    return a;
+}
+
+// ─── Actions ─────────────────────────────────────────────────────────────────
+
+function claude(args: string[], cwd = os.homedir()): Promise<string> {
+    return new Promise((ok) => {
+        const proc = spawn(CLAUDE, args, { cwd, shell: CLAUDE === 'claude' });
+        let sortie = '';
+        proc.stdout.on('data', (d) => (sortie += d));
+        proc.stderr.on('data', (d) => (sortie += d));
+        proc.on('error', (e) => ok(e.message));
+        proc.on('close', () => ok(sortie.trim()));
+    });
+}
+
+export interface OptionsAgent {
+    worktree?: string;          // la session travaille dans son propre worktree git (.claude/worktrees/<nom>)
+    role?: string;              // consigne ajoutée au prompt système (agent métier)
+    permissions?: string;       // acceptEdits, auto, manual…
+}
+
+// Lance une session d'arrière-plan ; renvoie son id court (pour claude attach)
+export async function lancerArrierePlan(cwd: string, nom: string, prompt?: string, reprendre?: string, options: OptionsAgent = {}): Promise<{ id?: string; sortie: string }> {
+    const args = ['--bg', '-n', nom];
+    if (reprendre) args.push('--resume', reprendre, '--fork-session');
+    if (options.worktree) args.push('-w', options.worktree);
+    if (options.role) args.push('--append-system-prompt', options.role);
+    if (options.permissions) args.push('--permission-mode', options.permissions);
+    if (prompt) args.push(prompt);
+    const sortie = await claude(args, cwd);
+    return { id: /backgrounded · ([0-9a-f]{6,})/.exec(sortie)?.[1], sortie };
+}
+
+export function arreterArrierePlan(id: string): Promise<string> {
+    return claude(['stop', id]);
+}
+
+// Retire la session de la liste (la conversation reste) ; Claude supprime son worktree quand c'est sans risque
+export function retirerArrierePlan(id: string): Promise<string> {
+    return claude(['rm', id]);
+}
+
+// Le service d'arrière-plan de Claude Code redémarre parfois quelques secondes (« service may be restarting ») :
+// ce n'est pas un échec, on réessaie
+const PASSAGER = /restarting|try again|ECONNREFUSED|ECONNRESET|EPIPE|timed? ?out|not running/i;
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Fermer = arrêter puis retirer ; « déjà retirée » compte comme réussi
+export async function fermerArrierePlan(id: string): Promise<{ ok: boolean; message: string }> {
+    let derniere = '';
+    for (let essai = 0; essai < 8; essai++) {
+        if (essai) await pause(Math.min(4000, 800 * essai));
+        const arret = await arreterArrierePlan(id);
+        if (PASSAGER.test(arret)) {
+            derniere = arret;
+            continue;
+        }
+        const retrait = await retirerArrierePlan(id);
+        if (/removed|no job matching/i.test(retrait)) return { ok: true, message: 'fermée' };
+        derniere = retrait;
+        if (!PASSAGER.test(retrait)) break;
+    }
+    return { ok: false, message: derniere.split('\n').find(Boolean) ?? 'impossible de la fermer' };
+}
+
+// Envoie un message à une session d'arrière-plan sans l'ouvrir.
+// Claude Code ne sait pas injecter un message dans une session qui tourne (il en ferait une copie) :
+// on retire le processus d'arrière-plan (la conversation est gardée), puis on la reprend avec le message,
+// sous le même id. Vérifié : l'historique est conservé.
+// Attention : la reprise peut créer un nouveau fichier de conversation (historique recopié) → nouvel id, renvoyé.
+export async function envoyerMessage(s: SessionVue, texte: string): Promise<{ ok: boolean; message: string; id?: string }> {
+    if (!s.arrierePlan || !s.id) return { ok: false, message: 'cette session est dans un onglet : écris-y directement, ou « Continuer ici »' };
+    if (s.statut === 'travaille') return { ok: false, message: 'Claude est en train de travailler : attends qu\'il ait fini, ou « Rejoindre »' };
+    if (s.statut === 'bloquee') return { ok: false, message: 'Claude attend une permission : « Rejoindre » pour répondre' };
+    // claude rm supprime aussi un éventuel worktree de la session : on ne prend pas ce risque
+    if (/[\\/]\.claude[\\/]worktrees[\\/]/i.test(s.cwd)) return { ok: false, message: 'session dans un worktree : utilise « Rejoindre »' };
+    const retrait = await claude(['rm', s.id]);
+    if (!/removed/i.test(retrait)) return { ok: false, message: retrait.split('\n')[0] || 'impossible de reprendre la session' };
+    // -n garde le nom de la session (sinon Claude la renomme d'après le nouveau message)
+    const sortie = await claude(['--bg', '-n', s.titre || s.nom, '--resume', s.sessionId, texte], s.cwd);
+    const id = /backgrounded · ([0-9a-f]{6,})/.exec(sortie)?.[1];
+    if (!id) return { ok: false, message: sortie.split('\n')[0] || 'échec de l\'envoi' };
+    return { ok: true, message: 'message envoyé', id };
+}

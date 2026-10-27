@@ -1,0 +1,16 @@
+{
+  "name": "string-width",
+  "version": "7.2.0-claudetopia",
+  "description": "string-width 7.2.0 avec chemin rapide ASCII et cache (Claudetopia)",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "types": "./index.d.ts",
+    "default": "./index.js"
+  },
+  "dependencies": {
+    "emoji-regex": "^10.3.0",
+    "get-east-asian-width": "^1.0.0",
+    "strip-ansi": "^7.1.0"
+  }
+}
