@@ -7,10 +7,16 @@ Poste de pilotage pour travailler avec Claude Code : sessions Claude en direct, 
 Dans PowerShell :
 
 ```powershell
-git clone <url du depot> "$HOME\Claudetopia"; & "$HOME\Claudetopia\Installer.bat"
+git clone https://github.com/SamChampagne/ClaudeTopia.git "$HOME\Claudetopia"; & "$HOME\Claudetopia\Installer.bat"
 ```
 
 Dans Claudetopia, **`/installation`** affiche cette ligne avec la bonne adresse, prête à copier.
+
+Si le dépôt est public, aussi :
+
+```powershell
+irm https://raw.githubusercontent.com/SamChampagne/ClaudeTopia/main/install.ps1 | iex
+```
 
 Sinon : copier ce dossier sur le poste et double-cliquer sur **Installer.bat**.
 

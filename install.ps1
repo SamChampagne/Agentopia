@@ -12,7 +12,7 @@
 $ErrorActionPreference = 'Continue'
 
 # Adresse du dépôt, utilisée quand le script est lancé seul (irm | iex). /installation dans Claudetopia affiche la bonne ligne.
-$Depot = if ($env:CLAUDETOPIA_DEPOT) { $env:CLAUDETOPIA_DEPOT } else { '' }
+$Depot = if ($env:CLAUDETOPIA_DEPOT) { $env:CLAUDETOPIA_DEPOT } else { 'https://github.com/SamChampagne/ClaudeTopia.git' }
 $Dossier = Join-Path $HOME 'Claudetopia'
 
 $racine = if ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { $null }
