@@ -1,0 +1,133 @@
+import { spawn } from 'child_process';
+import type { Commande } from './commandes.js';
+import { AIDE_JETONS, Hebergeur, pageJeton, jetonsConfigures, enregistrerJeton, oublierJeton } from './jetons.js';
+import { OUTILS, DOCKER_DESKTOP, identiteJeton, oublierIdentite, remotesDuPoste, lirePressePapiers, viderPressePapiers, existe } from './connexions.js';
+import { assurerCle } from './sshConfig.js';
+import { lireSynchro } from './synchro.js';
+import { choisir, saisir, confirmer, afficherVue, tache } from './ui/bus.js';
+import { lancerDetache } from './lanceurs.js';
+import { c } from './theme.js';
+
+// Tout connecter depuis l'application, en le moins d'étapes possible
+
+const SITES: Record<string, Hebergeur> = { github: 'GitHub', azure: 'Azure DevOps', gitlab: 'GitLab' };
+
+// Un jeton ressemble à une longue suite sans espace (évite d'enregistrer un texte copié par erreur)
+const ressembleAUnJeton = (t: string) => t.length >= 20 && t.length <= 400 && !/\s/.test(t);
+
+// Programme d'installation dans une fenêtre PowerShell visible (winget peut demander une confirmation Windows)
+function installerAvecWinget(nom: string, id: string): void {
+    const script = `Write-Host 'Installation de ${nom}…' -ForegroundColor Cyan; `
+        + `winget install -e --id ${id} --accept-source-agreements --accept-package-agreements; `
+        + `Write-Host ''; Write-Host 'Terminé : ferme cette fenêtre. Relance Claudetopia pour qu''il voie ${nom}.' -ForegroundColor Green`;
+    spawn('cmd.exe', ['/c', 'start', '""', 'powershell', '-NoExit', '-NoProfile', '-Command', script], { detached: true, stdio: 'ignore', windowsVerbatimArguments: false }).unref();
+}
+
+export function commandesConnexions(): Commande[] {
+    return [
+        {
+            nom: 'connexions', alias: ['connecter-tout'], groupe: 'Config',
+            description: 'Tout ce qui se connecte (Claude, GitHub, Azure, GitLab, SSH, SFTP, Docker, outils) : état et réglage en un clic',
+            executer: async () => {
+                const { VueConnexions } = await import('./ui/VueConnexions.js');
+                const React = await import('react');
+                await afficherVue((fermer) => React.createElement(VueConnexions, { fermer }));
+            },
+        },
+        {
+            nom: 'connecter', args: '[github|azure|gitlab]', groupe: 'Git',
+            description: 'Connecter GitHub, Azure DevOps ou GitLab (pull requests, dépôts en ligne)',
+            executer: async ({ args }) => {
+                // Le site d'abord : celui qui a le plus de dépôts sur ce poste est proposé en premier
+                const depots = lireSynchro().depots;
+                const nb = (h: Hebergeur) => depots.filter((d) => d.hebergeur === h).length;
+                const deja = jetonsConfigures();
+                const site: Hebergeur = SITES[args[0]?.toLowerCase()] ?? await choisir('Connecter quel site ?',
+                    (Object.values(SITES)).sort((a, b) => nb(b) - nb(a)).map((h) => ({
+                        label: `${deja.includes(h) ? '✓' : '○'} ${h}`, valeur: h,
+                        description: `${nb(h) ? `${nb(h)} dépôt${nb(h) > 1 ? 's' : ''} sur ce poste` : 'aucun dépôt détecté'}${deja.includes(h) ? ' · déjà connecté' : ''}`,
+                    })), false);
+                if (deja.includes(site)) {
+                    const quoi = await choisir(`${site} est déjà connecté`, [
+                        { label: '⇄ Le reconnecter avec un nouveau jeton', valeur: 'nouveau' },
+                        { label: '✕ Le déconnecter (supprimer le jeton)', valeur: 'oublier' },
+                    ], false);
+                    if (quoi === 'oublier') {
+                        oublierJeton(site);
+                        oublierIdentite(site);
+                        return console.log(c.succes(`${site} déconnecté`));
+                    }
+                }
+                const remotes = remotesDuPoste();
+                lancerDetache('start', ['', pageJeton(site, remotes)]);
+                console.log(c.discret(`Page ${site} ouverte dans le navigateur : ${AIDE_JETONS[site].consigne}, puis copie le jeton.`));
+                const comment = await choisir(`Jeton ${site}`, [
+                    { label: '⎘ Je l\'ai copié : le prendre dans le presse-papiers', valeur: 'presse', description: 'rien à coller, le presse-papiers est vidé après' },
+                    { label: '✎ Le coller moi-même', valeur: 'coller' },
+                ], false);
+                let secret = '';
+                if (comment === 'presse') {
+                    secret = await lirePressePapiers();
+                    if (!ressembleAUnJeton(secret)) {
+                        console.log(c.alerte('Le presse-papiers ne contient pas de jeton : colle-le ici'));
+                        secret = '';
+                    }
+                }
+                if (!secret) secret = (await saisir(`Colle le jeton ${site}`, '', true)).trim();
+                if (!secret) return;
+                // On vérifie AVANT d'enregistrer : un jeton refusé n'est pas gardé
+                const id = await tache(`Vérification du jeton ${site}`, () => identiteJeton(site, secret, remotes));
+                if (!id.ok) return console.log(c.erreur(`✕ ${site} : ${id.texte} · rien n'a été enregistré`));
+                if (!enregistrerJeton(site, secret)) return console.log(c.erreur('✕ Impossible de chiffrer le jeton'));
+                oublierIdentite(site);
+                if (comment === 'presse') viderPressePapiers();
+                console.log(c.succes(`✓ Connecté à ${site} : ${id.texte} · jeton chiffré pour ton compte Windows`));
+                // Pull requests et dépôts en ligne, tout de suite
+                const synchro = await import('./synchro.js');
+                void synchro.rafraichirDistants();
+            },
+        },
+        {
+            nom: 'installer', args: '<git|wt|code|rg|docker>', groupe: 'Config',
+            description: 'Installer un outil manquant (winget, dans une fenêtre visible)',
+            executer: async ({ args }) => {
+                const cle = args[0] ?? await choisir('Installer quel outil ?', Object.entries(OUTILS).map(([k, o]) => ({ label: o.nom, valeur: k, description: o.pour })), false);
+                const o = OUTILS[cle];
+                if (!o) return console.log(c.alerte(`Outil inconnu : ${cle} (${Object.keys(OUTILS).join(', ')})`));
+                installerAvecWinget(o.nom, o.winget);
+                console.log(c.succes(`Installation de ${o.nom} lancée dans une nouvelle fenêtre · accepte si Windows demande une confirmation`));
+            },
+        },
+        {
+            nom: 'ssh-creer-cle', groupe: 'Système', cache: true,
+            description: 'Créer une clé SSH (si tu n\'en as pas)',
+            executer: () => {
+                const r = assurerCle();
+                if ('erreur' in r) return console.log(c.erreur(`✕ ${r.erreur}`));
+                console.log(r.creee ? c.succes(`✓ Clé créée : ${r.prive}`) : c.discret(`Tu as déjà une clé : ${r.prive}`));
+                console.log(c.discret('Pour l\'installer sur un serveur : vue SSH → « ⚿ Installer ma clé »'));
+            },
+        },
+        {
+            nom: 'docker-demarrer', groupe: 'Système', cache: true,
+            description: 'Démarrer Docker Desktop',
+            executer: async () => {
+                if (!existe(DOCKER_DESKTOP)) return console.log(c.alerte('Docker Desktop introuvable : /installer docker'));
+                lancerDetache(DOCKER_DESKTOP, []);
+                console.log(c.succes('Docker Desktop démarre (environ 30 s) · la section Docker se remplira toute seule'));
+                if (await confirmer('Attendre qu\'il soit prêt ?')) {
+                    const { rafraichirDocker, lireDonnees } = await import('./ui/donnees.js');
+                    await tache('Démarrage de Docker', async () => {
+                        for (let i = 0; i < 30; i++) {
+                            await new Promise((r) => setTimeout(r, 3000));
+                            await rafraichirDocker();
+                            if (!lireDonnees().docker.find((h) => !h.serveur)?.erreur) return;
+                        }
+                    });
+                    console.log(c.succes('✓ Docker est prêt'));
+                }
+            },
+        },
+    ];
+}
+

@@ -29,6 +29,7 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
 
     const lignes: Ligne[] = [
         { type: 'section', texte: 'COMPTES' },
+        { type: 'reglage', label: '⚿ Connexions', valeur: 'tout voir et tout connecter au même endroit', couleur: theme.accent, commande: '/connexions', aide: 'ouvrir' },
         {
             type: 'reglage', label: 'Claude', commande: '/compte claude', aide: 'changer de compte',
             valeur: !claude ? 'lecture…' : claude.connecte ? `${claude.email ?? ''} (${claude.methode ?? ''})` : 'non connecté',

@@ -35,6 +35,13 @@ Seul **Node.js 18+** est obligatoire (`winget install OpenJS.NodeJS.LTS`). Le re
 | ripgrep | `/cherche` | `winget install BurntSushi.ripgrep.MSVC` |
 | Docker Desktop | section Docker | optionnel |
 
+## Tout connecter
+
+**`/connexions`** (aussi dans Config et au clic droit) montre tout ce qui se connecte, avec son état et un clic pour le régler :
+Claude Code et ton compte, Git, **GitHub / Azure DevOps / GitLab** (le jeton est vérifié auprès du site avant d'être gardé,
+et peut être pris directement dans le presse-papiers), clé et serveurs SSH, SFTP, Docker, et les outils manquants
+(installés avec winget). Au lancement, une ligne discrète signale s'il reste quelque chose à régler.
+
 ## Premier lancement
 
 Claudetopia scanne le poste (projets, doublons, serveurs SSH, outils) et propose les projets à suivre.

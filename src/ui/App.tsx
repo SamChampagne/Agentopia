@@ -242,6 +242,12 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         };
         etatClaude.on('maj', surClaude);
         const idMaitre = setTimeout(() => void verifierClaude(), 300);
+        // Une fois par lancement : s'il y a des connexions à régler, on le dit (sans insister)
+        const idConnexions = setTimeout(async () => {
+            const { etatConnexions } = await import('../connexions.js');
+            const aRegler = (await etatConnexions()).filter((x) => x.etat === 'manque' || x.etat === 'avert');
+            if (aRegler.length) bus.emit('notice', `⚿ ${aRegler.length} connexion${aRegler.length > 1 ? 's' : ''} à régler (${aRegler.slice(0, 3).map((x) => x.nom).join(', ')}) · /connexions`);
+        }, 20_000);
         if (commandeInitiale) lancer(commandeInitiale, true);
         else if (auDemarrage) lancer(auDemarrage);
         return () => {
@@ -256,6 +262,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             clearInterval(idTic);
             clearInterval(idHeure);
             clearTimeout(idMaitre);
+            clearTimeout(idConnexions);
             maitre.off('maj', surMaitre);
             etatClaude.off('maj', surClaude);
         };
@@ -450,6 +457,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     }));
     const general = (): Article[] => [
         { label: '◈ Parler au maître (Alt+M)', valeur: () => setModeMaitre(true) },
+        { label: '⚿ Connexions (comptes, serveurs, outils)', valeur: '/connexions' },
         { label: '+ Nouvelle session Claude', valeur: '/nouvelle' },
         { label: '◆ Nouvelle équipe d\'agents', valeur: '/equipe nouvelle' },
         ...ici(statut.cwd),

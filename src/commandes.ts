@@ -17,6 +17,7 @@ import { cherche } from './cherche.js';
 import { scan } from './scanCommande.js';
 import { commandesConfig } from './configCommandes.js';
 import { commandesSsh } from './sshGestion.js';
+import { commandesConnexions } from './connexionsCommandes.js';
 import { ajusterProjets } from './synchro.js';
 import { cloner as clonerDepot } from './git.js';
 import { afficherServeurs, testerServeurs, ouvrirSsh, serveursDuProjet } from './sshCommandes.js';
@@ -790,6 +791,7 @@ export const COMMANDES: Commande[] = [
     },
     ...commandesConfig(config),
     ...commandesSsh(config),
+    ...commandesConnexions(),
     { nom: 'aide', alias: ['help', '?'], groupe: 'Config', description: 'Cette aide', executer: afficherAide },
     { nom: 'clear', alias: ['cls'], groupe: 'Config', description: 'Effacer l\'écran', executer: () => { /* géré par l'interface */ } },
     { nom: 'exit', alias: ['quit', 'q'], groupe: 'Config', description: 'Quitter', executer: () => { /* géré par l'interface */ } },

@@ -182,7 +182,7 @@ export function etatGh(): 'absent' | 'deconnecte' | 'connecte' {
 // État de la dernière lecture des PR par hébergeur (affiché dans la vue Git)
 export const etatPR: Partial<Record<Hebergeur, string>> = {};
 
-async function appel(url: string, entetes: Record<string, string>): Promise<{ ok: boolean; statut: number; json?: any }> {
+export async function appel(url: string, entetes: Record<string, string>): Promise<{ ok: boolean; statut: number; json?: any }> {
     try {
         const res = await fetch(url, { headers: { 'User-Agent': 'claudetopia', ...entetes }, signal: AbortSignal.timeout(15_000) });
         return { ok: res.ok, statut: res.status, json: res.ok ? await res.json() : undefined };
