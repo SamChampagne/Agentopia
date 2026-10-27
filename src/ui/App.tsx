@@ -174,6 +174,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     const [espace, setEspaceEtat] = useState<Espace>('sessions');
     const [detail, setDetailEtat] = useState<Detail>();
     const [survol, setSurvol] = useState<string>();
+    const [pleinEcran, setPleinEcran] = useState(false);
     // « Quelle touche ? » ouvert : le chemin des lettres déjà tapées ('' = la racine)
     const [quelleTouche, setQuelleTouche] = useState<string>();
     const setEspace = (e: Espace) => {
@@ -327,6 +328,8 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             else if (quoi === 'surveillances') void etatRef.current.lancer('/surveillances', false, true);
         };
         liens.on('demande', surLien);
+        const surPleinEcran = (v: boolean) => setPleinEcran(v);
+        bus.on('plein-ecran', surPleinEcran);
         const surDetail = (dt: Detail) => setTimeout(() => etatRef.current.ouvrirDetail(dt), 50);
         bus.on('detail', surDetail);
         const surMaitre = () => setVersionMaitre((v) => v + 1);
@@ -366,6 +369,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             maitre.off('maj', surMaitre);
             etatClaude.off('maj', surClaude);
             liens.off('demande', surLien);
+            bus.off('plein-ecran', surPleinEcran);
             bus.off('detail', surDetail);
         };
     }, []);
@@ -711,7 +715,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         }
         const by = y - HAUT;
         if (by < 0 || by >= m.corps) return undefined;
-        if (x < m.lateral - 1) {
+        if (!pleinEcran && x < m.lateral - 1) {
             if (by === 0) {
                 const o = ongletsPositions().find((t) => x >= t.x - 1 && x <= t.x + t.largeur);
                 return o ? `onglet:${o.cle}` : undefined;
@@ -744,7 +748,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     }
 
     // Le gestionnaire souris est installé une fois : il lit toujours l'état et les fonctions du dernier rendu
-    const courant = { m, demande, occupe, session, suggestions, nbSugg, sugg, boutonsHaut, boutonsS, decalage, donnees, tache, lancer, ouvrirCarte, remplacer, setSelection, redimensionner, menuPour, ouvrirMenu, setModeMaitre, setVueActive, glisserVers, cibleDefilement, animDefilement, defilementActuel, espace, setEspace, ouvrirDetail, contenuOuvert, boutonsD, setSurvol, survol, cibleSurvol };
+    const courant = { m, demande, occupe, session, suggestions, nbSugg, sugg, boutonsHaut, boutonsS, decalage, donnees, tache, lancer, ouvrirCarte, remplacer, setSelection, redimensionner, menuPour, ouvrirMenu, setModeMaitre, setVueActive, glisserVers, cibleDefilement, animDefilement, defilementActuel, espace, setEspace, ouvrirDetail, contenuOuvert, boutonsD, setSurvol, survol, cibleSurvol, pleinEcran };
     const etatRef = useRef(courant);
     etatRef.current = courant;
 
@@ -779,7 +783,8 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
 
             // Un menu (ou le moniteur) est ouvert et on clique ailleurs (barre du haut, colonne de gauche) :
             // on le ferme, puis on rejoue le clic une fois la commande annulée
-            const ailleurs = e.y === 0 || (by >= 0 && by < m.corps && e.x < m.lateral);
+            const lateral = etatRef.current.pleinEcran ? 0 : m.lateral;   // plein écran : pas de colonne de gauche
+            const ailleurs = e.y === 0 || (by >= 0 && by < m.corps && e.x < lateral);
             if (demande && e.appui && ((e.bouton === 'gauche' && ailleurs) || e.bouton === 'droit')) {
                 if (demande.type === 'vue') demande.resoudre();
                 else demande.resoudre(undefined);
@@ -804,7 +809,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             }
             if (by < 0 || by >= m.corps) return;
 
-            if (e.x < m.lateral) {
+            if (e.x < lateral) {
                 if (!e.appui && !molette) return;
                 // Ligne 0 : les onglets des espaces ; tout à droite, les sessions qui attendent (« ? N »)
                 if (by === 0) {
@@ -844,7 +849,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
 
             if (demande?.type === 'vue') {
                 if (molette) bus.emit('molette-vue', molette);
-                else if (e.appui && e.bouton === 'gauche') bus.emit('clic-vue', { x: e.x - m.lateral, y: by });
+                else if (e.appui && e.bouton === 'gauche') bus.emit('clic-vue', { x: e.x - lateral, y: by });
                 return;
             }
             if (molette) {
@@ -1021,9 +1026,11 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                 droite={`${config.prenom || os.userInfo().username} · ${heure.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}`} />
             <Box height={1} flexShrink={0}><Text color={fond.bordure}>{'─'.repeat(m.largeur)}</Text></Box>
             <Box height={m.corps} flexShrink={0} overflow="hidden">
-                <Laterale donnees={donnees} largeur={m.lateral} hauteur={m.corps} selection={selection} decalage={decalage} tic={tic} maitre={etatMaitre()} modeMaitre={modeMaitre} claude={lireEtatClaude().etat}
-                    espace={espace} survol={survol} ouvert={detail ? `${detail.type}:${detail.cle}` : undefined} projets={getProjets()} />
-                <Box flexDirection="column" width={m.principal} height={m.corps}>
+                {!pleinEcran && (
+                    <Laterale donnees={donnees} largeur={m.lateral} hauteur={m.corps} selection={selection} decalage={decalage} tic={tic} maitre={etatMaitre()} modeMaitre={modeMaitre} claude={lireEtatClaude().etat}
+                        espace={espace} survol={survol} ouvert={detail ? `${detail.type}:${detail.cle}` : undefined} projets={getProjets()} />
+                )}
+                <Box flexDirection="column" width={pleinEcran ? m.largeur : m.principal} height={m.corps}>
                     <Box height={hauteurPrincipale} flexDirection="column" overflow="hidden">{principal}</Box>
                     {groupeQT && (
                         <Box flexDirection="column" height={hauteurQT} flexShrink={0} borderStyle="round" borderColor={theme.accent} paddingX={1} borderBottom={false} borderLeft={false} borderRight={false}>

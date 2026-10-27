@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { useTailleVue, useClicsVue } from './Vues.js';
+import { useClicsVue } from './Vues.js';
+import { useStdout } from 'ink';
+import { calculerMise } from './mise.js';
 import { useDonnees, decrireConnexion } from './donnees.js';
 import { ilYa, serveursPertinents } from './Panneau.js';
 import { bus } from './bus.js';
@@ -21,7 +23,16 @@ const STATUTS = { travaille: { t: 'travaille', c: '#4ade80' }, attend: { t: 't\'
 const une = (s: string) => s.replace(/\s+/g, ' ').trim();
 
 export function VueGlobale({ fermer }: { fermer: () => void }) {
-    const { largeur, hauteur } = useTailleVue();
+    // Plein écran : la colonne de gauche disparaît le temps de la vue (sinon les sessions seraient affichées deux fois)
+    const { stdout } = useStdout();
+    const mise = calculerMise(stdout.columns || 110, stdout.rows || 34);
+    const largeur = mise.largeur, hauteur = mise.corps;
+    useEffect(() => {
+        bus.emit('plein-ecran', true);
+        return () => {
+            bus.emit('plein-ecran', false);
+        };
+    }, []);
     const d = useDonnees();
     const [, setV] = useState(0);
     const tic = Math.floor(Date.now() / 800);
@@ -82,24 +93,24 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
         ] });
         droite.push({ detail, morceaux: [{ t: `  ${s.ip ?? s.hote}${m?.depuis ? ` · allumé ${m.depuis}` : ''}${m?.conteneurs ? ` · ◫ ${m.conteneurs}` : ''}${connecte ? ` · ⇄ ${connecte} connecté${connecte > 1 ? 's' : ''}` : ''}`, c: connecte ? theme.accent : fond.discret }] });
     }
-    droite.push({ morceaux: [{ t: '' }] });
     const enMarche = d.docker.reduce((n, h) => n + h.conteneurs.filter((c) => c.enMarche).length, 0);
-    droite.push({ titre: true, morceaux: [{ t: `DOCKER (${enMarche} en marche)`, c: theme.primaire, gras: true }] });
+    const docker: Ligne[] = [];
+    docker.push({ titre: true, morceaux: [{ t: `DOCKER (${enMarche} en marche)`, c: theme.primaire, gras: true }] });
     for (const h of d.docker) {
-        droite.push({ morceaux: [{ t: h.serveur ? `◫ ${h.nom}` : '◫ ce poste', c: theme.secondaire, gras: true }, { t: h.erreur ? `  ${h.erreur}` : `  ${h.conteneurs.filter((c) => c.enMarche).length}/${h.conteneurs.length}`, c: h.erreur ? '#f87171' : 'gray' }] });
+        docker.push({ morceaux: [{ t: h.serveur ? `◫ ${h.nom}` : '◫ ce poste', c: theme.secondaire, gras: true }, { t: h.erreur ? `  ${h.erreur}` : `  ${h.conteneurs.filter((c) => c.enMarche).length}/${h.conteneurs.length}`, c: h.erreur ? '#f87171' : 'gray' }] });
         for (const c of h.conteneurs.filter((x) => x.enMarche)) {
-            droite.push({ detail: { type: 'conteneur', cle: `${h.nom}|${c.id}` }, morceaux: [
+            docker.push({ detail: { type: 'conteneur', cle: `${h.nom}|${c.id}` }, morceaux: [
                 { t: '  ● ', c: c.sante === 'unhealthy' ? '#facc15' : '#4ade80' }, { t: c.nom.padEnd(22).slice(0, 22) },
                 { t: ` ${[c.cpu, c.memoire].filter(Boolean).join(' · ')}`, c: 'gray' },
             ] });
         }
     }
 
-    // Deux colonnes si la place le permet, sinon l'une sous l'autre
-    const deux = largeur >= 96;
-    const largeurCol = deux ? Math.floor((largeur - 3) / 2) : largeur - 2;
+    // Trois colonnes sur un écran large, deux sinon (Serveurs et Docker l'un sous l'autre), une seule si étroit
+    const vide: Ligne = { morceaux: [{ t: '' }] };
+    const colonnes = largeur >= 150 ? [gauche, droite, docker] : largeur >= 96 ? [gauche, [...droite, vide, ...docker]] : [[...gauche, vide, ...droite, vide, ...docker]];
+    const largeurCol = Math.floor((largeur - 2 - (colonnes.length - 1) * 2) / colonnes.length);
     const zone = hauteur - 2;
-    const colonnes = deux ? [gauche, droite] : [[...gauche, { morceaux: [{ t: '' }] }, ...droite]];
     const ouvrir = (l?: Ligne) => {
         if (!l) return;
         if (l.session) {
@@ -111,7 +122,7 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
         }
     };
     useClicsVue((x, y) => {
-        const col = deux && x > largeurCol + 1 ? 1 : 0;
+        const col = Math.min(colonnes.length - 1, Math.floor((x - 1) / (largeurCol + 2)));
         ouvrir(colonnes[col][y - 2]);
     });
     useInput((input, key) => {
@@ -122,13 +133,13 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
     return (
         <Box flexDirection="column" width={largeur} height={hauteur} paddingLeft={1}>
             <Box height={1} flexShrink={0} justifyContent="space-between" paddingRight={1}>
-                <Text bold color={theme.accent}>{`◉ VUE GLOBALE `}<Text color={fond.discret}>en direct</Text></Text>
+                <Text bold color={theme.accent}>{`◉ VUE GLOBALE `}<Text color={fond.discret}>en direct · Échap pour revenir</Text></Text>
                 <Text color="gray">{`${total} session${total > 1 ? 's' : ''} au travail · ${enMarche} conteneur${enMarche > 1 ? 's' : ''}${d.cout.total ? ` · ≈ ${dollars(d.cout.total)} auj.` : ''}`}</Text>
             </Box>
             <Box height={1} flexShrink={0}><Text color={fond.bordure}>{'─'.repeat(Math.max(0, largeur - 2))}</Text></Box>
             <Box flexDirection="row" height={zone}>
                 {colonnes.map((lignes, c) => (
-                    <Box key={c} flexDirection="column" width={largeurCol} marginRight={c === 0 && deux ? 2 : 0} overflow="hidden">
+                    <Box key={c} flexDirection="column" width={largeurCol} marginRight={c < colonnes.length - 1 ? 2 : 0} overflow="hidden">
                         {lignes.slice(0, zone - 1).map((l, i) => (
                             <Box key={i} height={1} overflow="hidden">
                                 <Text wrap="truncate-end">{l.morceaux.map((m, k) => <Text key={k} color={m.c} bold={m.gras}>{m.t || ' '}</Text>)}</Text>

@@ -22,7 +22,8 @@
     "test:maitre": "node test-maitre.mjs",
     "test:ssh": "node test-ssh.mjs",
     "test:plus": "node test-plus.mjs",
-    "test:espaces": "node test-espaces.mjs"
+    "test:espaces": "node test-espaces.mjs",
+    "test:barre": "node test-barre.mjs"
   },
   "keywords": [],
   "author": "",

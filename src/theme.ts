@@ -74,7 +74,8 @@ export function degrade(texte: string, de = theme.primaire, a = theme.accent): s
     const largeur = Math.max(...texte.split('\n').map((l) => l.length), 1);
     return texte.split('\n').map((ligne) => [...ligne].map((ch, i) => {
         const t = i / largeur;
-        return chalk.rgb(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t)(ch);
+        // Entiers obligatoires : « 38;2;98.8;… » n'est pas un code couleur valide (le terminal l'affiche de travers)
+        return chalk.rgb(Math.round(r1 + (r2 - r1) * t), Math.round(g1 + (g2 - g1) * t), Math.round(b1 + (b2 - b1) * t))(ch);
     }).join('')).join('\n');
 }
 
