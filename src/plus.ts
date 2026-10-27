@@ -86,7 +86,7 @@ export function commandesPlus(config: Config): Commande[] {
                 config.planifications = [...(config.planifications ?? []), { id: Math.random().toString(16).slice(2, 8), nom, heure, jours, projet, consigne, actif: true }];
                 await sauver();
                 const { decrireJours } = await import('./planificateur.js');
-                console.log(c.succes(`⏰ « ${nom} » : ${decrireJours(jours)} à ${heure} · /planifications pour gérer`));
+                console.log(c.succes(`◴ « ${nom} » : ${decrireJours(jours)} à ${heure} · /planifications pour gérer`));
                 console.log(c.discret('Elle tourne pendant que Claudetopia est ouvert ; si l\'heure est passée pendant qu\'il était fermé, elle part au lancement suivant (le même jour).'));
             },
         },
@@ -100,7 +100,7 @@ export function commandesPlus(config: Config): Commande[] {
                 const liste = config.planifications ?? [];
                 const p = await choisir<import('./planificateur.js').Planification | 'nouvelle'>('Tâches planifiées', [
                     { label: '+ Nouvelle tâche planifiée', valeur: 'nouvelle' },
-                    ...liste.map((x) => ({ label: `${x.actif ? '⏰' : '○'} ${x.nom}`, valeur: x, description: `${decrireJours(x.jours)} à ${x.heure} · ${x.projet.split(/[\\/]/).pop()} · dernier : ${dernierLancement(x.id) ?? 'jamais'}` })),
+                    ...liste.map((x) => ({ label: `${x.actif ? '◴' : '○'} ${x.nom}`, valeur: x, description: `${decrireJours(x.jours)} à ${x.heure} · ${x.projet.split(/[\\/]/).pop()} · dernier : ${dernierLancement(x.id) ?? 'jamais'}` })),
                 ], false);
                 if (p === 'nouvelle') {
                     const { COMMANDES } = await import('./commandes.js');
@@ -108,7 +108,7 @@ export function commandesPlus(config: Config): Commande[] {
                 }
                 const action = await choisir(p.nom, [
                     { label: '▶ Lancer maintenant', valeur: 'lancer' },
-                    { label: p.actif ? '○ Désactiver' : '⏰ Activer', valeur: 'basculer' },
+                    { label: p.actif ? '○ Désactiver' : '◴ Activer', valeur: 'basculer' },
                     { label: '− Supprimer', valeur: 'supprimer' },
                 ], false);
                 if (action === 'lancer') {
@@ -213,11 +213,11 @@ export function commandesPlus(config: Config): Commande[] {
         },
         {
             nom: 'menu-principal', groupe: 'Système', cache: true,
-            description: 'Le menu ☰ : ce qui n\'est pas dans la barre du haut',
+            description: 'Le menu ≡ : ce qui n\'est pas dans la barre du haut',
             executer: async () => {
                 const { choisir } = await import('./ui/bus.js');
                 const { executerLigne } = await import('./commandes.js');
-                const choix = await choisir('☰ Menu', [
+                const choix = await choisir('≡ Menu', [
                     { label: '▸ Un projet : ses actions', valeur: '', description: 'session, onglet, commit, revue, worktree…' },
                     { label: '⌘ Palette (Ctrl+K)', valeur: '/palette', description: 'chercher et lancer n\'importe quoi' },
                     { label: '? Ce que les sessions attendent', valeur: '/questions' },
@@ -225,7 +225,7 @@ export function commandesPlus(config: Config): Commande[] {
                     { label: '≡ Journal', valeur: '/journal', description: 'ce qui a été fait, par jour' },
                     { label: '◷ Récents', valeur: '/recents' },
                     { label: '$ Coût du jour', valeur: '/cout' },
-                    { label: '⏰ Tâches planifiées', valeur: '/planifications' },
+                    { label: '◴ Tâches planifiées', valeur: '/planifications' },
                     { label: '◉ Logs surveillés', valeur: '/surveillances' },
                     { label: '⚿ Connexions', valeur: '/connexions' },
                     { label: '⇅ Exporter / importer la config', valeur: '/exporter', description: '/importer pour l\'autre sens' },

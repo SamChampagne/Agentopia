@@ -45,7 +45,7 @@ export function decrireJours(jours: number[]): string {
 
 export async function lancerPlanification(p: Planification): Promise<{ ok: boolean; message: string; id?: string }> {
     if (!fs.existsSync(p.projet)) return { ok: false, message: `dossier introuvable : ${p.projet}` };
-    const { id, sortie } = await lancerArrierePlan(p.projet, `⏰ ${p.nom}`, p.consigne);
+    const { id, sortie } = await lancerArrierePlan(p.projet, `◴ ${p.nom}`, p.consigne);
     if (!id) return { ok: false, message: sortie.split('\n').find(Boolean) ?? 'la session n\'a pas démarré' };
     noterLancement(p.id);
     return { ok: true, message: `session ${id} lancée sur ${path.basename(p.projet)}`, id };
@@ -63,7 +63,7 @@ export async function verifierPlanifications(): Promise<void> {
             if (!p.actif || hhmm < p.heure || dernierLancement(p.id) === jour()) continue;
             if (p.jours.length && !p.jours.includes(maintenant.getDay())) continue;
             const r = await lancerPlanification(p);
-            toast(r.ok ? `⏰ ${p.nom} a démarré` : `✕ ${p.nom} n'a pas démarré`, r.message, r.id ? `claudetopia:session/${r.id}` : undefined);
+            toast(r.ok ? `◴ ${p.nom} a démarré` : `✕ ${p.nom} n'a pas démarré`, r.message, r.id ? `claudetopia:session/${r.id}` : undefined);
             if (!r.ok) noterLancement(p.id);   // pas de nouvel essai toutes les minutes : demain, ou « lancer maintenant »
         }
     } finally {

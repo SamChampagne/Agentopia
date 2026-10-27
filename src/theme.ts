@@ -7,8 +7,8 @@ export const theme = { ...config.theme };
 
 // Fonds, bordures et textes discrets : sombres par défaut, clairs pour un terminal à fond blanc (/mode clair)
 const FONDS = {
-    sombre: { selection: '#1e293b', entete: '#172033', bordure: '#334155', discret: '#475569', eteint: '#64748b', texte: 'white' },
-    clair: { selection: '#dbeafe', entete: '#e2e8f0', bordure: '#cbd5e1', discret: '#94a3b8', eteint: '#94a3b8', texte: '#0f172a' },
+    sombre: { selection: '#1e293b', entete: '#172033', bordure: '#334155', discret: '#475569', eteint: '#64748b', texte: 'white', panneau: '#141a26', panneauActif: '#1f2a40' },
+    clair: { selection: '#dbeafe', entete: '#e2e8f0', bordure: '#cbd5e1', discret: '#94a3b8', eteint: '#94a3b8', texte: '#0f172a', panneau: '#f1f5f9', panneauActif: '#dbeafe' },
 };
 export const fond = { ...FONDS[config.modeClair ? 'clair' : 'sombre'] };
 export function appliquerMode(clair: boolean): void {

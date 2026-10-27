@@ -130,7 +130,8 @@ export function VueSession({ s, messages, boutons, largeur, hauteur, defilement,
                     const appuye = appui === `session:${b.action}`;
                     return (
                         <Box key={b.action} marginRight={1} flexShrink={0}>
-                            <Text inverse={appuye} bold={principal} color={principal ? theme.accent : b.action === 'fermer-session' ? '#f87171' : fond.eteint}>
+                            <Text inverse={appuye} backgroundColor={fond.selection} bold={principal}
+                                color={principal ? theme.accent : b.action === 'fermer-session' ? '#f87171' : theme.secondaire}>
                                 {` ${b.label} `}
                             </Text>
                         </Box>

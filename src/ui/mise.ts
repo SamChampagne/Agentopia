@@ -98,7 +98,7 @@ export interface Bouton {
 }
 
 // Place des boutons sur une ligne à partir de x ; renvoie leur position pour les clics.
-// La largeur est mesurée comme Ink la mesure (string-width) : certains symboles (☰…) font 2 colonnes.
+// La largeur est mesurée comme Ink la mesure (string-width) : certains symboles (≡…) font 2 colonnes.
 export function placerBoutons(boutons: { label: string; action: string }[], x0: number): Bouton[] {
     let x = x0;
     return boutons.map((b) => {

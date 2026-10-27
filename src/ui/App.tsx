@@ -36,9 +36,9 @@ import { theme, couleurProjet, c, fond } from '../theme.js';
 
 const SPINNER = ['✻', '✼', '✽', '✾', '✿', '❀', '✿', '✾', '✽', '✼'];
 
-// Seulement l'essentiel : Moniteur, Journal, Récents, Aide… sont dans le menu ☰ (et la palette Ctrl+K)
+// Seulement l'essentiel : Moniteur, Journal, Récents, Aide… sont dans le menu ≡ (et la palette Ctrl+K)
 export const BOUTONS_HAUT = [
-    { label: '☰ Menu', action: '/menu-principal' },
+    { label: '≡ Menu', action: '/menu-principal' },
     { label: 'Projets', action: '/projets' },
     { label: 'Équipes', action: '/equipe' },
     { label: 'Git', action: '/git' },
@@ -484,6 +484,17 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     }
 
     // Où part le texte tapé : affiché au-dessus de la barre de saisie
+    // ─── Raccourcis du moment (barre du bas) ─────────────────────────────────
+    function raccourcis(): [string, string][] {
+        if (demande?.type === 'choix') return [['↑↓', 'choisir'], ['Entrée', 'valider'], ['Échap', 'annuler']];
+        if (demande?.type === 'saisie') return [['Entrée', 'valider'], ['Échap', 'annuler']];
+        if (demande?.type === 'vue') return [['clic', 'choisir'], ['Entrée', 'ouvrir'], ['Échap', 'fermer']];
+        if (recherche) return [['Entrée', 'suivante'], ['Échap', 'fermer']];
+        if (modeMaitre) return [['Entrée', 'envoyer'], ['Échap', 'revenir']];
+        if (session) return [['Entrée', 'rejoindre'], ['Ctrl+F', 'chercher'], ['clic droit', 'actions'], ['Échap', 'retour']];
+        return [['Ctrl+K', 'tout'], ['Alt+M', 'maître'], ['clic droit', 'actions'], ['?', 'aide']];
+    }
+
     // ─── Le maître ───────────────────────────────────────────────────────────
     // Sa réponse s'affiche dans sa zone (à gauche) et dans le journal ; ses commandes passent par lancer(),
     // comme si tu les tapais, après une seule confirmation si elles arrêtent ou suppriment quelque chose
@@ -949,7 +960,11 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                                 {`≈ ${dollars(donnees.cout.total)} auj.${config.budgetJour ? ` / ${dollars(config.budgetJour)}` : ''} · `}
                             </Text>
                         ) : null}
-                        {`CPU ${statut.cpu.toFixed(0)}% · RAM ${formatRam(ram)}/${formatRam(os.totalmem())} · Ctrl+K`}
+                        {`CPU ${statut.cpu.toFixed(0)}% · RAM ${Math.round((ram / os.totalmem()) * 100)}%   `}
+                        {/* Les 3-4 raccourcis utiles là, maintenant (le reste : ? et Ctrl+K) */}
+                        {raccourcis().map(([touche, quoi], i) => (
+                            <Text key={i}><Text color={theme.secondaire}>{touche}</Text><Text color={fond.discret}>{` ${quoi}${i < raccourcis().length - 1 ? '  ' : ''}`}</Text></Text>
+                        ))}
                     </Text>
                 </Box>
             </Box>

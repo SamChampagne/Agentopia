@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { Box, Text } from 'ink';
 import wrapAnsi from 'wrap-ansi';
 import type { etatMaitre } from '../maitre.js';
@@ -58,14 +57,37 @@ const ANIM = ['✻', '✼', '✽', '✾', '✿', '❀'];
 
 const une = (s: string) => s.replace(/\s+/g, ' ').trim();
 
-// Une ligne de carte : barre d'état à gauche, texte qui se coupe, partie droite qui ne rétrécit jamais
-function LigneCarte({ barre, couleurBarre, largeur, children, droite, couleurDroite }:
-    { barre: string; couleurBarre: string; largeur: number; children: ReactNode; droite?: string; couleurDroite?: string }) {
+// Une ligne de carte : barre d'état à gauche, morceaux de texte coupés à la largeur, partie droite,
+// le tout sur le fond de la carte (rempli jusqu'au bord : la carte se détache sans cadre)
+type Morceau = { t: string; c?: string; gras?: boolean };
+function couperA(texte: string, max: number): string {
+    if (stringWidth(texte) <= max) return texte;
+    let r = '';
+    for (const ch of texte) {
+        if (stringWidth(r + ch) > max - 1) break;
+        r += ch;
+    }
+    return r + '…';
+}
+function LigneCarte({ barre, couleurBarre, largeur, morceaux, droite, couleurDroite, fondCarte }:
+    { barre: string; couleurBarre: string; largeur: number; morceaux: Morceau[]; droite?: string; couleurDroite?: string; fondCarte: string }) {
+    const fin = droite ? ` ${droite} ` : ' ';
+    let place = Math.max(0, largeur - stringWidth(barre) - stringWidth(fin));
+    const coupes: Morceau[] = [];
+    for (const m of morceaux) {
+        if (place <= 0) break;
+        const t = couperA(m.t, place);
+        coupes.push({ ...m, t });
+        place -= stringWidth(t);
+    }
     return (
         <Box height={1} width={largeur} overflow="hidden">
-            <Box flexShrink={0}><Text color={couleurBarre}>{barre}</Text></Box>
-            <Box flexGrow={1} flexShrink={1} overflow="hidden">{children}</Box>
-            {droite ? <Box flexShrink={0}><Text color={couleurDroite ?? fond.discret}>{` ${droite} `}</Text></Box> : null}
+            <Text backgroundColor={fondCarte}>
+                <Text color={couleurBarre}>{barre}</Text>
+                {coupes.map((m, i) => <Text key={i} color={m.c} bold={m.gras}>{m.t}</Text>)}
+                {' '.repeat(place)}
+                <Text color={couleurDroite ?? fond.discret}>{fin}</Text>
+            </Text>
         </Box>
     );
 }
@@ -75,26 +97,18 @@ function Carte({ s, a, active, largeur, tic }: { s: SessionVue; a?: Activite; ac
     const icone = s.statut === 'travaille' ? ANIM[tic % ANIM.length] : s.statut === 'bloquee' ? '!' : s.statut === 'terminee' ? '✓' : '○';
     // Ligne 2 : la question en attente, sinon l'action en cours (outil), la dernière réponse, le titre
     const action = s.question ? `? ${une(s.question)}` : a?.outil ? `▸ ${une(a.outil)}` : a?.dernierTexte ? une(a.dernierTexte) : s.titre || 'pas encore d\'activité';
-    // Barre épaisse et couleur d'accent pour la session ouverte, fine et couleur de l'état sinon
-    const barre = active ? '▌ ' : '▎ ';
-    const couleurBarre = active ? theme.accent : couleur;
+    // La session ouverte : fond plus marqué et barre d'accent ; les autres : fond de panneau et barre de leur état
+    const fondCarte = active ? fond.panneauActif : fond.panneau;
+    const commun = { barre: '▌ ', couleurBarre: active ? theme.accent : couleur, largeur: largeur - 1, fondCarte };
     return (
         <Box height={CARTE} flexShrink={0} width={largeur} flexDirection="column">
-            <LigneCarte barre={barre} couleurBarre={couleurBarre} largeur={largeur} droite={`${icone} ${LIBELLES[s.statut]}`} couleurDroite={couleur}>
-                <Text wrap="truncate-end">
-                    <Text color={couleurProjet(s.nom)}>● </Text>
-                    <Text bold color={active ? theme.accent : undefined}>{s.nom}</Text>
-                    <Text color={fond.discret}>{s.arrierePlan ? ' ⧉' : ''}</Text>
-                </Text>
-            </LigneCarte>
-            <LigneCarte barre={barre} couleurBarre={couleurBarre} largeur={largeur} droite={a?.date ? ilYa(a.date) : undefined}>
-                <Text wrap="truncate-end" color={s.question ? '#fdba74' : a?.outil ? theme.secondaire : fond.eteint}>{`  ${action}`}</Text>
-            </LigneCarte>
-            {CARTE > 3 && (
-                <LigneCarte barre={barre} couleurBarre={couleurBarre} largeur={largeur}>
-                    <Text wrap="truncate-end" color={fond.discret}>{`  ${a?.dernierUser ? `» ${une(a.dernierUser)}` : s.titre}`}</Text>
-                </LigneCarte>
-            )}
+            <LigneCarte {...commun} droite={`${icone} ${LIBELLES[s.statut]}`} couleurDroite={couleur} morceaux={[
+                { t: '● ', c: couleurProjet(s.nom) }, { t: s.nom, gras: true, c: active ? theme.accent : fond.texte }, { t: s.arrierePlan ? ' ⧉' : '', c: fond.discret },
+            ]} />
+            <LigneCarte {...commun} droite={a?.date ? ilYa(a.date) : undefined} morceaux={[
+                { t: `  ${action}`, c: s.question ? '#fdba74' : a?.outil ? theme.secondaire : 'gray' },
+            ]} />
+            {CARTE > 3 && <LigneCarte {...commun} morceaux={[{ t: `  ${a?.dernierUser ? `» ${une(a.dernierUser)}` : s.titre}`, c: fond.eteint }]} />}
             <Box height={1} flexShrink={0} />
         </Box>
     );
@@ -116,28 +130,15 @@ export function etatEquipe(e: Equipe, tic = 0): { texte: string; couleur: string
 function CarteEquipe({ e, largeur, tic }: { e: Equipe; largeur: number; tic: number }) {
     const a = avancement(e);
     const etat = etatEquipe(e, tic);
-    const legende = a.total ? ` ${a.faites}/${a.total} ` : '';
-    const barre = Math.max(4, largeur - 4 - legende.length);
+    const legende = a.total ? ` ${a.faites}/${a.total}` : '';
+    const barre = Math.max(4, largeur - 6 - legende.length);
     const plein = a.total ? Math.round((a.faites / a.total) * barre) : 0;
-    const couleurBarre = e.etat === 'en cours' || e.etat === 'integration' ? '#a78bfa' : '#6d28d9';
+    const commun = { barre: '▌ ', couleurBarre: e.etat === 'en cours' || e.etat === 'integration' ? '#a78bfa' : '#6d28d9', largeur: largeur - 1, fondCarte: fond.panneau };
     return (
         <Box height={CARTE} flexShrink={0} width={largeur} flexDirection="column">
-            <LigneCarte barre="▎ " couleurBarre={couleurBarre} largeur={largeur} droite={etat.texte} couleurDroite={etat.couleur}>
-                <Text wrap="truncate-end"><Text color="#c084fc">◆ </Text><Text bold>{e.nomProjet}</Text></Text>
-            </LigneCarte>
-            <LigneCarte barre="▎ " couleurBarre={couleurBarre} largeur={largeur}>
-                <Text wrap="truncate-end">
-                    <Text>{'  '}</Text>
-                    <Text color="#a78bfa">{'━'.repeat(plein)}</Text>
-                    <Text color={fond.bordure}>{'━'.repeat(Math.max(0, barre - plein))}</Text>
-                    <Text color={fond.discret}>{legende}</Text>
-                </Text>
-            </LigneCarte>
-            {CARTE > 3 && (
-                <LigneCarte barre="▎ " couleurBarre={couleurBarre} largeur={largeur}>
-                    <Text wrap="truncate-end" color={fond.discret}>{`  ${e.objectif}`}</Text>
-                </LigneCarte>
-            )}
+            <LigneCarte {...commun} droite={etat.texte} couleurDroite={etat.couleur} morceaux={[{ t: '◆ ', c: '#c084fc' }, { t: e.nomProjet, gras: true, c: fond.texte }]} />
+            <LigneCarte {...commun} morceaux={[{ t: '  ' }, { t: '━'.repeat(plein), c: '#a78bfa' }, { t: '━'.repeat(Math.max(0, barre - plein)), c: fond.bordure }, { t: legende, c: fond.discret }]} />
+            {CARTE > 3 && <LigneCarte {...commun} morceaux={[{ t: `  ${e.objectif}`, c: fond.eteint }]} />}
             <Box height={1} flexShrink={0} />
         </Box>
     );
