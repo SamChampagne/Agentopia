@@ -12,6 +12,7 @@ export interface Souris {
     bouton: 'gauche' | 'milieu' | 'droit' | 'molette-haut' | 'molette-bas';
     appui: boolean;         // false = relâchement
     glisse?: boolean;       // mouvement avec le bouton enfoncé
+    survol?: boolean;       // mouvement sans bouton (ce qui est sous la souris s'éclaire)
     crans?: number;         // molette : plusieurs crans regroupés en un seul événement
 }
 
@@ -43,13 +44,15 @@ const SEQUENCE = /\x1b\[<(\d+);(\d+);(\d+)([mM])/g;
 // (un seul rendu qui défile de la somme), de même pour les mouvements quand on glisse
 let molette: Souris | undefined;
 let glisse: Souris | undefined;
+let survol: Souris | undefined;
 let minuterie: NodeJS.Timeout | undefined;
 function vider(): void {
     clearTimeout(minuterie);
     minuterie = undefined;
     if (molette) souris.emit('souris', molette);
     if (glisse) souris.emit('souris', glisse);
-    molette = glisse = undefined;
+    if (survol) souris.emit('souris', survol);
+    molette = glisse = survol = undefined;
 }
 function plusTard(): void {
     minuterie ??= setTimeout(vider, 16);
@@ -65,7 +68,12 @@ function surDonnees(d: Buffer) {
         const code = Number(b);
         // Mouvement (bit 32) : on ne garde que ceux faits bouton enfoncé (pour glisser la séparation)
         if (code & 32) {
-            if ((code & 3) === 3) return '';
+            // Mouvement sans bouton : le survol (regroupé : seule la dernière position compte)
+            if ((code & 3) === 3) {
+                survol = { x: Number(x) - 1, y: Number(y) - 1, bouton: 'gauche', appui: false, survol: true };
+                plusTard();
+                return '';
+            }
             glisse = { x: Number(x) - 1, y: Number(y) - 1, bouton: 'gauche', appui: true, glisse: true };
             plusTard();
             return '';
@@ -89,8 +97,8 @@ function surDonnees(d: Buffer) {
 }
 
 const ECRAN_ALT = '\x1b[?1049h', ECRAN_NORMAL = '\x1b[?1049l';
-// 1002 = clics + mouvements bouton enfoncé ; 1006 = coordonnées au format SGR
-const SOURIS_ON = '\x1b[?1002h\x1b[?1006h', SOURIS_OFF = '\x1b[?1002l\x1b[?1000l\x1b[?1006l';
+// 1003 = clics + tous les mouvements (survol) ; 1006 = coordonnées au format SGR
+const SOURIS_ON = '\x1b[?1003h\x1b[?1006h', SOURIS_OFF = '\x1b[?1003l\x1b[?1002l\x1b[?1000l\x1b[?1006l';
 
 export function activer(): void {
     process.stdout.write(ECRAN_ALT + SOURIS_ON);

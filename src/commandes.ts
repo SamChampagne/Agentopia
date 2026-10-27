@@ -184,6 +184,8 @@ function afficherAide(): void {
     console.log(tableau([
         [c.accent('clic'), 'carte de session → sa conversation · boutons · menus · serveurs · Docker'],
         [c.accent('molette'), 'faire défiler la conversation, la sortie, les cartes'],
+        [c.accent('Espace'), 'dans la saisie vide : la carte des actions (g = Git, s = Sessions, r = Serveurs, d = Docker…)'],
+        [c.accent('Alt+S / P / R / D'), 'espaces de la colonne de gauche : Sessions, Projets, SSH, Docker'],
         [c.accent('Ctrl+K'), "palette : chercher et lancer n'importe quoi (« proj com » → Commit · mon-projet)"],
         [c.accent('Ctrl+F'), 'chercher dans la conversation ouverte (Entrée = occurrence suivante)'],
         [c.accent('glisser un fichier'), 'dans la fenêtre : il devient une pièce jointe du message'],

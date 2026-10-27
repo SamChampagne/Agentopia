@@ -21,7 +21,8 @@
     "test:vitesse": "node bench-ui.mjs",
     "test:maitre": "node test-maitre.mjs",
     "test:ssh": "node test-ssh.mjs",
-    "test:plus": "node test-plus.mjs"
+    "test:plus": "node test-plus.mjs",
+    "test:espaces": "node test-espaces.mjs"
   },
   "keywords": [],
   "author": "",

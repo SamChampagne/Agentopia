@@ -96,8 +96,8 @@ export function lignesTranscript(messages: Message[], largeur: number): string[]
 }
 
 // Conversation d'une session, en direct, avec ses boutons (positions fournies par l'appelant)
-export function VueSession({ s, messages, boutons, largeur, hauteur, defilement, git, surligne, cout }:
-    { s: SessionVue; messages: Message[]; boutons: Bouton[]; largeur: number; hauteur: number; defilement: number; git?: EtatGit; surligne?: string; cout?: number }) {
+export function VueSession({ s, messages, boutons, largeur, hauteur, defilement, git, surligne, cout, survol }:
+    { s: SessionVue; messages: Message[]; boutons: Bouton[]; largeur: number; hauteur: number; defilement: number; git?: EtatGit; surligne?: string; cout?: number; survol?: string }) {
     const appui = useAppui();
     const lignes = useMemo(() => lignesTranscript(messages, largeur - 2), [messages, largeur]);
     const fen = fenetre(lignes, largeur - 2, hauteur - 3, defilement);
@@ -130,7 +130,7 @@ export function VueSession({ s, messages, boutons, largeur, hauteur, defilement,
                     const appuye = appui === `session:${b.action}`;
                     return (
                         <Box key={b.action} marginRight={1} flexShrink={0}>
-                            <Text inverse={appuye} backgroundColor={fond.selection} bold={principal}
+                            <Text inverse={appuye} backgroundColor={survol === `session:${b.action}` ? fond.panneauActif : fond.selection} bold={principal || survol === `session:${b.action}`}
                                 color={principal ? theme.accent : b.action === 'fermer-session' ? '#f87171' : theme.secondaire}>
                                 {` ${b.label} `}
                             </Text>
@@ -146,7 +146,7 @@ export function VueSession({ s, messages, boutons, largeur, hauteur, defilement,
     );
 }
 
-export function BarreHaut({ boutons, largeur, droite, vueActive }: { boutons: Bouton[]; largeur: number; droite: string; vueActive?: string }) {
+export function BarreHaut({ boutons, largeur, droite, vueActive, survol }: { boutons: Bouton[]; largeur: number; droite: string; vueActive?: string; survol?: string }) {
     const appui = useAppui();
     return (
         // Hauteur 1 stricte : si la barre passait sur 2 lignes, tout l'écran descendrait d'une ligne
@@ -159,7 +159,7 @@ export function BarreHaut({ boutons, largeur, droite, vueActive }: { boutons: Bo
                     const ouvert = vueActive === b.action;
                     return (
                         <Box key={b.action} marginRight={1} flexShrink={0}>
-                            <Text inverse={appuye} color={ouvert || appuye ? theme.accent : fond.eteint} bold={ouvert} underline={ouvert}>{` ${b.label} `}</Text>
+                            <Text inverse={appuye} color={ouvert || appuye ? theme.accent : survol === `haut:${b.action}` ? fond.texte : fond.eteint} bold={ouvert || survol === `haut:${b.action}`} underline={ouvert}>{` ${b.label} `}</Text>
                         </Box>
                     );
                 })}

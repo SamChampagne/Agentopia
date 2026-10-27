@@ -10,6 +10,10 @@ import { SECTIONS, Section, sectionMasquee } from './sections.js';
 import { arreterEquipe, terminerEquipe } from '../equipe.js';
 import { copier } from '../lanceurs.js';
 import { appuyer } from './appui.js';
+import { noeudA, estGroupe } from './quelleTouche.js';
+import { Espace, Detail, ongletsPositions, lignesEspace } from './espaces.js';
+import { VueDetail, contenuDetail } from './VueDetail.js';
+import { suivreMetriques, metriques } from '../metriques.js';
 import { dollars } from '../cout.js';
 import { liens } from '../notifications.js';
 import { CHEMINS } from '../chemins.js';
@@ -19,7 +23,7 @@ import { maitre, etatMaitre, prechauffer, demanderAuMaitre, DESTRUCTRICES } from
 import { Selecteur, Saisie } from './Selecteur.js';
 import { Laterale, cartesLaterales, X_TERMINAL } from './Laterale.js';
 import { VueJournal, VueSession, BarreHaut, largeurTitre, toutesLesLignes, lignesTranscript } from './Zones.js';
-import { useDonnees, demarrerCollecte, rafraichirAgents } from './donnees.js';
+import { useDonnees, demarrerCollecte, rafraichirAgents, lireDonnees } from './donnees.js';
 import { serveursLateraux, miseLateraleDe, basculerRepli } from './sections.js';
 import { souris, Souris } from './terminal.js';
 import { quitterEcran } from './ecran.js';
@@ -39,6 +43,7 @@ const SPINNER = ['✻', '✼', '✽', '✾', '✿', '❀', '✿', '✾', '✽', 
 // Seulement l'essentiel : Moniteur, Journal, Récents, Aide… sont dans le menu ≡ (et la palette Ctrl+K)
 export const BOUTONS_HAUT = [
     { label: '≡ Menu', action: '/menu-principal' },
+    { label: '◉ Live', action: '/global' },
     { label: 'Projets', action: '/projets' },
     { label: 'Équipes', action: '/equipe' },
     { label: 'Git', action: '/git' },
@@ -166,6 +171,23 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     const [selection, setSelectionEtat] = useState<string | undefined>(selectionMemo);
     // Mode maître : ce qui est tapé en bas va au maître (clic sur sa zone à gauche, ou Alt+M)
     const [modeMaitre, setModeMaitre] = useState(false);
+    const [espace, setEspaceEtat] = useState<Espace>('sessions');
+    const [detail, setDetailEtat] = useState<Detail>();
+    const [survol, setSurvol] = useState<string>();
+    // « Quelle touche ? » ouvert : le chemin des lettres déjà tapées ('' = la racine)
+    const [quelleTouche, setQuelleTouche] = useState<string>();
+    const setEspace = (e: Espace) => {
+        setEspaceEtat(e);
+        setDecalage(0);
+    };
+    // Une conversation et un panneau de détail se remplacent l'un l'autre dans la zone principale
+    const ouvrirDetail = (dt?: Detail) => {
+        setDetailEtat(dt);
+        if (dt) {
+            selectionMemo = undefined;
+            setSelectionEtat(undefined);
+        }
+    };
     // Bouton du haut de la vue ouverte (reste allumé tant qu'elle est ouverte)
     const [vueActive, setVueActive] = useState<string>();
     const [, setVersionMaitre] = useState(0);
@@ -208,6 +230,18 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         }, 400);
         return () => clearTimeout(t);
     }, [selection, demande, vueActive]);
+    const [, setVersionMetriques] = useState(0);
+    const regardeServeurs = espace === 'serveurs' || detail?.type === 'serveur';
+    useEffect(() => {
+        if (!regardeServeurs) return;
+        const f = () => setVersionMetriques((v) => v + 1);
+        metriques.on('maj', f);
+        const arreter = suivreMetriques(() => lireDonnees().serveurs);
+        return () => {
+            metriques.off('maj', f);
+            arreter();
+        };
+    }, [regardeServeurs]);
     const repris = useRef(false);
     useEffect(() => {
         if (repris.current || commandeInitiale || auDemarrage || sansReprise) return;
@@ -228,6 +262,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     }, [donnees.agents]);
 
     const setSelection = (cle?: string) => {
+        if (cle) setDetailEtat(undefined);
         selectionMemo = cle;
         setSelectionEtat(cle);
         setDefilement(0);
@@ -292,6 +327,8 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             else if (quoi === 'surveillances') void etatRef.current.lancer('/surveillances', false, true);
         };
         liens.on('demande', surLien);
+        const surDetail = (dt: Detail) => setTimeout(() => etatRef.current.ouvrirDetail(dt), 50);
+        bus.on('detail', surDetail);
         const surMaitre = () => setVersionMaitre((v) => v + 1);
         maitre.on('maj', surMaitre);
         // Le maître démarre en arrière-plan : sa première réponse sera rapide
@@ -329,6 +366,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             maitre.off('maj', surMaitre);
             etatClaude.off('maj', surClaude);
             liens.off('demande', surLien);
+            bus.off('detail', surDetail);
         };
     }, []);
 
@@ -486,13 +524,14 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     // Où part le texte tapé : affiché au-dessus de la barre de saisie
     // ─── Raccourcis du moment (barre du bas) ─────────────────────────────────
     function raccourcis(): [string, string][] {
+        if (quelleTouche !== undefined) return [['lettre', 'choisir'], ['⌫', 'remonter'], ['Échap', 'fermer']];
         if (demande?.type === 'choix') return [['↑↓', 'choisir'], ['Entrée', 'valider'], ['Échap', 'annuler']];
         if (demande?.type === 'saisie') return [['Entrée', 'valider'], ['Échap', 'annuler']];
         if (demande?.type === 'vue') return [['clic', 'choisir'], ['Entrée', 'ouvrir'], ['Échap', 'fermer']];
         if (recherche) return [['Entrée', 'suivante'], ['Échap', 'fermer']];
         if (modeMaitre) return [['Entrée', 'envoyer'], ['Échap', 'revenir']];
         if (session) return [['Entrée', 'rejoindre'], ['Ctrl+F', 'chercher'], ['clic droit', 'actions'], ['Échap', 'retour']];
-        return [['Ctrl+K', 'tout'], ['Alt+M', 'maître'], ['clic droit', 'actions'], ['?', 'aide']];
+        return [['Espace', 'actions'], ['Ctrl+K', 'chercher'], ['Alt+M', 'maître'], ['?', 'aide']];
     }
 
     // ─── Le maître ───────────────────────────────────────────────────────────
@@ -577,7 +616,6 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         { label: '+ Nouvelle session Claude', valeur: '/nouvelle' },
         { label: '◆ Nouvelle équipe d\'agents', valeur: '/equipe nouvelle' },
         ...ici(statut.cwd),
-        ...sectionsArticles(),
     ];
 
     function menuSession(s: SessionVue): { titre: string; articles: Article[] } {
@@ -662,19 +700,68 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         else await choix();
     }
 
+    // Panneau de détail ouvert (projet, serveur, conteneur) : son contenu et la place de ses boutons
+    const contenuOuvert = detail ? contenuDetail(detail, donnees, getProjets()) : undefined;
+    const boutonsD = contenuOuvert ? placerBoutons(contenuOuvert.boutons, m.lateral + 1) : [];
+
+    function cibleSurvol(x: number, y: number): string | undefined {
+        if (y === 0) {
+            const b = boutonA(boutonsHaut, x);
+            return b ? `haut:${b.action}` : undefined;
+        }
+        const by = y - HAUT;
+        if (by < 0 || by >= m.corps) return undefined;
+        if (x < m.lateral - 1) {
+            if (by === 0) {
+                const o = ongletsPositions().find((t) => x >= t.x - 1 && x <= t.x + t.largeur);
+                return o ? `onglet:${o.cle}` : undefined;
+            }
+            if (espace !== 'sessions') {
+                const lignes = lignesEspace(espace, donnees, getProjets());
+                const debutListe = Math.max(0, Math.min(decalage, lignes.length - (m.corps - 1)));
+                const l = lignes[debutListe + by - 1];
+                return l && !l.titre ? l.cle : undefined;
+            }
+            const ml = miseLateraleDe(m.corps, donnees);
+            if (by >= 1 && by < ml.ligneNouvelle && (by - 1) % CARTE < CARTE - 1) {
+                const cartes = cartesLaterales(donnees);
+                const debut = Math.max(0, Math.min(decalage, cartes.length - ml.nbCartes));
+                const c2 = cartes[debut + Math.floor((by - 1) / CARTE)];
+                return c2?.type === 'session' ? `carte:${c2.s.cle}` : undefined;
+            }
+            return undefined;
+        }
+        if (demande) return undefined;
+        if (by === 1 && session) {
+            const b = boutonA(boutonsS, x);
+            return b ? `session:${b.action}` : undefined;
+        }
+        if (by === 1 && contenuOuvert) {
+            const b = boutonA(boutonsD, x);
+            return b ? `detail:${b.action}` : undefined;
+        }
+        return undefined;
+    }
+
     // Le gestionnaire souris est installé une fois : il lit toujours l'état et les fonctions du dernier rendu
-    const courant = { m, demande, occupe, session, suggestions, nbSugg, sugg, boutonsHaut, boutonsS, decalage, donnees, tache, lancer, ouvrirCarte, remplacer, setSelection, redimensionner, menuPour, ouvrirMenu, setModeMaitre, setVueActive, glisserVers, cibleDefilement, animDefilement, defilementActuel };
+    const courant = { m, demande, occupe, session, suggestions, nbSugg, sugg, boutonsHaut, boutonsS, decalage, donnees, tache, lancer, ouvrirCarte, remplacer, setSelection, redimensionner, menuPour, ouvrirMenu, setModeMaitre, setVueActive, glisserVers, cibleDefilement, animDefilement, defilementActuel, espace, setEspace, ouvrirDetail, contenuOuvert, boutonsD, setSurvol, survol, cibleSurvol };
     const etatRef = useRef(courant);
     etatRef.current = courant;
 
     useEffect(() => {
         const surSouris = (e: Souris) => {
-            const { m, demande, occupe, session, suggestions, nbSugg, sugg, boutonsHaut, boutonsS, decalage, donnees,
+            const { m, demande, occupe, session, suggestions, nbSugg, sugg, boutonsHaut, boutonsS, decalage, donnees, espace, setEspace, ouvrirDetail, contenuOuvert, boutonsD,
                 lancer, ouvrirCarte, remplacer, setSelection, redimensionner, menuPour, ouvrirMenu, setModeMaitre, setVueActive } = etatRef.current;
             const libre = !demande && !occupe;
             const by = e.y - HAUT;
             const molette = (e.bouton === 'molette-haut' ? 1 : e.bouton === 'molette-bas' ? -1 : 0) * (e.crans ?? 1);
 
+            // Survol : seulement quand ce qui est sous la souris change
+            if (e.survol) {
+                const id = etatRef.current.cibleSurvol(e.x, e.y);
+                if (id !== etatRef.current.survol) etatRef.current.setSurvol(id);
+                return;
+            }
             // Glisser la ligne verticale entre la colonne de gauche et la zone principale
             if (e.glisse) {
                 if (glisser.current) redimensionner(e.x + 1, false);
@@ -718,16 +805,33 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             if (by < 0 || by >= m.corps) return;
 
             if (e.x < m.lateral) {
+                if (!e.appui && !molette) return;
+                // Ligne 0 : les onglets des espaces ; tout à droite, les sessions qui attendent (« ? N »)
+                if (by === 0) {
+                    if (!e.appui || e.bouton !== 'gauche') return;
+                    const o = ongletsPositions().find((x) => e.x >= x.x - 1 && e.x <= x.x + x.largeur);
+                    if (o) return setEspace(o.cle);
+                    if (e.x >= m.lateral - 6 && libre) return void lancer('/questions', false, true);
+                    return;
+                }
+                if (espace !== 'sessions') {
+                    const lignes = lignesEspace(espace, donnees, getProjets());
+                    const debutListe = Math.max(0, Math.min(decalage, lignes.length - (m.corps - 1)));
+                    if (molette) return setDecalage(Math.max(0, Math.min(debutListe - molette * 2, lignes.length - (m.corps - 1))));
+                    if (e.bouton !== 'gauche') return;
+                    const l = lignes[debutListe + by - 1];
+                    if (l?.detail) return ouvrirDetail(l.detail);
+                    if (l?.commande && libre) return void lancer(l.commande, false, true);
+                    return;
+                }
                 const ml = miseLateraleDe(m.corps, donnees);
                 if (molette) {
                     setDecalage((d) => Math.max(0, Math.min(d - molette, cartesLaterales(donnees).length - ml.nbCartes)));
                     return;
                 }
-                if (!e.appui || e.bouton !== 'gauche') return;
+                if (e.bouton !== 'gauche') return;
                 const debut = Math.max(0, Math.min(decalage, cartesLaterales(donnees).length - ml.nbCartes));
                 if (by >= 1 && by < ml.ligneNouvelle) return ouvrirCarte(debut + Math.floor((by - 1) / CARTE));
-                // En-tête « Sessions Claude · N en attente » : ce que les sessions attendent de toi
-                if (by === 0 && libre) return void lancer('/questions', false, true);
                 if (by === ml.ligneNouvelle && libre) return void lancer(e.x >= X_TERMINAL - 1 ? '/terminal' : '/nouvelle', false, true);
                 if (ml.hauteurMaitre >= 2 && by >= ml.ligneMaitre && by < ml.ligneMaitre + ml.hauteurMaitre) {
                     const claude = lireEtatClaude().etat;
@@ -735,15 +839,6 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                     if (claude === 'deconnecte' && libre) return void lancer('/connexion-claude', false, true);
                     return setModeMaitre((v) => !v);
                 }
-                // En-tête Docker ou Serveurs SSH : replier / déplier
-                if (ml.afficheDocker && by === ml.ligneDocker) return void basculerRepli('docker').then(() => setTaille((t) => ({ ...t })));
-                if (ml.afficheServeurs && by === ml.ligneServeurs) return void basculerRepli('ssh').then(() => setTaille((t) => ({ ...t })));
-                const iServeur = by - ml.ligneServeurs - 1;
-                if (iServeur >= 0 && iServeur < ml.nbServeurs && libre) {
-                    return void lancer(`/ssh vue ${serveursLateraux(donnees)[iServeur].nom}`, false, true);
-                }
-                // Section Docker (titre ou lignes) : ouvre la vue Docker
-                if (ml.nbDocker && by > ml.ligneDocker && by <= ml.ligneDocker + ml.nbDocker && libre) return void lancer('/docker', false, true);
                 return;
             }
 
@@ -767,6 +862,14 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                     if (s.executer) lancer(s.texte);
                     else remplacer(s.texte);
                 }
+                return;
+            }
+            if (!session && contenuOuvert && by === 1) {
+                const b = boutonA(boutonsD, e.x);
+                if (!b) return;
+                appuyer(`detail:${b.action}`);
+                if (b.action === 'retour') return ouvrirDetail(undefined);
+                if (libre) lancer(b.action, false, true);
                 return;
             }
             if (session && by === 1) {
@@ -795,6 +898,21 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
 
     // ─── Clavier ─────────────────────────────────────────────────────────────
     useInput((input, key) => {
+        if (quelleTouche !== undefined) {
+            if (key.escape) return setQuelleTouche(undefined);
+            if (key.backspace || key.delete) return setQuelleTouche(quelleTouche ? quelleTouche.slice(0, -1) : undefined);
+            const enfant = noeudA(quelleTouche).enfants[input];
+            if (!enfant) return;
+            if (estGroupe(enfant)) return setQuelleTouche(quelleTouche + input);
+            setQuelleTouche(undefined);
+            if (enfant.commande.startsWith('espace:')) return setEspace(enfant.commande.slice(7) as Espace);
+            if (enfant.commande === 'maitre') return setModeMaitre(true);
+            return void lancer(enfant.commande, false, true);
+        }
+        if (input === ' ' && !saisie.trim() && !demande && !occupe && !recherche && !modeMaitre && !modeShell) {
+            remplacer('');
+            return setQuelleTouche('');
+        }
         if (key.ctrl && input === 'c') {
             if (saisie) return setSaisie('');
             if (Date.now() - ctrlC < 1500) return quitter();
@@ -821,6 +939,8 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         if (key.ctrl && input === 'k') return void lancer('/palette', false, true);
         // Alt+T : ouvrir un terminal (PowerShell, cmd, Git Bash…)
         if (key.meta && input === 't') return void lancer('/terminal', false, true);
+        // Alt+S / P / R / D : espaces Sessions, Projets, seRveurs SSH, Docker
+        if (key.meta && ['s', 'p', 'r', 'd'].includes(input)) return setEspace(({ s: 'sessions', p: 'projets', r: 'serveurs', d: 'docker' } as const)[input as 's']);
         // Alt+M : parler au maître (ou revenir)
         if (key.meta && input === 'm') return setModeMaitre((v) => !v);
         // Alt+1..9 : ouvrir la carte N
@@ -847,6 +967,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             if (saisie) return setSaisie('');
             if (images.length) return setImages([]);
             if (modeMaitre) return setModeMaitre(false);
+            if (detail) return ouvrirDetail(undefined);
             if (selection) return setSelection(undefined);
             return;
         }
@@ -868,7 +989,11 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     });
 
     // ─── Rendu ───────────────────────────────────────────────────────────────
-    const hauteurPrincipale = m.corps - nbSugg;
+    const groupeQT = quelleTouche !== undefined ? noeudA(quelleTouche) : undefined;
+    const entreesQT = groupeQT ? Object.entries(groupeQT.enfants) : [];
+    const colonnesQT = Math.max(1, Math.floor((m.principal - 4) / 30));
+    const hauteurQT = groupeQT ? Math.ceil(entreesQT.length / colonnesQT) + 2 : 0;
+    const hauteurPrincipale = m.corps - nbSugg - hauteurQT;
     const debutSugg = Math.max(0, Math.min(sugg - 3, suggestions.length - 8));
     const modeShell = saisie.startsWith('!');
     const ram = os.totalmem() - os.freemem();
@@ -883,20 +1008,37 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     } else if (demande?.type === 'vue') {
         principal = demande.rendu(demande.resoudre);
     } else if (session) {
-        principal = <VueSession s={session} messages={messages} boutons={boutonsS} largeur={m.principal} hauteur={hauteurPrincipale} defilement={defilement} git={gitSession} surligne={recherche ? saisie.trim() : undefined} cout={donnees.cout.parSession[session.sessionId]} />;
+        principal = <VueSession s={session} messages={messages} boutons={boutonsS} largeur={m.principal} hauteur={hauteurPrincipale} defilement={defilement} git={gitSession} surligne={recherche ? saisie.trim() : undefined} cout={donnees.cout.parSession[session.sessionId]} survol={survol} />;
     } else {
-        principal = <VueJournal lignes={lignesJournal()} largeur={m.principal} hauteur={hauteurPrincipale} defilement={defilement} />;
+        principal = contenuOuvert
+            ? <VueDetail contenu={contenuOuvert} boutons={boutonsD.map((b) => ({ ...b, x: b.x - m.lateral }))} largeur={m.principal} hauteur={hauteurPrincipale} survol={survol} />
+            : <VueJournal lignes={lignesJournal()} largeur={m.principal} hauteur={hauteurPrincipale} defilement={defilement} />;
     }
 
     return (
         <Box flexDirection="column" width={m.largeur} height={m.hauteur} overflow="hidden">
-            <BarreHaut boutons={boutonsHaut} largeur={m.largeur} vueActive={demande?.type === 'vue' ? vueActive : undefined}
+            <BarreHaut boutons={boutonsHaut} largeur={m.largeur} vueActive={demande?.type === 'vue' ? vueActive : undefined} survol={survol}
                 droite={`${config.prenom || os.userInfo().username} · ${heure.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}`} />
             <Box height={1} flexShrink={0}><Text color={fond.bordure}>{'─'.repeat(m.largeur)}</Text></Box>
             <Box height={m.corps} flexShrink={0} overflow="hidden">
-                <Laterale donnees={donnees} largeur={m.lateral} hauteur={m.corps} selection={selection} decalage={decalage} tic={tic} maitre={etatMaitre()} modeMaitre={modeMaitre} claude={lireEtatClaude().etat} />
+                <Laterale donnees={donnees} largeur={m.lateral} hauteur={m.corps} selection={selection} decalage={decalage} tic={tic} maitre={etatMaitre()} modeMaitre={modeMaitre} claude={lireEtatClaude().etat}
+                    espace={espace} survol={survol} ouvert={detail ? `${detail.type}:${detail.cle}` : undefined} projets={getProjets()} />
                 <Box flexDirection="column" width={m.principal} height={m.corps}>
                     <Box height={hauteurPrincipale} flexDirection="column" overflow="hidden">{principal}</Box>
+                    {groupeQT && (
+                        <Box flexDirection="column" height={hauteurQT} flexShrink={0} borderStyle="round" borderColor={theme.accent} paddingX={1} borderBottom={false} borderLeft={false} borderRight={false}>
+                            <Box height={1}><Text color={theme.accent} bold>{`␣ ${quelleTouche ? quelleTouche.split('').join(' ') + ' · ' : ''}${groupeQT.nom}`}</Text><Text color={fond.discret}>{'   lettre = choisir · ⌫ remonter · Échap fermer'}</Text></Box>
+                            {Array.from({ length: hauteurQT - 2 }, (_, ligne) => (
+                                <Box key={ligne} height={1}>
+                                    {entreesQT.slice(ligne * colonnesQT, ligne * colonnesQT + colonnesQT).map(([t, n]) => (
+                                        <Box key={t} width={30} flexShrink={0}>
+                                            <Text wrap="truncate-end"><Text color={theme.accent} bold>{` ${t} `}</Text><Text color={estGroupe(n) ? theme.secondaire : fond.texte}>{` ${n.nom}${estGroupe(n) ? ' ›' : ''}`}</Text></Text>
+                                        </Box>
+                                    ))}
+                                </Box>
+                            ))}
+                        </Box>
+                    )}
                     {nbSugg > 0 && (
                         <Box flexDirection="column" height={nbSugg} paddingX={1}>
                             {suggestions.slice(debutSugg, debutSugg + 8).map((s, i) => {
@@ -926,6 +1068,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                             {!modeShell && <Text color={theme.primaire}>❯ </Text>}
                             <TextInput
                                 key={cleSaisie}
+                                focus={quelleTouche === undefined}
                                 value={saisie}
                                 onChange={surSaisie}
                                 onSubmit={soumettre}

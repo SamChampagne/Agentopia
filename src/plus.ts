@@ -212,6 +212,36 @@ export function commandesPlus(config: Config): Commande[] {
             },
         },
         {
+            nom: 'global', alias: ['live'], groupe: 'Système',
+            description: 'Vue globale en direct : sessions, équipes, ce qui se passe dans les serveurs SSH, Docker',
+            executer: () => vue(import('./ui/VueGlobale.js'), 'VueGlobale'),
+        },
+        {
+            nom: 'conteneur', args: '<logs|shell|start|stop|restart> <hôte> <id>', groupe: 'Système', cache: true,
+            description: 'Action sur un conteneur Docker (panneau de détail)',
+            executer: async ({ args }) => {
+                const [action, hote, id] = args;
+                const { lireDonnees, rafraichirDocker } = await import('./ui/donnees.js');
+                const { actionConteneur, commandeInteractive } = await import('./docker.js');
+                const { tache } = await import('./ui/bus.js');
+                const { c } = await import('./theme.js');
+                const h = lireDonnees().docker.find((x) => x.nom === hote);
+                const ct = h?.conteneurs.find((x) => x.id === id);
+                if (!h || !ct) return console.log(c.alerte('Conteneur introuvable'));
+                if (action === 'logs' || action === 'shell') {
+                    const { passerLaMain } = await import('./ui/ecran.js');
+                    console.log(c.discret(action === 'logs' ? 'Logs en continu · Ctrl+C pour revenir' : 'Shell dans le conteneur · exit pour revenir'));
+                    const [prog, a2] = commandeInteractive(action, id, h.serveur);
+                    passerLaMain(prog, a2);
+                    return;
+                }
+                if (!['start', 'stop', 'restart'].includes(action)) return;
+                const r = await tache(`${action} ${ct.nom}`, () => actionConteneur(action as 'start', id, h.serveur));
+                await rafraichirDocker();
+                console.log(r.ok ? c.succes(`✓ ${ct.nom} : ${action === 'start' ? 'démarré' : action === 'stop' ? 'arrêté' : 'redémarré'}`) : c.erreur(`✕ ${r.sortie.split('\n')[0]}`));
+            },
+        },
+        {
             nom: 'menu-principal', groupe: 'Système', cache: true,
             description: 'Le menu ≡ : ce qui n\'est pas dans la barre du haut',
             executer: async () => {

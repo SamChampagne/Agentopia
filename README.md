@@ -101,6 +101,16 @@ Claudetopia occupe ~110 Mo et ~3 % d'un cœur au repos. Le maître (~250 Mo) s'e
 (5 min sous 12 Go de RAM, où il ne démarre d'ailleurs qu'au premier besoin) ; réglable avec `maitre.veille` (minutes, 0 = jamais).
 Si Claude Code n'est pas installé ou pas connecté, la zone du maître le dit : un clic l'installe ou ouvre la connexion.
 
+## Se repérer
+
+- **Espaces** (onglets en haut de la colonne de gauche, ou Alt+S / P / R / D) : Sessions, Projets, SSH, Docker.
+  Un seul à la fois : l'écran reste simple même avec beaucoup de choses.
+- **Panneau de détail** : un clic sur un projet, un serveur ou un conteneur ouvre ses infos et ses actions à droite.
+- **Espace** (dans la saisie vide) : la carte des actions, regroupées par thème (g = Git, s = Sessions, r = Serveurs…).
+- **◉ Live** (`/global`) : la vue globale en direct, avec les sessions, les équipes, ce qui se passe dans chaque serveur SSH
+  (charge, mémoire, disque, conteneurs ; serveurs accessibles par clé) et Docker.
+- Ce qui est sous la souris s'éclaire ; la barre du bas montre les raccourcis du moment.
+
 ## Confort et outils
 
 | | |

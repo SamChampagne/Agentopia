@@ -13,6 +13,8 @@ import { Serveur } from '../ssh.js';
 import { grouperConteneurs, portsCourts } from '../docker.js';
 import { Equipe, avancement, agentsDesEquipes } from '../equipe.js';
 import { serveursLateraux, dockerLateral, miseLateraleDe, sectionRepliee } from './sections.js';
+import { Espace, ESPACES, LigneEspace, lignesEspace } from './espaces.js';
+import type { Projet } from '../projets.js';
 
 // Colonne où commence « ❯ Terminal » sur la ligne « + Session » (marge 1 + « + Session » + 3 espaces)
 export const X_TERMINAL = 1 + '+ Session'.length + 3;
@@ -69,8 +71,8 @@ function couperA(texte: string, max: number): string {
     }
     return r + '…';
 }
-function LigneCarte({ barre, couleurBarre, largeur, morceaux, droite, couleurDroite, fondCarte }:
-    { barre: string; couleurBarre: string; largeur: number; morceaux: Morceau[]; droite?: string; couleurDroite?: string; fondCarte: string }) {
+export function LigneCarte({ barre, couleurBarre, largeur, morceaux, droite, couleurDroite, fondCarte }:
+    { barre: string; couleurBarre: string; largeur: number; morceaux: Morceau[]; droite?: string; couleurDroite?: string; fondCarte?: string }) {
     const fin = droite ? ` ${droite} ` : ' ';
     let place = Math.max(0, largeur - stringWidth(barre) - stringWidth(fin));
     const coupes: Morceau[] = [];
@@ -92,13 +94,13 @@ function LigneCarte({ barre, couleurBarre, largeur, morceaux, droite, couleurDro
     );
 }
 
-function Carte({ s, a, active, largeur, tic }: { s: SessionVue; a?: Activite; active: boolean; largeur: number; tic: number }) {
+function Carte({ s, a, active, largeur, tic, survole }: { s: SessionVue; a?: Activite; active: boolean; largeur: number; tic: number; survole?: boolean }) {
     const couleur = COULEURS[s.statut];
     const icone = s.statut === 'travaille' ? ANIM[tic % ANIM.length] : s.statut === 'bloquee' ? '!' : s.statut === 'terminee' ? '✓' : '○';
     // Ligne 2 : la question en attente, sinon l'action en cours (outil), la dernière réponse, le titre
     const action = s.question ? `? ${une(s.question)}` : a?.outil ? `▸ ${une(a.outil)}` : a?.dernierTexte ? une(a.dernierTexte) : s.titre || 'pas encore d\'activité';
     // La session ouverte : fond plus marqué et barre d'accent ; les autres : fond de panneau et barre de leur état
-    const fondCarte = active ? fond.panneauActif : fond.panneau;
+    const fondCarte = active ? fond.panneauActif : survole ? fond.selection : fond.panneau;
     const commun = { barre: '▌ ', couleurBarre: active ? theme.accent : couleur, largeur: largeur - 1, fondCarte };
     return (
         <Box height={CARTE} flexShrink={0} width={largeur} flexDirection="column">
@@ -206,7 +208,50 @@ function Maitre({ etat, actif, hauteur, largeur, tic, claude, projet }: { etat: 
     );
 }
 
+// Onglets des espaces de travail (ligne 0) ; à droite, les sessions qui attendent une réponse (clic = /questions)
+function Onglets({ espace, largeur, survol, attente }: { espace: Espace; largeur: number; survol?: string; attente: number }) {
+    const fin = attente ? `? ${attente} ` : '';
+    const libres = Math.max(0, largeur - 1 - ESPACES.reduce((n, e) => n + e.label.length + 2, 0) - fin.length);
+    return (
+        <Box height={1} flexShrink={0} overflow="hidden">
+            <Text wrap="truncate-end" backgroundColor={fond.entete}>
+                <Text> </Text>
+                {ESPACES.map((e) => {
+                    const actif = e.cle === espace;
+                    const survole = survol === `onglet:${e.cle}`;
+                    return <Text key={e.cle}><Text bold={actif} underline={actif} color={actif ? theme.accent : survole ? fond.texte : fond.eteint}>{e.label}</Text>{'  '}</Text>;
+                })}
+                {' '.repeat(libres)}
+                <Text color="#facc15" bold>{fin}</Text>
+            </Text>
+        </Box>
+    );
+}
+
+// Liste d'un espace (Projets, SSH, Docker) : une ligne par élément, fond au survol et sur l'élément ouvert
+function ListeEspace({ lignes, largeur, hauteur, decalage, survol, ouvert }: { lignes: LigneEspace[]; largeur: number; hauteur: number; decalage: number; survol?: string; ouvert?: string }) {
+    const debut = Math.max(0, Math.min(decalage, lignes.length - hauteur));
+    return (
+        <Box flexDirection="column" height={hauteur} overflow="hidden">
+            {lignes.slice(debut, debut + hauteur).map((l, i) => {
+                const actif = !!ouvert && l.cle === ouvert;
+                const survole = !l.titre && survol === l.cle;
+                return (
+                    <LigneCarte key={`${l.cle}:${i}`} barre={actif ? '▌ ' : '  '} couleurBarre={theme.accent} largeur={largeur - 1}
+                        fondCarte={actif ? fond.panneauActif : survole ? fond.selection : undefined}
+                        morceaux={l.morceaux} droite={l.droite} couleurDroite={l.couleurDroite} />
+                );
+            })}
+            {!lignes.length && <Text color="gray">  (rien pour l'instant)</Text>}
+        </Box>
+    );
+}
+
 interface Props {
+    espace: Espace;
+    survol?: string;            // ce qui est sous la souris (onglet:…, carte:…, projet:…)
+    ouvert?: string;            // l'élément dont le détail est ouvert
+    projets: Projet[];
     donnees: Donnees;
     largeur: number;
     hauteur: number;
@@ -218,7 +263,7 @@ interface Props {
     claude: string;
 }
 
-export function Laterale({ donnees: d, largeur, hauteur, selection, decalage, tic, maitre, modeMaitre, claude }: Props) {
+export function Laterale({ donnees: d, largeur, hauteur, selection, decalage, tic, maitre, modeMaitre, claude, espace, survol, ouvert, projets }: Props) {
     const serveurs: Serveur[] = serveursLateraux(d);
     const docker = dockerLateral(d);
     const m = miseLateraleDe(hauteur, d);
@@ -237,11 +282,14 @@ export function Laterale({ donnees: d, largeur, hauteur, selection, decalage, ti
         <Box width={largeur} height={hauteur} flexDirection="column" overflow="hidden"
             borderStyle="single" borderTop={false} borderBottom={false} borderLeft={false} borderColor={fond.bordure}>
             {/* Chaque ligne a une hauteur fixe : la géométrie doit correspondre à miseLaterale() pour les clics */}
-            <Entete titre="SESSIONS CLAUDE" largeur={interieur}
-                droite={`${d.agents.length}${enAttente ? ` · ${enAttente} en attente` : ''}`} couleurDroite={enAttente ? '#facc15' : 'gray'} />
+            <Onglets espace={espace} largeur={interieur} survol={survol} attente={d.agents.filter((x) => x.statut === 'bloquee' || (x.arrierePlan && x.statut === 'attend')).length} />
+            {espace !== 'sessions' && (
+                <ListeEspace lignes={lignesEspace(espace, d, projets)} largeur={interieur} hauteur={hauteur - 1} decalage={decalage} survol={survol} ouvert={ouvert} />
+            )}
+            {espace === 'sessions' && <>
             {visibles.map((x) => (x.type === 'equipe'
                 ? <CarteEquipe key={`equipe-${x.e.id}`} e={x.e} largeur={interieur} tic={tic} />
-                : <Carte key={x.s.cle} s={x.s} a={d.activites.get(x.s.sessionId)} active={x.s.cle === selection} largeur={interieur} tic={tic} />
+                : <Carte key={x.s.cle} s={x.s} a={d.activites.get(x.s.sessionId)} active={x.s.cle === selection} largeur={interieur} tic={tic} survole={survol === `carte:${x.s.cle}`} />
             ))}
             {Array.from({ length: m.nbCartes - visibles.length }, (_, i) => <Box key={`vide${i}`} height={CARTE} flexShrink={0} />)}
             <Box height={1} flexShrink={0} paddingX={1}>
@@ -256,6 +304,7 @@ export function Laterale({ donnees: d, largeur, hauteur, selection, decalage, ti
             <Box flexGrow={1} flexDirection="column" overflow="hidden">
                 {m.hauteurMaitre >= 2 && <Maitre etat={maitre} actif={modeMaitre} hauteur={m.hauteurMaitre} largeur={interieur} tic={tic} claude={claude} projet={d.agents.find((a) => a.arrierePlan)?.nom ?? d.agents[0]?.nom} />}
             </Box>
+            </>}
             {m.afficheDocker && vide}
             {m.afficheDocker && (
                 <Box flexDirection="column" flexShrink={0}>
