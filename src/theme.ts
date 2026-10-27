@@ -29,6 +29,11 @@ export const c = {
 export const PALETTES: Record<string, typeof theme> = {
     // Couleurs foncées : lisibles sur un terminal à fond blanc (avec /mode clair)
     'Clair': { primaire: '#0369a1', secondaire: '#0e7490', accent: '#be185d' },
+    'Catppuccin': { primaire: '#89b4fa', secondaire: '#94e2d5', accent: '#f5c2e7' },
+    'Tokyo Night': { primaire: '#7aa2f7', secondaire: '#7dcfff', accent: '#bb9af7' },
+    'Dracula': { primaire: '#bd93f9', secondaire: '#8be9fd', accent: '#ff79c6' },
+    'Nord': { primaire: '#88c0d0', secondaire: '#8fbcbb', accent: '#b48ead' },
+    'Gruvbox': { primaire: '#fabd2f', secondaire: '#8ec07c', accent: '#fe8019' },
     'Océan': { primaire: '#00b4d8', secondaire: '#90e0ef', accent: '#f72585' },
     'Forêt': { primaire: '#4ade80', secondaire: '#a7f3d0', accent: '#facc15' },
     'Coucher de soleil': { primaire: '#fb923c', secondaire: '#fcd34d', accent: '#f472b6' },

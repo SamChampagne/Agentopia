@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Box, Text } from 'ink';
 import wrapAnsi from 'wrap-ansi';
 import type { etatMaitre } from '../maitre.js';
@@ -57,38 +58,44 @@ const ANIM = ['✻', '✼', '✽', '✾', '✿', '❀'];
 
 const une = (s: string) => s.replace(/\s+/g, ' ').trim();
 
+// Une ligne de carte : barre d'état à gauche, texte qui se coupe, partie droite qui ne rétrécit jamais
+function LigneCarte({ barre, couleurBarre, largeur, children, droite, couleurDroite }:
+    { barre: string; couleurBarre: string; largeur: number; children: ReactNode; droite?: string; couleurDroite?: string }) {
+    return (
+        <Box height={1} width={largeur} overflow="hidden">
+            <Box flexShrink={0}><Text color={couleurBarre}>{barre}</Text></Box>
+            <Box flexGrow={1} flexShrink={1} overflow="hidden">{children}</Box>
+            {droite ? <Box flexShrink={0}><Text color={couleurDroite ?? fond.discret}>{` ${droite} `}</Text></Box> : null}
+        </Box>
+    );
+}
+
 function Carte({ s, a, active, largeur, tic }: { s: SessionVue; a?: Activite; active: boolean; largeur: number; tic: number }) {
     const couleur = COULEURS[s.statut];
     const icone = s.statut === 'travaille' ? ANIM[tic % ANIM.length] : s.statut === 'bloquee' ? '!' : s.statut === 'terminee' ? '✓' : '○';
-    const interieur = largeur - 4;
-    // Ligne 2 : l'action en cours (outil) ou la dernière réponse de Claude
-    // Ligne 2 : l'action en cours (outil), sinon la dernière réponse de Claude, sinon le titre de la session
+    // Ligne 2 : la question en attente, sinon l'action en cours (outil), la dernière réponse, le titre
     const action = s.question ? `? ${une(s.question)}` : a?.outil ? `▸ ${une(a.outil)}` : a?.dernierTexte ? une(a.dernierTexte) : s.titre || 'pas encore d\'activité';
+    // Barre épaisse et couleur d'accent pour la session ouverte, fine et couleur de l'état sinon
+    const barre = active ? '▌ ' : '▎ ';
+    const couleurBarre = active ? theme.accent : couleur;
     return (
-        <Box height={CARTE} flexShrink={0} width={largeur} flexDirection="column" borderStyle="round" paddingX={1}
-            borderColor={active ? theme.accent : s.statut === 'travaille' ? '#166534' : s.statut === 'bloquee' ? '#9a3412' : fond.bordure}>
-            {/* Lignes de hauteur 1 fixe, la partie droite ne rétrécit jamais : une carte ne déborde pas */}
-            <Box height={1} width={interieur} overflow="hidden">
-                <Box flexGrow={1} flexShrink={1} overflow="hidden">
-                    <Text wrap="truncate-end">
-                        <Text color={couleurProjet(s.nom)}>● </Text>
-                        <Text bold>{s.nom}</Text>
-                        <Text color="gray">{s.arrierePlan ? ' ⧉' : ''}</Text>
-                    </Text>
-                </Box>
-                <Box flexShrink={0}><Text color={couleur}>{` ${icone} ${LIBELLES[s.statut]}`}</Text></Box>
-            </Box>
-            <Box height={1} width={interieur} overflow="hidden">
-                <Box flexGrow={1} flexShrink={1} overflow="hidden">
-                    <Text wrap="truncate-end" color={s.question ? '#fb923c' : a?.outil ? theme.secondaire : 'gray'}>{action}</Text>
-                </Box>
-                <Box flexShrink={0}><Text color={fond.discret}>{a?.date ? ` ${ilYa(a.date)}` : ''}</Text></Box>
-            </Box>
-            {CARTE > 4 && (
-                <Box height={1} width={interieur} overflow="hidden">
-                    <Text wrap="truncate-end" color={fond.eteint}>{a?.dernierUser ? `» ${une(a.dernierUser)}` : s.titre}</Text>
-                </Box>
+        <Box height={CARTE} flexShrink={0} width={largeur} flexDirection="column">
+            <LigneCarte barre={barre} couleurBarre={couleurBarre} largeur={largeur} droite={`${icone} ${LIBELLES[s.statut]}`} couleurDroite={couleur}>
+                <Text wrap="truncate-end">
+                    <Text color={couleurProjet(s.nom)}>● </Text>
+                    <Text bold color={active ? theme.accent : undefined}>{s.nom}</Text>
+                    <Text color={fond.discret}>{s.arrierePlan ? ' ⧉' : ''}</Text>
+                </Text>
+            </LigneCarte>
+            <LigneCarte barre={barre} couleurBarre={couleurBarre} largeur={largeur} droite={a?.date ? ilYa(a.date) : undefined}>
+                <Text wrap="truncate-end" color={s.question ? '#fdba74' : a?.outil ? theme.secondaire : fond.eteint}>{`  ${action}`}</Text>
+            </LigneCarte>
+            {CARTE > 3 && (
+                <LigneCarte barre={barre} couleurBarre={couleurBarre} largeur={largeur}>
+                    <Text wrap="truncate-end" color={fond.discret}>{`  ${a?.dernierUser ? `» ${une(a.dernierUser)}` : s.titre}`}</Text>
+                </LigneCarte>
             )}
+            <Box height={1} flexShrink={0} />
         </Box>
     );
 }
@@ -109,24 +116,29 @@ export function etatEquipe(e: Equipe, tic = 0): { texte: string; couleur: string
 function CarteEquipe({ e, largeur, tic }: { e: Equipe; largeur: number; tic: number }) {
     const a = avancement(e);
     const etat = etatEquipe(e, tic);
-    const interieur = largeur - 4;
-    const legende = a.total ? ` ${a.faites}/${a.total}` : '';
-    const barre = Math.max(4, interieur - legende.length - 1);
+    const legende = a.total ? ` ${a.faites}/${a.total} ` : '';
+    const barre = Math.max(4, largeur - 4 - legende.length);
     const plein = a.total ? Math.round((a.faites / a.total) * barre) : 0;
+    const couleurBarre = e.etat === 'en cours' || e.etat === 'integration' ? '#a78bfa' : '#6d28d9';
     return (
-        <Box height={CARTE} flexShrink={0} width={largeur} flexDirection="column" borderStyle="double" paddingX={1}
-            borderColor={e.etat === 'en cours' || e.etat === 'integration' ? '#7c3aed' : '#4c1d95'}>
-            <Box height={1} width={interieur} overflow="hidden">
-                <Box flexGrow={1} flexShrink={1} overflow="hidden">
-                    <Text wrap="truncate-end"><Text color="#c084fc">◆ </Text><Text bold>{e.nomProjet}</Text></Text>
-                </Box>
-                <Box flexShrink={0}><Text color={etat.couleur}>{` ${etat.texte}`}</Text></Box>
-            </Box>
-            <Box height={1} width={interieur} overflow="hidden">
-                <Text color="#7c3aed">{'━'.repeat(plein)}</Text>
-                <Text color={fond.bordure}>{'━'.repeat(barre - plein)}</Text>
-                <Text color="gray">{legende}</Text>
-            </Box>
+        <Box height={CARTE} flexShrink={0} width={largeur} flexDirection="column">
+            <LigneCarte barre="▎ " couleurBarre={couleurBarre} largeur={largeur} droite={etat.texte} couleurDroite={etat.couleur}>
+                <Text wrap="truncate-end"><Text color="#c084fc">◆ </Text><Text bold>{e.nomProjet}</Text></Text>
+            </LigneCarte>
+            <LigneCarte barre="▎ " couleurBarre={couleurBarre} largeur={largeur}>
+                <Text wrap="truncate-end">
+                    <Text>{'  '}</Text>
+                    <Text color="#a78bfa">{'━'.repeat(plein)}</Text>
+                    <Text color={fond.bordure}>{'━'.repeat(Math.max(0, barre - plein))}</Text>
+                    <Text color={fond.discret}>{legende}</Text>
+                </Text>
+            </LigneCarte>
+            {CARTE > 3 && (
+                <LigneCarte barre="▎ " couleurBarre={couleurBarre} largeur={largeur}>
+                    <Text wrap="truncate-end" color={fond.discret}>{`  ${e.objectif}`}</Text>
+                </LigneCarte>
+            )}
+            <Box height={1} flexShrink={0} />
         </Box>
     );
 }
@@ -170,8 +182,8 @@ function Maitre({ etat, actif, hauteur, largeur, tic, claude, projet }: { etat: 
         );
     }
     if (!dernier) {
-        corps.push({ texte: actif ? 'Écris ta demande en bas ↓' : 'Clique ici, puis demande :', couleur: actif ? VIOLET : 'gray' });
-        exemples(projet).forEach((e) => corps.push({ texte: e, couleur: 'gray' }));
+        // Au repos, une seule ligne : l'invitation (les exemples tournent, un à la fois)
+        corps.push(actif ? { texte: 'Écris ta demande en bas ↓', couleur: VIOLET } : { texte: `ex. ${exemples(projet)[Math.floor(Date.now() / 20_000) % 3]}`, couleur: fond.eteint });
     } else {
         corps.push({ texte: `» ${dernier.question}`, couleur: 'gray' });
         if (etat.enCours) corps.push({ texte: `${ANIM[tic % ANIM.length]} réfléchit…`, couleur: VIOLET });

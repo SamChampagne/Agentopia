@@ -36,26 +36,26 @@ import { theme, couleurProjet, c, fond } from '../theme.js';
 
 const SPINNER = ['✻', '✼', '✽', '✾', '✿', '❀', '✿', '✾', '✽', '✼'];
 
+// Seulement l'essentiel : Moniteur, Journal, Récents, Aide… sont dans le menu ☰ (et la palette Ctrl+K)
 export const BOUTONS_HAUT = [
-    { label: '☰ Menu', action: '' },
+    { label: '☰ Menu', action: '/menu-principal' },
     { label: 'Projets', action: '/projets' },
     { label: 'Équipes', action: '/equipe' },
-    { label: 'Moniteur', action: '/top' },
     { label: 'Git', action: '/git' },
     { label: 'Docker', action: '/docker' },
     { label: 'SSH', action: '/ssh' },
-    { label: 'Journal', action: '/journal' },
-    { label: 'Récents', action: '/recents' },
     { label: 'Config', action: '/config' },
-    { label: 'Aide', action: '/aide' },
 ];
 
 // Boutons de la conversation ouverte. Revue et Commit agissent sur le projet de la session.
+// 4 boutons seulement : le reste (copier, revue, commit, VS Code, terminal…) est dans « ⋯ Actions » (et au clic droit)
 function boutonsSession(s: SessionVue) {
-    const projet = [{ label: '⎘ Copier', action: 'copier-code' }, { label: '⌕ Revue', action: 'revue' }, { label: '✓ Commit', action: 'commit' }, { label: '◧ VS Code', action: 'code' }];
-    return s.arrierePlan
-        ? [{ label: '← Retour', action: 'fermer' }, { label: '↵ Rejoindre', action: 'rejoindre' }, { label: '★ Favori', action: 'favori' }, ...projet, { label: '✕ Fermer la session', action: 'fermer-session' }]
-        : [{ label: '← Retour', action: 'fermer' }, { label: '⑂ Continuer ici', action: 'copie' }, ...projet, { label: '✕ Fermer la session', action: 'fermer-session' }];
+    return [
+        { label: '← Retour', action: 'fermer' },
+        s.arrierePlan ? { label: '↵ Rejoindre', action: 'rejoindre' } : { label: '⑂ Continuer ici', action: 'copie' },
+        { label: '⋯ Actions', action: 'actions' },
+        { label: '✕ Fermer la session', action: 'fermer-session' },
+    ];
 }
 
 function commandeSession(action: string, s: SessionVue): string | undefined {
@@ -171,6 +171,23 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     const [, setVersionMaitre] = useState(0);
     const [messages, setMessages] = useState<Message[]>([]);
     const [defilement, setDefilement] = useState(0);
+    const cibleDefilement = useRef(0);
+    const animDefilement = useRef<NodeJS.Timeout>();
+    const defilementActuel = useRef(0);
+    defilementActuel.current = defilement;
+    function glisserVers(cible: number) {
+        cibleDefilement.current = Math.max(0, cible);
+        if (animDefilement.current) return;
+        animDefilement.current = setInterval(() => {
+            const reste = cibleDefilement.current - defilementActuel.current;
+            if (Math.abs(reste) <= 1) {
+                clearInterval(animDefilement.current);
+                animDefilement.current = undefined;
+                return setDefilement(cibleDefilement.current);
+            }
+            setDefilement((d) => d + Math.ceil(Math.abs(reste) / 2) * Math.sign(reste));
+        }, 16);
+    }
     const [decalage, setDecalage] = useState(0);
     const [tic, setTic] = useState(0);
     const [images, setImages] = useState<string[]>([]);
@@ -514,7 +531,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             if (session.statut === 'bloquee') return { texte: `${session.nom} attend une permission : Entrée pour le rejoindre et répondre`, couleur: '#fb923c' };
             return { texte: `↳ envoyé à la conversation ${session.nom} (${session.titre || session.id})${t ? '' : ' · Entrée vide = la rejoindre'}`, couleur: couleurProjet(session.nom) };
         }
-        return { texte: `↳ démarre une nouvelle session Claude dans ${path.basename(statut.cwd)} (en arrière-plan) · /ask pour une question rapide`, couleur: theme.primaire };
+        return { texte: `↳ nouvelle session Claude dans ${path.basename(statut.cwd)} · Ctrl+K pour tout le reste`, couleur: fond.discret };
     }
 
     function ouvrirCarte(index: number) {
@@ -635,7 +652,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     }
 
     // Le gestionnaire souris est installé une fois : il lit toujours l'état et les fonctions du dernier rendu
-    const courant = { m, demande, occupe, session, suggestions, nbSugg, sugg, boutonsHaut, boutonsS, decalage, donnees, tache, lancer, ouvrirCarte, remplacer, setSelection, redimensionner, menuPour, ouvrirMenu, setModeMaitre, setVueActive };
+    const courant = { m, demande, occupe, session, suggestions, nbSugg, sugg, boutonsHaut, boutonsS, decalage, donnees, tache, lancer, ouvrirCarte, remplacer, setSelection, redimensionner, menuPour, ouvrirMenu, setModeMaitre, setVueActive, glisserVers, cibleDefilement, animDefilement, defilementActuel };
     const etatRef = useRef(courant);
     etatRef.current = courant;
 
@@ -725,7 +742,9 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                 return;
             }
             if (molette) {
-                setDefilement((d) => Math.max(0, d + molette * 3));
+                // Pendant un glissement, on part de la cible (les crans s'additionnent), sinon de la position actuelle
+                const depart = etatRef.current.animDefilement.current ? etatRef.current.cibleDefilement.current : etatRef.current.defilementActuel.current;
+                etatRef.current.glisserVers(depart + molette * 3);
                 return;
             }
             if (!e.appui || e.bouton !== 'gauche') return;
@@ -745,6 +764,10 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                 if (b.action === 'fermer') {
                     appuyer('session:fermer');
                     return setSelection(undefined);
+                }
+                if (b.action === 'actions') {
+                    appuyer('session:actions');
+                    return void ouvrirMenu(menuPour(m.lateral + 1, 1));
                 }
                 const cmd = commandeSession(b.action, session);
                 if (cmd && libre) {
@@ -883,7 +906,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                     ? <Text color={notice.startsWith('✕') ? '#f87171' : notice.startsWith('!') ? '#fb923c' : '#4ade80'} wrap="truncate-end">{notice}</Text>
                     : !demande && !occupe && <Text color={destination().couleur} wrap="truncate-end">{destination().texte}</Text>}
             </Box>
-            <Box borderStyle="round" borderColor={modeShell ? theme.accent : session ? couleurProjet(session.nom) : 'gray'} paddingX={1}
+            <Box borderStyle="round" borderColor={modeShell ? theme.accent : modeMaitre ? '#a78bfa' : recherche ? theme.secondaire : fond.bordure} paddingX={1}
                 width={m.largeur} height={3} flexShrink={0} overflow="hidden">
                 {demande || occupe
                     ? <Text color="gray">{occupe && !demande ? 'commande en cours…' : 'réponds dans la zone ci-dessus'}</Text>

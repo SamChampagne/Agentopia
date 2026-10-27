@@ -5,10 +5,10 @@ import stringWidth from 'string-width';
 
 export const HAUT = 2;              // barre du haut + ligne de séparation
 export const BAS = 5;               // destination du texte (1) + saisie (3) + barre de statut (1)
-// Hauteur d'une carte de session (bordures comprises) : 2 lignes de contenu, 3 en mode détaillé (/cartes)
-export let CARTE = 4;
+// Hauteur d'une carte de session : 2 lignes de contenu + 1 ligne d'espace (3 lignes de contenu en mode détaillé, /cartes)
+export let CARTE = 3;
 export function choisirTailleCartes(detaillees: boolean): void {
-    CARTE = detaillees ? 5 : 4;
+    CARTE = detaillees ? 4 : 3;
 }
 export const MAX_SERVEURS = 5;
 export const LATERAL_MIN = 28;
@@ -38,7 +38,7 @@ export function calculerMise(colonnes: number, lignes: number): Mise {
 }
 
 export const MAX_DOCKER = 4;
-export const MAITRE_MIN = 3;        // lignes réservées au maître (titre + 2 lignes) dans l'espace libre
+export const MAITRE_MIN = 2;        // lignes réservées au maître (titre + 1 ligne) dans l'espace libre
 
 export interface MiseLaterale {
     nbCartes: number;               // cartes visibles

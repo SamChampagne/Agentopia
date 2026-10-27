@@ -45,6 +45,7 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
         })),
         { type: 'section', texte: 'INTERFACE' },
         { type: 'reglage', label: 'Thème', valeur: nomPalette(), couleur: theme.accent, commande: '/theme', aide: 'changer' },
+        { type: 'reglage', label: 'Apparence du terminal', valeur: 'couleurs, police, transparence (profil Windows Terminal)', commande: '/apparence', aide: 'choisir' },
         { type: 'reglage', label: 'Fond du terminal', valeur: config.modeClair ? 'clair' : 'sombre', commande: `/mode ${config.modeClair ? 'sombre' : 'clair'}`, aide: 'basculer' },
         { type: 'reglage', label: 'Cartes de session', valeur: config.cartesDetaillees ? 'détaillées (3 lignes)' : 'compactes (2 lignes)', commande: `/cartes ${config.cartesDetaillees ? 'compactes' : 'detaillees'}`, aide: 'basculer' },
         { type: 'reglage', label: 'Nom en haut à gauche', valeur: (config.banniere || 'CLAUDETOPIA').toUpperCase(), commande: '/nom', aide: 'modifier' },

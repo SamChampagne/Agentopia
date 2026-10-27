@@ -98,8 +98,10 @@ export function remplacerAncienRaccourci(): void {
 export function creerRaccourci(): { ok: boolean; message: string } {
     const lanceur = path.join(RACINE_CLI, 'Claudetopia.bat');
     const wt = spawnSync('where', ['wt'], { encoding: 'utf-8' }).stdout?.split(/\r?\n/)[0]?.trim();
+    // Avec le profil Windows Terminal « Claudetopia » (/apparence) : ses couleurs, sa police, sa transparence
+    const profil = fs.existsSync(path.join(process.env.LOCALAPPDATA ?? '', 'Microsoft', 'Windows Terminal', 'Fragments', 'Claudetopia', 'claudetopia.json'));
     const [cible, args] = wt
-        ? [wt, `-d "${RACINE_CLI}" --title "Claudetopia" cmd /k "${lanceur}"`]
+        ? [wt, profil ? '-p "Claudetopia"' : `-d "${RACINE_CLI}" --title "Claudetopia" cmd /k "${lanceur}"`]
         : [path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe'), `/k "${lanceur}"`];
     const echapper = (s: string) => s.replace(/'/g, "''");
     const script = `$s = (New-Object -ComObject WScript.Shell).CreateShortcut('${echapper(cheminRaccourci())}');`

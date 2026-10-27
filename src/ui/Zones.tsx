@@ -9,7 +9,7 @@ import { Message } from '../agents.js';
 import { SessionVue } from '../agents.js';
 import { EtatGit } from '../projets.js';
 import { Bouton } from './mise.js';
-import { theme, couleurProjet, c, fond } from '../theme.js';
+import { theme, couleurProjet, c, fond, degrade } from '../theme.js';
 import { ligneMarkdown } from '../affichage.js';
 
 // Découpe des lignes (avec couleurs) à la largeur, puis garde la fenêtre visible selon le défilement
@@ -67,7 +67,7 @@ export function VueJournal({ lignes, largeur, hauteur, defilement }: { lignes: s
             <Box height={hauteur} width={largeur} flexDirection="column" justifyContent="center" alignItems="center">
                 <Text color={theme.accent}>✻</Text>
                 <Text color="gray">Clique une session à gauche pour voir ce qu'elle fait</Text>
-                <Text color="gray">Tape / pour les commandes · Entrée pour le menu · Alt+V pour coller une image</Text>
+                <Text color="gray">Ctrl+K pour tout chercher · / pour les commandes · Alt+M pour le maître</Text>
             </Box>
         );
     }
@@ -125,14 +125,17 @@ export function VueSession({ s, messages, boutons, largeur, hauteur, defilement,
                 )}
             </Box>
             <Box height={1} flexShrink={0} overflow="hidden">
-                {boutons.map((b) => (
-                    <Box key={b.action} marginRight={1} flexShrink={0}>
-                        <Text backgroundColor={appui === `session:${b.action}` ? theme.secondaire : b.action === 'rejoindre' || b.action === 'copie' ? theme.accent : b.action === 'fermer-session' ? '#7f1d1d' : fond.selection}
-                            color={appui === `session:${b.action}` ? 'black' : b.action === 'fermer-session' || b.action === 'rejoindre' || b.action === 'copie' ? 'white' : fond.texte} bold>
-                            {` ${b.label} `}
-                        </Text>
-                    </Box>
-                ))}
+                {boutons.map((b) => {
+                    const principal = b.action === 'rejoindre' || b.action === 'copie';
+                    const appuye = appui === `session:${b.action}`;
+                    return (
+                        <Box key={b.action} marginRight={1} flexShrink={0}>
+                            <Text inverse={appuye} bold={principal} color={principal ? theme.accent : b.action === 'fermer-session' ? '#f87171' : fond.eteint}>
+                                {` ${b.label} `}
+                            </Text>
+                        </Box>
+                    );
+                })}
             </Box>
             <Box height={1} flexShrink={0}><Text color={fond.bordure}>{'─'.repeat(largeur)}</Text></Box>
             <Box paddingLeft={1}>
@@ -148,18 +151,14 @@ export function BarreHaut({ boutons, largeur, droite, vueActive }: { boutons: Bo
         // Hauteur 1 stricte : si la barre passait sur 2 lignes, tout l'écran descendrait d'une ligne
         <Box width={largeur} height={1} overflow="hidden" justifyContent="space-between">
             <Box flexShrink={1} overflow="hidden">
-                <Text bold>
-                    <Text color={theme.accent}>{' ✻ '}</Text>
-                    <Text color={theme.primaire}>{`${titreBarre} `}</Text>
-                </Text>
+                <Text bold>{` ${degrade('✻ ' + titreBarre, theme.accent, theme.primaire)} `}</Text>
                 {boutons.map((b) => {
-                    // Appuyé : couleur vive un instant · vue ouverte : reste allumé
+                    // Sans fond : appuyé = inversé un instant · vue ouverte = couleur d'accent soulignée
                     const appuye = appui === `haut:${b.action}`;
                     const ouvert = vueActive === b.action;
                     return (
                         <Box key={b.action} marginRight={1} flexShrink={0}>
-                            <Text backgroundColor={appuye ? theme.accent : ouvert ? theme.primaire : fond.selection}
-                                color={appuye || ouvert ? 'black' : theme.secondaire} bold={appuye || ouvert}>{` ${b.label} `}</Text>
+                            <Text inverse={appuye} color={ouvert || appuye ? theme.accent : fond.eteint} bold={ouvert} underline={ouvert}>{` ${b.label} `}</Text>
                         </Box>
                     );
                 })}
@@ -175,4 +174,4 @@ export function definirTitre(t: string): void {
     titreBarre = (t || 'CLAUDETOPIA').toUpperCase();
 }
 // Largeur du titre : les boutons de la barre du haut commencent juste après
-export const largeurTitre = () => stringWidth(` ✻ ${titreBarre} `);
+export const largeurTitre = () => stringWidth(` ✻ ${titreBarre} `);   // même largeur avec le dégradé (couleurs seulement)

@@ -212,6 +212,30 @@ export function commandesPlus(config: Config): Commande[] {
             },
         },
         {
+            nom: 'menu-principal', groupe: 'Système', cache: true,
+            description: 'Le menu ☰ : ce qui n\'est pas dans la barre du haut',
+            executer: async () => {
+                const { choisir } = await import('./ui/bus.js');
+                const { executerLigne } = await import('./commandes.js');
+                const choix = await choisir('☰ Menu', [
+                    { label: '▸ Un projet : ses actions', valeur: '', description: 'session, onglet, commit, revue, worktree…' },
+                    { label: '⌘ Palette (Ctrl+K)', valeur: '/palette', description: 'chercher et lancer n\'importe quoi' },
+                    { label: '? Ce que les sessions attendent', valeur: '/questions' },
+                    { label: '▤ Moniteur', valeur: '/top', description: 'CPU, mémoire, sessions, serveurs' },
+                    { label: '≡ Journal', valeur: '/journal', description: 'ce qui a été fait, par jour' },
+                    { label: '◷ Récents', valeur: '/recents' },
+                    { label: '$ Coût du jour', valeur: '/cout' },
+                    { label: '⏰ Tâches planifiées', valeur: '/planifications' },
+                    { label: '◉ Logs surveillés', valeur: '/surveillances' },
+                    { label: '⚿ Connexions', valeur: '/connexions' },
+                    { label: '⇅ Exporter / importer la config', valeur: '/exporter', description: '/importer pour l\'autre sens' },
+                    { label: '✎ Apparence du terminal', valeur: '/apparence' },
+                    { label: '? Aide et raccourcis', valeur: '/aide' },
+                ], false);
+                await executerLigne(choix);
+            },
+        },
+        {
             nom: 'questions', alias: ['attente', 'todo'], groupe: 'Claude',
             description: 'Ce que les sessions attendent de toi : leurs questions, la réponse proposée, répondre en un clic',
             executer: () => vue(import('./ui/VueQuestions.js'), 'VueQuestions'),

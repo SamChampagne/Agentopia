@@ -22,6 +22,7 @@ import { commandesPlus } from './plus.js';
 import { commandesPrCi } from './prci.js';
 import { commandesSurveillance } from './surveillanceLogs.js';
 import { commandesExport } from './exportImport.js';
+import { commandesApparence } from './apparence.js';
 import { ajusterProjets } from './synchro.js';
 import { cloner as clonerDepot } from './git.js';
 import { afficherServeurs, testerServeurs, ouvrirSsh, serveursDuProjet } from './sshCommandes.js';
@@ -811,6 +812,7 @@ export const COMMANDES: Commande[] = [
     ...commandesPrCi(),
     ...commandesSurveillance(),
     ...commandesExport(config),
+    ...commandesApparence(config),
     { nom: 'aide', alias: ['help', '?'], groupe: 'Config', description: 'Cette aide', executer: afficherAide },
     { nom: 'clear', alias: ['cls'], groupe: 'Config', description: 'Effacer l\'écran', executer: () => { /* géré par l'interface */ } },
     { nom: 'exit', alias: ['quit', 'q'], groupe: 'Config', description: 'Quitter', executer: () => { /* géré par l'interface */ } },

@@ -116,6 +116,8 @@ Si Claude Code n'est pas installé ou pas connecté, la zone du maître le dit :
 | **`/surveiller-logs`** | notification à chaque erreur dans les logs d'un conteneur ; analyse par Claude |
 | **`/exporter`, `/importer`** | emporter sa configuration sur un autre poste (sans aucun secret) |
 | **`/mode clair`, `/cartes detaillees`** | terminal à fond blanc, cartes sur 3 lignes |
+| **`/apparence`** | profil Windows Terminal « Claudetopia » : Catppuccin, Tokyo Night, Dracula, Nord ou Gruvbox, police Cascadia Code, transparence acrylique, effet rétro (`/apparence retirer` l'enlève) |
+| **`/theme`** | couleurs de l'interface, dont les mêmes palettes |
 | **`/notifications-cliquables`** | un clic sur une notification ouvre la session (lien enregistré pour ton compte) |
 
 Au lancement, Claudetopia rouvre la conversation ou la vue où tu en étais.
