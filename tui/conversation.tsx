@@ -57,7 +57,7 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
             </box>
             {position === 'haut' && <box paddingLeft={1}><Boutons boutons={actions} agir={agir} /></box>}
             <box flexGrow={1} flexDirection={position === 'droite' ? 'row-reverse' : 'row'}>
-                {enColonne && <box width={COL} flexShrink={0} flexDirection="column" paddingLeft={1} paddingTop={1}>
+                {enColonne && <box width={COL} flexShrink={0} flexDirection="column" paddingLeft={1} paddingRight={2} paddingTop={1}>
                     {actions.map((a: any) => {
                         const sur = survol === a.action;
                         const fg = a.action === 'fermer-session' ? '#f87171' : sur ? theme.accent : a.action === 'fermer' ? fond.eteint : fond.texte;

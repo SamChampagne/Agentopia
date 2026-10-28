@@ -3,8 +3,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { useEffect, useRef, useState } from 'react';
-import { createCliRenderer } from '@opentui/core';
-import { createRoot, useKeyboard, useTerminalDimensions } from '@opentui/react';
+import { createCliRenderer, TextRenderable } from '@opentui/core';
+import { createRoot, extend, useKeyboard, useTerminalDimensions } from '@opentui/react';
 import { Ansi } from './ansi.tsx';
 import { GRAS } from './style.ts';
 import { Colonne } from './colonne.tsx';
@@ -34,6 +34,15 @@ import { liens } from '../dist/notifications.js';
 import { imageDuPressePapiers, joindreImages, fichiersDeposes, EST_IMAGE } from '../dist/ui/pressePapiers.js';
 import { chargerConfig, chargerHistorique, ajouterHistorique, sauverConfig, premierLancement } from '../dist/config.js';
 import { theme, fond, couleurProjet, degrade, c } from '../dist/theme.js';
+
+// Texte non sélectionnable par défaut : un clic un peu glissé surlignait une partie du libellé cliqué.
+// Ce qu'on veut pouvoir copier (conversation, journal, détail) le demande avec « selectable »
+class Texte extends TextRenderable {
+    constructor(ctx: any, options: any) {
+        super(ctx, { ...options, selectable: options?.selectable ?? false });
+    }
+}
+extend({ text: Texte } as any);
 
 const BOUTONS = [
     { label: '◉ Live', action: '/global' }, { label: '▦ Projets', action: '/projets' }, { label: '◆ Équipes', action: '/equipe' },
@@ -118,6 +127,18 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
     // La vue affichée (la commande qui l'a ouverte) : gardée pour la rouvrir au prochain lancement
     const [vueActive, setVueActive] = useState<string>();
     const commandeCourante = useRef<string>();
+    // Le temps qu'une commande lancée d'un clic ou d'un menu ouvre sa vue, on garde l'écran d'avant :
+    // sinon le cockpit apparaît une fraction de seconde entre les deux (500 ms au plus)
+    const [fige, setFige] = useState(false);
+    const zoneAvant = useRef<any>();
+    // Un clic passe d'une vue à l'autre : la fin de l'ancienne commande ne doit pas dégeler l'écran avant que la nouvelle démarre
+    const changement = useRef(false);
+    const minuterieFige = useRef<ReturnType<typeof setTimeout>>();
+    const figer = (oui: boolean) => {
+        clearTimeout(minuterieFige.current);
+        setFige(oui);
+        if (oui) minuterieFige.current = setTimeout(() => setFige(false), 500);
+    };
     // Ctrl+F : chercher dans la conversation ouverte (Entrée = occurrence suivante, en remontant le temps)
     const [recherche, setRecherche] = useState(false);
     const [occurrence, setOccurrence] = useState(0);
@@ -161,6 +182,7 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
             return setJournalOuvert(true);
         }
         const avant = lignesJournal().length;
+        if (silencieux) figer(true);
         if (texte && !cmd?.cache && !silencieux) {
             historique.unshift(texte);
             ajouterHistorique(texte);
@@ -184,6 +206,7 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
             rafraichirProjets();
             rafraichirAgents();
             setOccupe(false);
+            if (!changement.current) figer(false);
             // Un résultat trop long pour « Dernières sorties » s'ouvre en entier (Échap ramène au cockpit)
             if (lignesJournal().length - avant > 8) setJournalOuvert(true);
             if (puisQuitter) setTimeout(quitter, 300);
@@ -206,7 +229,11 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
     }
     // Un clic (barre du haut, colonne) passe d'une vue à l'autre ; si une commande tourne encore, on le dit
     async function ouvrirDepuisClic(cmd: string) {
-        if (!(await fermerOuvert())) return void bus.emit('notice', `Une commande est encore en cours (${commandeCourante.current ?? '…'}) : attends qu'elle finisse`);
+        figer(true);
+        changement.current = true;
+        const ferme = await fermerOuvert();
+        changement.current = false;
+        if (!ferme) return void (figer(false), bus.emit('notice', `Une commande est encore en cours (${commandeCourante.current ?? '…'}) : attends qu'elle finisse`));
         void lancerRef.current(cmd, true);
     }
     // Choisir une carte referme la vue ouverte : sinon la conversation resterait cachée derrière
@@ -385,6 +412,9 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
     useEffect(() => {
         let minuterie: ReturnType<typeof setTimeout> | undefined;
         const surDemande = (x?: any) => {
+            // Un menu ou un choix se ferme mais sa commande continue (elle ouvre souvent une vue ensuite) : on fige
+            if (x) figer(false);
+            else if (occupeRef.current) figer(true);
             if (x?.type === 'vue') setVueActive(commandeCourante.current);
             else if (!x) setVueActive(undefined);
             setDemande(x);
@@ -577,6 +607,10 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
             </box>
         );
     }
+
+    // Une commande lancée d'un clic n'a pas encore ouvert sa vue : l'écran d'avant reste
+    if (fige && !demande && zoneAvant.current) zone = zoneAvant.current;
+    else zoneAvant.current = zone;
 
     return (
         <box width={width} height={height} flexDirection="column" backgroundColor="#0c0c0c">

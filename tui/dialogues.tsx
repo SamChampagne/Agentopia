@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useKeyboard, usePaste } from '@opentui/react';
 import { GRAS } from './style.ts';
+import { morceauxAnsi } from './ansi.tsx';
 import { theme, fond } from '../dist/theme.js';
 
 // Ce que les commandes demandent (bus.ts) : un choix dans une liste, une saisie, ou une vue plein écran.
@@ -8,13 +9,15 @@ import { theme, fond } from '../dist/theme.js';
 
 const imprimable = (k: any) => !k.ctrl && !k.meta && k.sequence?.length === 1 && k.sequence >= ' ';
 
+const sansCouleur = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
+
 export function Choix({ d, hauteur }: { d: any; hauteur: number }) {
     const [filtre, setFiltre] = useState('');
     const [index, setIndex] = useState(0);
     const [coches, setCoches] = useState<Set<number>>(() => new Set(d.choix.flatMap((c: any, i: number) => (c.coche ? [i] : []))));
     const [survol, setSurvol] = useState<number>();
     const visibles: { c: any; i: number }[] = d.choix.map((c: any, i: number) => ({ c, i }))
-        .filter(({ c }: any) => !filtre || `${c.label} ${c.description ?? ''}`.toLowerCase().includes(filtre.toLowerCase()));
+        .filter(({ c }: any) => !filtre || sansCouleur(`${c.label} ${c.description ?? ''}`).toLowerCase().includes(filtre.toLowerCase()));
     const courant = Math.min(index, Math.max(0, visibles.length - 1));
     const basculer = (i: number) => setCoches((s) => {
         const n = new Set(s);
@@ -54,7 +57,10 @@ export function Choix({ d, hauteur }: { d: any; hauteur: number }) {
                         onMouseDown={() => (d.multiple ? basculer(i) : valider(pos))}>
                         <text fg={actif ? theme.accent : 'gray'}>{pos === courant ? '❯ ' : '  '}</text>
                         {d.multiple && <text fg={coches.has(i) ? '#4ade80' : fond.discret}>{coches.has(i) ? '◉ ' : '○ '}</text>}
-                        <text fg={actif ? theme.accent : fond.texte} truncate>{c.label}</text>
+                        <text fg={actif ? theme.accent : fond.texte} truncate>
+                            {/* Un libellé peut être coloré par chalk (la pastille d'un projet) */}
+                            {morceauxAnsi(c.label).map((m, j) => <span key={j} fg={m.fg} bg={m.bg} attributes={m.attributs}>{m.t}</span>)}
+                        </text>
                         {c.description && <text fg={fond.discret} truncate flexGrow={1}>{`  ${c.description}`}</text>}
                     </box>
                 );
