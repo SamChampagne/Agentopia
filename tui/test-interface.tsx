@@ -97,6 +97,45 @@ if (avecMessages >= 0) {
     verifier('Échap referme la conversation', image.includes('SESSIONS CLAUDE'), image);
 }
 
+// « Quelle touche ? » : Espace sur une ligne vide ; on ne descend que dans un groupe (g = Git), jamais sur une action
+await mockInput.typeText(' ');
+image = await ecran();
+verifier('Espace : carte « Quelle touche ? »', image.includes('␣ Actions') && image.includes('Git ›'), image);
+await mockInput.typeText('g');
+image = await ecran();
+verifier('g : groupe Git', image.includes('␣ g · Git') && image.includes('Vue Git'), image);
+mockInput.pressBackspace();
+image = await ecran();
+verifier('⌫ remonte', image.includes('␣ Actions'), image);
+image = await echap();
+// Barre vide = son texte d'aide est affiché (l'Espace qui a ouvert la carte n'y est pas resté)
+verifier('Échap ferme la carte, la barre reste vide', !image.includes('␣ Actions') && image.includes('❯ Tape / pour les commandes'), image);
+
+// Clic droit : menu de la carte, puis menu général du cockpit (refermés par Échap)
+await mockMouse.click(4, 3, 2);
+image = await ecran();
+verifier('clic droit sur une carte : son menu', image.includes('Ouvrir la conversation') && image.includes('Fermer la session'), image);
+image = await echap();
+await mockMouse.click(120, 30, 2);
+image = await ecran();
+verifier('clic droit sur le cockpit : menu général', image.includes('Parler au maître') && image.includes('Nouvelle session Claude'), image);
+image = await echap();
+verifier('Échap referme le menu sans rien lancer', image.includes('SESSIONS CLAUDE'), image);
+
+// Ctrl+K : la palette (recherche), refermée par Échap
+mockInput.pressKey('k', { ctrl: true });
+await w(800);
+image = await ecran();
+verifier('Ctrl+K : palette avec recherche', image.includes('tape pour filtrer'), image);
+image = await echap();
+
+// Alt+M : mode maître (rien n'est tapé ni envoyé), Échap pour revenir
+mockInput.pressKey('m', { meta: true });
+image = await ecran();
+verifier('Alt+M : mode maître', image.includes('au maître') && image.includes('◈ MAÎTRE'), image);
+image = await echap();
+verifier('Échap quitte le mode maître', !image.includes('au maître :'), image);
+
 await mockMouse.click(12, 2);
 image = await ecran();
 verifier('onglet Projets', !image.includes('+ Session') && /⎇ /.test(image), image);
