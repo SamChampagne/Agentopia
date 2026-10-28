@@ -33,7 +33,7 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
     return (
         <box flexGrow={1} flexDirection="column" paddingLeft={1}>
             <Titre texte="CONFIGURATION" droite="clic ou Entrée = modifier · Échap fermer" />
-            <scrollbox flexGrow={1} scrollY>
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {lignes.map((l: any, i: number) => {
                     if (l.type === 'section') return <text key={i} fg={theme.primaire} attributes={GRAS}>{` ${l.texte}`}</text>;
                     const actif = i === index || i === survol;

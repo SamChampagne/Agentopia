@@ -175,8 +175,11 @@ image = await echap();
 verifier('Échap revient au cockpit', image.includes('SESSIONS CLAUDE'), image);
 
 // La session qui a le plus de messages : on vérifie aussi que le texte s'affiche
-const agents = lireDonnees().agents;
-const tailles = agents.map((a: any) => lireTranscript(a.fichier).length);
+// Dans l'ordre des cartes de la colonne (équipes d'abord, sessions en pause à la fin)
+const { cartesLaterales } = await import('../dist/ui/Laterale.js');
+const cartes = cartesLaterales(lireDonnees());
+const agents = cartes.map((x: any) => x.s ?? { fichier: '' });
+const tailles = agents.map((a: any) => (a.fichier ? lireTranscript(a.fichier).length : -1));
 const avecMessages = tailles.indexOf(Math.max(...tailles, 0));
 if (avecMessages >= 0) {
     await mockMouse.click(4, 3 + 3 * avecMessages);

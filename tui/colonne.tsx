@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Ansi } from './ansi.tsx';
 import { GRAS, SOULIGNE, ANIM, une, couper } from './style.ts';
 import { lignesEspace } from '../dist/ui/espaces.js';
-import { lignesDocker } from '../dist/ui/Laterale.js';
+import { lignesDocker, cartesLaterales, enPause, etatEquipe } from '../dist/ui/Laterale.js';
+import { avancement } from '../dist/equipe.js';
+import { ilYa } from '../dist/ui/Panneau.js';
 import { theme, fond, couleurProjet } from '../dist/theme.js';
 import { menuSession, menuServeur, menuDocker } from './menus.ts';
 
@@ -16,8 +18,11 @@ const COULEURS: Record<string, string> = { travaille: '#4ade80', attend: '#facc1
 const LIBELLES: Record<string, string> = { travaille: 'travaille', attend: 't’attend', bloquee: 'bloquée', terminee: 'terminée' };
 
 function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu }: any) {
-    const couleur = COULEURS[s.statut] ?? fond.discret;
-    const icone = s.statut === 'travaille' ? ANIM[tic % ANIM.length] : s.statut === 'bloquee' ? '!' : s.statut === 'terminee' ? '✓' : '○';
+    // En pause : plus de 12 h sans activité (grisée, rangée en bas de la liste)
+    const pause = enPause(s, a);
+    const couleur = pause ? fond.discret : COULEURS[s.statut] ?? fond.discret;
+    const icone = pause ? '◌' : s.statut === 'travaille' ? ANIM[tic % ANIM.length] : s.statut === 'bloquee' ? '!' : s.statut === 'terminee' ? '✓' : '○';
+    const etat = pause ? `en pause · ${ilYa(a?.date ?? s.debut)}` : LIBELLES[s.statut] ?? s.statut;
     const action = s.question ? `? ${une(s.question)}` : a?.outil ? `▸ ${une(a.outil)}` : a?.dernierTexte ? une(a.dernierTexte) : s.titre || 'pas encore d’activité';
     const bg = active ? fond.panneauActif : survole ? fond.selection : fond.panneau;
     const barre = active ? theme.accent : couleur;
@@ -26,11 +31,34 @@ function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu }:
             <box height={1} backgroundColor={bg} flexDirection="row">
                 <text fg={barre}>▌ </text>
                 <text flexGrow={1} truncate><span fg={couleurProjet(s.nom)}>● </span><span fg={fond.texte} attributes={GRAS}>{s.nom}</span></text>
-                <text fg={couleur}>{`${icone} ${LIBELLES[s.statut] ?? s.statut} `}</text>
+                <text fg={couleur}>{`${icone} ${etat} `}</text>
             </box>
             <box height={1} backgroundColor={bg} flexDirection="row">
                 <text fg={barre}>▌ </text>
                 <text fg="#94a3b8" truncate>{'  ' + couper(action, largeur - 5)}</text>
+            </box>
+        </box>
+    );
+}
+
+// Une équipe d'agents : son nom, son état et une barre d'avancement ; clic = ouvrir l'équipe
+function CarteEquipe({ e, largeur, tic, ouvrir }: any) {
+    const a = avancement(e);
+    const et = etatEquipe(e, tic);
+    const legende = a.total ? ` ${a.faites}/${a.total}` : '';
+    const barre = Math.max(4, largeur - 6 - legende.length);
+    const plein = a.total ? Math.round((a.faites / a.total) * barre) : 0;
+    const couleurBarre = e.etat === 'en cours' || e.etat === 'integration' ? VIOLET : '#6d28d9';
+    return (
+        <box height={3} flexShrink={0} onMouseDown={ouvrir}>
+            <box height={1} backgroundColor={fond.panneau} flexDirection="row">
+                <text fg={couleurBarre}>▌ </text>
+                <text flexGrow={1} truncate><span fg="#c084fc">◆ </span><span fg={fond.texte} attributes={GRAS}>{e.nomProjet}</span></text>
+                <text fg={et.couleur}>{`${et.texte} `}</text>
+            </box>
+            <box height={1} backgroundColor={fond.panneau} flexDirection="row">
+                <text fg={couleurBarre}>▌ </text>
+                <text>{'  '}<span fg={VIOLET}>{'━'.repeat(plein)}</span><span fg={fond.discret}>{'─'.repeat(barre - plein)}</span><span fg="gray">{legende}</span></text>
             </box>
         </box>
     );
@@ -90,7 +118,7 @@ export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace
                 ))}
             </box>
             {espace === 'projets' ? (
-                <scrollbox flexGrow={1} scrollY>
+                <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                     {lignesEspace('projets', d, projets).map((l: any) => (
                         <box key={l.cle} height={1} flexDirection="row" backgroundColor={detail && l.detail?.cle === detail.cle ? fond.panneauActif : survol === l.cle ? fond.selection : undefined}
                             {...survoler(l.cle)} onMouseDown={() => l.detail && ouvrirDetail(l.detail)}>
@@ -101,13 +129,14 @@ export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace
                 </scrollbox>
             ) : (
                 <box flexGrow={1} flexDirection="column">
-                    <scrollbox flexGrow={1} scrollY>
-                        {d.agents.map((s: any) => (
-                            <Carte key={s.cle} s={s} a={d.activites.get(s.sessionId)} active={s.cle === selection} survole={survol === s.cle}
-                                largeur={largeur - 1} tic={tic} choisir={() => choisir(s.cle === selection ? undefined : s.cle)}
-                                survoler={(v: boolean) => setSurvol(v ? s.cle : undefined)}
-                                menu={() => ouvrirMenu(menuSession(s, () => choisir(s.cle)))} />
-                        ))}
+                    <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
+                        {/* Mêmes cartes que l'interface Ink : équipes, puis sessions (membres d'équipe exclus, en pause à la fin) */}
+                        {cartesLaterales(d).map((x: any) => (x.type === 'equipe'
+                            ? <CarteEquipe key={`equipe-${x.e.id}`} e={x.e} largeur={largeur - 1} tic={tic} ouvrir={() => lancer(`/equipe ${x.e.id}`)} />
+                            : <Carte key={x.s.cle} s={x.s} a={d.activites.get(x.s.sessionId)} active={x.s.cle === selection} survole={survol === x.s.cle}
+                                largeur={largeur - 1} tic={tic} choisir={() => choisir(x.s.cle === selection ? undefined : x.s.cle)}
+                                survoler={(v: boolean) => setSurvol(v ? x.s.cle : undefined)}
+                                menu={() => ouvrirMenu(menuSession(x.s, () => choisir(x.s.cle)))} />))}
                     </scrollbox>
                     <box height={1} flexDirection="row">
                         <text> </text>

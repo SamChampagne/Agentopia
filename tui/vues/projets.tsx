@@ -49,7 +49,7 @@ export function VueProjets({ fermer, filtreInitial = '' }: { fermer: () => void;
         <box flexGrow={1} flexDirection="column" paddingLeft={1}>
             <Titre texte="PROJETS" droite={filtre ? `filtre : « ${filtre} » · ${projets.length} projet(s) · Échap efface` : `${projets.length} projets · tape pour filtrer · clic = actions`} />
             <text fg="gray">{'   ' + colonne('Projet', 28) + colonne('Branche', 28) + colonne('État git', 26) + colonne('Claude', 14) + 'Hébergé sur'}</text>
-            <scrollbox flexGrow={1} scrollY>
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {[...parRacine].map(([racine, ps]) => (
                     <box key={racine} flexDirection="column" flexShrink={0}>
                         <text><span fg={theme.primaire} attributes={GRAS}>{` ${racine === '(extra)' ? 'Autres projets' : racine}`}</span><span fg="gray">{`  ${ps.length}`}</span></text>

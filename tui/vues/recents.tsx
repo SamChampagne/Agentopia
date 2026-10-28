@@ -46,7 +46,7 @@ export function VueRecents({ fermer }: { fermer: () => void }) {
         <box flexGrow={1} flexDirection="column" paddingLeft={1}>
             <Titre texte="PROJETS RÉCENTS" droite="clic = actions du projet · Échap fermer" />
             <text fg="gray">{'  ' + colonne('Projet', 28) + colonne('Activité', 15) + colonne('Branche', 32) + 'État'}</text>
-            <scrollbox flexGrow={1} scrollY>
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {lignes.map((l: any, i: number) => {
                     const actif = i === index;
                     const depot = depotDe(l.projet.chemin);

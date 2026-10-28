@@ -71,7 +71,7 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
                     <text> </text>
                     {aide && <text fg={fond.discret} wrapMode="word">{aide}</text>}
                 </box>}
-                <scrollbox ref={defilement} flexGrow={1} scrollY stickyScroll stickyStart="bottom" paddingLeft={enColonne ? 0 : 1} paddingRight={1}>
+                <scrollbox verticalScrollbarOptions={{ visible: false }} ref={defilement} flexGrow={1} scrollY stickyScroll stickyStart="bottom" paddingLeft={enColonne ? 0 : 1} paddingRight={1}>
                     {lignes.map((l, i) => (
                         <box key={i} id={`ligne-${i}`} flexShrink={0}
                             backgroundColor={i === courante ? fond.panneauActif : terme && trouvees.includes(i) ? fond.selection : undefined}>

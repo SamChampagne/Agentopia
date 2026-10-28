@@ -9,7 +9,7 @@ export function Journal() {
     return (
         <box flexGrow={1} flexDirection="column" paddingLeft={1}>
             <text><span fg={theme.accent} attributes={GRAS}>▤ JOURNAL </span><span fg={fond.discret}>Échap pour revenir au cockpit · molette pour défiler · /clear pour vider</span></text>
-            <scrollbox flexGrow={1} scrollY stickyScroll stickyStart="bottom">
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY stickyScroll stickyStart="bottom">
                 {lignes.slice(-2000).map((l: string, i: number) => <Ansi key={i} texte={l} selectionnable />)}
             </scrollbox>
         </box>

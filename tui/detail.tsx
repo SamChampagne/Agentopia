@@ -28,7 +28,7 @@ export function Detail({ detail, d, projets, fermer, lancer }: { detail: any; d:
             <text truncate>{morceaux(contenu.titre)}</text>
             <Boutons boutons={contenu.boutons} agir={(a) => (a === 'retour' ? fermer() : lancer(a))} />
             <box height={1} border={['bottom']} borderColor={fond.bordure} />
-            <scrollbox flexGrow={1} scrollY>
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {contenu.lignes.map((l: any[], i: number) => <text key={i} truncate selectable>{morceaux(l)}</text>)}
             </scrollbox>
         </box>

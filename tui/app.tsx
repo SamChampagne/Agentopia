@@ -12,6 +12,7 @@ import { Conversation } from './conversation.tsx';
 import { Choix, Saisie, VueNonMigree } from './dialogues.tsx';
 import { VUES } from './vues/index.ts';
 import { Detail } from './detail.tsx';
+import { activerEntreeVT, restaurerConsole } from './console.ts';
 import { disposition } from '../dist/ui/disposition.js';
 import { Barre } from './barre.tsx';
 import { Journal } from './journal.tsx';
@@ -328,7 +329,14 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
     // Au lancement : la commande demandée (puis on quitte), ou l'assistant la première fois ;
     // une fois par lancement, on signale les connexions à régler (sans insister)
     useEffect(() => {
-        if (commandeInitiale) void lancerRef.current(commandeInitiale, false, true);
+        // Au lancement, seulement une vraie commande : un texte inconnu (ex. un argument transformé en chemin par
+        // Git Bash, « /status » → « C:/Program Files/Git/status ») partirait sinon à Claude comme une nouvelle session
+        const inconnue = commandeInitiale && !trouverCommande(commandeInitiale.trim().split(' ')[0]);
+        if (inconnue) {
+            console.log(c.erreur(`✗ « ${commandeInitiale} » n'est pas une commande Claudetopia : rien n'est lancé`));
+            setTimeout(quitter, 1500);
+        }
+        else if (commandeInitiale) void lancerRef.current(commandeInitiale, false, true);
         else if (auDemarrage) void lancerRef.current(auDemarrage);
         const t = setTimeout(async () => {
             const { etatConnexions } = await import('../dist/connexions.js');
@@ -548,7 +556,7 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
 
     return (
         <box width={width} height={height} flexDirection="column" backgroundColor="#0c0c0c">
-            <box height={1} flexDirection="row" onMouseDown={(e: any) => droit(e) && ouvrirMenu({ titre: 'Claudetopia', articles: general(parler) })}>
+            <box height={1} flexShrink={0} flexDirection="row" onMouseDown={(e: any) => droit(e) && ouvrirMenu({ titre: 'Claudetopia', articles: general(parler) })}>
                 <Ansi texte={degrade(' ✻ ' + (chargerConfig().banniere || 'CLAUDETOPIA').toUpperCase() + ' ')} />
                 {BOUTONS.map((b) => (
                     <text key={b.action} onMouseOver={() => setSurvolHaut(b.action)} onMouseOut={() => setSurvolHaut(undefined)}
@@ -559,8 +567,8 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
                     </text>
                 ))}
             </box>
-            <Ansi texte={degrade('─'.repeat(width))} />
-            <box flexGrow={1} flexDirection="row">
+            <box height={1} flexShrink={0}><Ansi texte={degrade('─'.repeat(width))} /></box>
+            <box flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden" flexDirection="row">
                 {disp.laterale === 'droite' && zone}
                 {colonneVisible && <Colonne d={d} largeur={lateral} cote={disp.laterale}
                     bord={{
@@ -605,15 +613,21 @@ if (import.meta.main) {
     const renderer = await createCliRenderer({ exitOnCtrlC: false, useMouse: true, enableMouseMovement: true, consoleMode: 'disabled', autoFocus: false });
     // Tout ce que les commandes écrivent va au journal (affiché dans « Dernières sorties » et /sorties)
     capturerConsole();
+    // Windows : clics et molette (entrée VT de la console), noté dans le journal
+    const etatConsole = activerEntreeVT();
+    if (etatConsole) console.log(c.discret(etatConsole));
+    process.on('exit', restaurerConsole);
     // claude attach, ssh, connexion : on rend le terminal au programme, puis on le reprend
     definirPassage(async () => {
         await renderer.suspend();
         process.stdout.write('\x1b[2J\x1b[H');
     }, async () => {
         await renderer.resume();
+        activerEntreeVT();
     });
     const quitter = () => {
         renderer.destroy();
+        restaurerConsole();
         process.exit(0);
     };
     createRoot(renderer).render(<App quitter={quitter} commandeInitiale={commandeInitiale} auDemarrage={auDemarrage} />);

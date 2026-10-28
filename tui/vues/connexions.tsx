@@ -53,7 +53,7 @@ export function VueConnexions({ fermer }: { fermer: () => void }) {
             <Titre texte="⚿ CONNEXIONS" droite={!elements ? 'vérification…' : `${prets} prêt${prets > 1 ? 's' : ''}${aFaire ? ` · ${aFaire} à régler` : ' · tout est connecté'}`} />
             <text fg="gray"> clic ou Entrée = régler · tout est chiffré ou stocké sur ce poste seulement · Échap fermer</text>
             {!elements && <text fg="gray">  Vérification de Claude, Git, des comptes en ligne, des serveurs et des outils…</text>}
-            <scrollbox flexGrow={1} scrollY>
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {lignes.map((l, i) => {
                     if (l.type === 'groupe') return <text key={i} fg={theme.primaire} attributes={GRAS}>{` ${l.texte}`}</text>;
                     const actif = i === courant;

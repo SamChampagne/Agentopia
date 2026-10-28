@@ -72,7 +72,7 @@ export function VueDocker({ fermer }: { fermer: () => void }) {
             <Titre texte="DOCKER" droite={d.docker.length ? `${enMarche} en marche · ${total} conteneurs` : 'lecture…'} />
             <Boutons boutons={BOUTONS} actifs={actifs} agir={(a) => void agir(a)} />
             <text> </text>
-            <scrollbox flexGrow={1} scrollY>
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {lignes.map((l, i) => {
                     if (l.type === 'hote') {
                         return (

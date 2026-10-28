@@ -139,7 +139,7 @@ export function VueGit({ fermer }: { fermer: () => void }) {
             <Titre texte="GIT" droite={resume} />
             <Boutons boutons={BOUTONS} actifs={actifs} agir={(a) => void agir(a)} />
             <text> </text>
-            <scrollbox flexGrow={1} scrollY>
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {lignes.map((l, i) => {
                     if (l.type === 'titre') return <text key={`t${i}`} fg={theme.primaire} attributes={GRAS}>{`  ${l.texte}`}</text>;
                     const c = cle(l);

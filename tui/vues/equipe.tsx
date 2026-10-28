@@ -38,7 +38,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
             <Titre texte="ÉQUIPES D'AGENTS" droite="clic = ouvrir · Échap fermer" />
             <text fg="gray" wrapMode="word">Un chef d'équipe découpe ton objectif en tâches, puis plusieurs agents Claude les font en parallèle, chacun sur sa branche. À la fin, un intégrateur fusionne tout.</text>
             <text> </text>
-            <scrollbox flexGrow={1} scrollY>
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {lignes.map((e: any, i) => {
                     const actif = i === index;
                     const etat = e ? etatEquipe(e, tic()) : undefined;
@@ -152,7 +152,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: any; fermer: () => void; retour
             <Boutons boutons={boutonsEquipe(e, courante)} agir={(a) => void agir(a)} />
             <text truncate fg={message.startsWith('!') || e.etat === 'erreur' ? '#facc15' : 'gray'}>{info || ' '}</text>
             <text fg="gray">{'  ' + colonne('Tâche', 50) + colonne('Rôle', 17) + 'État'}</text>
-            <scrollbox flexGrow={1} scrollY>
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {e.etat === 'planification' && <text fg="#c084fc">{`  ${ANIM[t0 % ANIM.length]} Le chef d'équipe prépare le plan…`}</text>}
                 {taches.map((t: any) => {
                     const actif = t.id === courante?.id;

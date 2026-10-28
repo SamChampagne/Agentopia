@@ -162,7 +162,7 @@ export function VueSftp({ fermer, cible }: { fermer: () => void; cible: any }) {
                 </box>
             ) : <text truncate fg={erreur ? '#f87171' : message.startsWith('✓') ? '#4ade80' : 'gray'}>{message}</text>}
             <text fg="gray">{'  ' + colonne('Nom', 60) + colonne('Taille', 12) + 'Modifié'}</text>
-            <scrollbox flexGrow={1} scrollY>
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {entrees === undefined && !erreur && <text fg="gray">  connexion…</text>}
                 {liste.map((e, i) => {
                     const actif = i === index;

@@ -113,7 +113,7 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
             <box height={1} border={['bottom']} borderColor={fond.bordure} />
             <box flexGrow={1} flexDirection="row">
                 {colonnes.map((lignes, c) => (
-                    <scrollbox key={c} flexGrow={1} flexBasis={0} scrollY marginRight={c < colonnes.length - 1 ? 2 : 0}>
+                    <scrollbox verticalScrollbarOptions={{ visible: false }} key={c} flexGrow={1} flexBasis={0} scrollY marginRight={c < colonnes.length - 1 ? 2 : 0}>
                         {lignes.map((l, i) => {
                             const cle = `${c}:${i}`;
                             const cliquable = !!(l.session || l.detail);

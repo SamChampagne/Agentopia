@@ -61,7 +61,7 @@ export function VueQuestions({ fermer }: { fermer: () => void }) {
             ) : <text fg="gray">Entrée = envoyer la suggestion (ou répondre) · r répondre · Échap fermer</text>}
             <text> </text>
             {!liste.length && <text fg="#4ade80">  ✓ Aucune session n'attend de réponse</text>}
-            <scrollbox flexGrow={1} scrollY>
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {liste.map((s: any) => {
                     const actif = s === courante;
                     const bord = <span fg={actif ? theme.accent : fond.bordure}>{actif ? '▌ ' : '  '}</span>;

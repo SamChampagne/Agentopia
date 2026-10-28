@@ -336,7 +336,14 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             const aRegler = (await etatConnexions()).filter((x) => x.etat === 'manque' || x.etat === 'avert');
             if (aRegler.length) bus.emit('notice', `⚿ ${aRegler.length} connexion${aRegler.length > 1 ? 's' : ''} à régler (${aRegler.slice(0, 3).map((x) => x.nom).join(', ')}) · /connexions`);
         }, 20_000);
-        if (commandeInitiale) lancer(commandeInitiale, true);
+        // Au lancement, seulement une vraie commande : un texte inconnu (ex. un argument transformé en chemin par
+        // Git Bash, « /status » → « C:/Program Files/Git/status ») partirait sinon à Claude comme une nouvelle session
+        const inconnue = commandeInitiale && !trouverCommande(commandeInitiale.trim().split(' ')[0]);
+        if (inconnue) {
+            console.log(c.erreur(`✗ « ${commandeInitiale} » n'est pas une commande Claudetopia : rien n'est lancé`));
+            setTimeout(quitter, 1500);
+        }
+        else if (commandeInitiale) lancer(commandeInitiale, true);
         else if (auDemarrage) lancer(auDemarrage);
         return () => {
             stdout.off('resize', surResize);

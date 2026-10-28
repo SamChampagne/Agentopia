@@ -90,7 +90,7 @@ export function VueServeurs({ fermer, initial }: { fermer: () => void; initial?:
             <Titre texte="SERVEURS SSH" droite={`${liste.length} serveur${liste.length > 1 ? 's' : ''}`} />
             <Boutons boutons={BOUTONS} agir={(a) => void agir(a)} />
             <text> </text>
-            <scrollbox flexGrow={1} scrollY>
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {!liste.length && <text fg="gray">Aucun serveur dans ~/.ssh/config ni known_hosts</text>}
                 {liste.map((s) => {
                     const actif = s === courant;

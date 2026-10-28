@@ -89,17 +89,19 @@ function lireFichiersAgents(): SessionVue[] | undefined {
     const [sessions, jobs] = DOSSIERS_AGENTS;
     if (!fs.existsSync(sessions) || !fs.existsSync(jobs)) return undefined;
     const brut: BrutAgent[] = [];
-    for (const f of fs.readdirSync(sessions)) {
-        if (!/^\d+\.json$/.test(f)) continue;
-        const j = lireJson(path.join(sessions, f));
-        if (!j?.sessionId || !j.cwd || !j.pid || j.kind === 'background' || !vivant(j.pid)) continue;
-        brut.push({ pid: j.pid, cwd: j.cwd, kind: 'interactive', startedAt: j.startedAt, sessionId: j.sessionId, name: j.name, status: j.status });
-    }
     for (const id of fs.readdirSync(jobs)) {
         const j = lireJson(path.join(jobs, id, 'state.json'));
         if (!j) continue;
         if (!j.sessionId || !j.cwd || !j.state) return undefined;   // format inconnu : on laisse faire `claude agents`
         brut.push({ id, cwd: j.cwd, kind: 'background', startedAt: Date.parse(j.createdAt) || 0, sessionId: j.sessionId, name: j.name, state: j.state, needs: j.needs, suggestedReply: j.suggestedReply });
+    }
+    // Une session d'arrière-plan a aussi un processus « interactif » avec le même identifiant : une seule carte
+    const enArrierePlan = new Set(brut.map((b) => b.sessionId));
+    for (const f of fs.readdirSync(sessions)) {
+        if (!/^\d+\.json$/.test(f)) continue;
+        const j = lireJson(path.join(sessions, f));
+        if (!j?.sessionId || !j.cwd || !j.pid || j.kind === 'background' || enArrierePlan.has(j.sessionId) || !vivant(j.pid)) continue;
+        brut.push({ pid: j.pid, cwd: j.cwd, kind: 'interactive', startedAt: j.startedAt, sessionId: j.sessionId, name: j.name, status: j.status });
     }
     return brut.map(vue).sort((a, b) => a.debut.getTime() - b.debut.getTime());
 }

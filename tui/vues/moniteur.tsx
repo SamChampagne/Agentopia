@@ -121,7 +121,7 @@ export function Moniteur({ projets, fermer }: { projets: any[]; fermer: () => vo
                 <span>CPU </span><Jauge pourcent={cpu} /><span>{` ${cpu.toFixed(0).padStart(3)}%      `}</span>
                 <span>RAM </span><Jauge pourcent={(ramUtilisee / ramTotale) * 100} /><span>{` ${formatRam(ramUtilisee)} / ${formatRam(ramTotale)}`}</span>
             </text>
-            <scrollbox flexGrow={1} scrollY>
+            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 <Cadre titre={`🤖 Sessions Claude (${lignes.length})`} actif={section === 'sessions'}>
                     <text fg="gray">{'  ' + colonne('Projet', 24) + colonne('Branche', 26) + colonne('Statut', 14) + 'Durée'.padStart(6) + 'CPU'.padStart(7) + 'RAM'.padStart(10)}</text>
                     {!charge && <text fg="gray">  chargement…</text>}
