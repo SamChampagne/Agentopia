@@ -10,7 +10,7 @@ import { theme, fond } from '../theme.js';
 // Disposition de l'écran : chaque réglage s'applique tout de suite (l'écran derrière change en direct)
 // et l'aperçu à droite montre où va chaque chose. ↑↓ choisir · ←→, Entrée ou clic pour changer · Échap.
 
-type Reglage = {
+export type Reglage = {
     label: string;
     valeurs: { nom: string; appliquer: () => Partial<Disposition> }[];
     actuelle: (d: Disposition) => number;
@@ -22,7 +22,7 @@ const panneaux = (d: Disposition, cle: string, visible: boolean) => ({
     cockpitMasques: visible ? d.cockpitMasques.filter((k) => k !== cle) : [...new Set([...d.cockpitMasques, cle])],
 });
 
-function lignes(): Ligne[] {
+export function lignes(): Ligne[] {
     return [
         { section: 'DISPOSITION' },
         {
@@ -62,7 +62,7 @@ function lignes(): Ligne[] {
 }
 
 // Petit schéma de l'écran selon la disposition
-function apercu(d: Disposition): string[] {
+export function apercu(d: Disposition): string[] {
     const L = 44;
     const ligne = (s: string) => s.padEnd(L).slice(0, L);
     const haut = d.icones ? '✻  ◉ Live ▦ Projets ◆ Équipes ⎇ Git  ⋯' : '✻  Live  Projets  Équipes  Git  ⋯';

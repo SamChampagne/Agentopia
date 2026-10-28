@@ -11,6 +11,7 @@ import { Conversation } from './conversation.tsx';
 import { Choix, Saisie, VueNonMigree } from './dialogues.tsx';
 import { VUES } from './vues/index.ts';
 import { Detail } from './detail.tsx';
+import { disposition } from '../dist/ui/disposition.js';
 import { Barre } from './barre.tsx';
 import { Journal } from './journal.tsx';
 import { QuelleTouche } from './quelleTouche.tsx';
@@ -53,11 +54,18 @@ const surMaitre = (f: () => void) => {
     };
 };
 const droit = (e: any) => e?.button === 2;
+// Disposition de l'écran (/ecran) : tout l'écran se redessine quand elle change
+const surDisposition = (f: () => void) => {
+    bus.on('disposition', f);
+    return () => void bus.off('disposition', f);
+};
 
 export function App({ quitter }: { quitter: () => void }) {
     useVersion(surMajDonnees);
     useVersion(surJournal);
     useVersion(surMaitre);
+    useVersion(surDisposition);
+    const disp = disposition();
     const d = lireDonnees();
     const { width, height } = useTerminalDimensions();
     const [selection, setSelectionEtat] = useState<string>();
@@ -80,7 +88,13 @@ export function App({ quitter }: { quitter: () => void }) {
     const [notice, setNotice] = useState<string>();
     const [occupe, setOccupe] = useState(false);
     const [journalOuvert, setJournalOuvert] = useState(false);
-    const [valeur, setValeur] = useState('');
+    const [valeur, setValeurEtat] = useState('');
+    // Valeur réelle de la barre, à jour à chaque frappe : le clavier la lit (l'état React peut avoir une frappe de retard)
+    const valeurRef = useRef('');
+    const setValeur = (v: string) => {
+        valeurRef.current = v;
+        setValeurEtat(v);
+    };
     const [cle, setCle] = useState(0);
     const [indexSugg, setIndexSugg] = useState(0);
     const posHistorique = useRef(-1);
@@ -285,7 +299,7 @@ export function App({ quitter }: { quitter: () => void }) {
     useKeyboard((k) => {
         // Ctrl+C : vide la saisie ; deux fois de suite pour quitter
         if (k.ctrl && k.name === 'c') {
-            if (valeur) return remplacer('');
+            if (valeurRef.current) return remplacer('');
             if (Date.now() - ctrlC.current < 1500) return quitter();
             ctrlC.current = Date.now();
             return void bus.emit('notice', 'Ctrl+C encore une fois pour quitter');
@@ -300,11 +314,11 @@ export function App({ quitter }: { quitter: () => void }) {
         const alt = k.meta || k.option;
         // Le champ reçoit aussi la touche (Espace, ?) : on le vide une fois qu'il l'a traitée
         const viderApres = () => setTimeout(() => remplacer(''), 0);
-        if (k.name === 'space' && !valeur.trim() && !occupe && !modeMaitre) {
+        if (k.name === 'space' && !valeurRef.current.trim() && !occupe && !modeMaitre) {
             viderApres();
             return setQuelleTouche('');
         }
-        if (k.sequence === '?' && !valeur.trim()) {
+        if (k.sequence === '?' && !valeurRef.current.trim()) {
             viderApres();
             return void lancer('/aide', true);
         }
@@ -319,7 +333,7 @@ export function App({ quitter }: { quitter: () => void }) {
         }
         if (k.name === 'escape') {
             if (modeMaitre) return setModeMaitre(false);
-            if (valeur) return remplacer('');
+            if (valeurRef.current) return remplacer('');
             if (session) return setSelection(undefined);
             if (detail) return ouvrirDetail(undefined);
             if (journalOuvert) return setJournalOuvert(false);
@@ -358,8 +372,11 @@ export function App({ quitter }: { quitter: () => void }) {
         return { texte: `↳ nouvelle session Claude dans ${path.basename(process.cwd())} · Ctrl+K pour tout le reste`, couleur: fond.discret };
     }
 
-    const lateral = Math.max(32, Math.min(56, Math.floor(width / 3)));
+    const colonneVisible = !pleinEcran && disp.laterale !== 'cachee';
+    const lateral = colonneVisible ? Math.max(32, Math.min(56, Math.floor(width / 3))) : 0;
     const principal = width - lateral;
+    // Début de la zone principale (pour le clic dans le cockpit) : après la colonne si elle est à gauche
+    const debutZone = disp.laterale === 'gauche' ? lateral : 0;
     const nbSugg = Math.min(8, suggestions.length);
     const corps = height - 2 - 4 - nbSugg - (quelleTouche !== undefined ? 2 + Math.ceil(Object.keys(noeudA(quelleTouche).enfants).length / 3) : 0);
 
@@ -376,7 +393,7 @@ export function App({ quitter }: { quitter: () => void }) {
     else if (session) {
         zone = (
             <box flexGrow={1} onMouseDown={(e: any) => droit(e) && ouvrirMenu(menuSession(session, () => undefined))}>
-                <Conversation s={session} largeur={principal} cout={d.cout.parSession[session.sessionId]} agir={agir} />
+                <Conversation s={session} largeur={principal} cout={d.cout.parSession[session.sessionId]} agir={agir} position={disp.actions} />
             </box>
         );
     } else if (journalOuvert) zone = <box flexGrow={1} onMouseDown={(e: any) => droit(e) && ouvrirMenu(menuJournal(parler))}><Journal /></box>;
@@ -386,7 +403,7 @@ export function App({ quitter }: { quitter: () => void }) {
             <box flexGrow={1} flexDirection="column" paddingLeft={1}
                 onMouseDown={(e: any) => {
                     if (droit(e)) return void ouvrirMenu({ titre: 'Claudetopia', articles: general(parler) });
-                    const cible = cockpit.cible(e.x - lateral - 1, e.y - 2);
+                    const cible = cockpit.cible(e.x - debutZone - 1, e.y - 2);
                     if (cible === JOURNAL) setJournalOuvert(true);
                     else if (cible) setSelection(cible);
                 }}>
@@ -403,15 +420,19 @@ export function App({ quitter }: { quitter: () => void }) {
                 {BOUTONS.map((b) => (
                     <text key={b.action} onMouseOver={() => setSurvolHaut(b.action)} onMouseOut={() => setSurvolHaut(undefined)}
                         onMouseDown={() => libre && lancer(b.action, true)}
-                        fg={survolHaut === b.action ? fond.texte : fond.eteint} attributes={survolHaut === b.action ? GRAS : 0}>{`  ${b.label} `}</text>
+                        fg={survolHaut === b.action ? fond.texte : fond.eteint} attributes={survolHaut === b.action ? GRAS : 0}>
+                        {/* Icônes cachées (/ecran) : seulement les noms */}
+                        {`  ${disp.icones || b.label === '⋯' ? b.label : b.label.split(' ').slice(1).join(' ')} `}
+                    </text>
                 ))}
             </box>
             <Ansi texte={degrade('─'.repeat(width))} />
             <box flexGrow={1} flexDirection="row">
-                {!pleinEcran && <Colonne d={d} largeur={lateral} selection={selection} choisir={setSelection} tic={tic} espace={espace} setEspace={setEspace}
+                {disp.laterale === 'droite' && zone}
+                {colonneVisible && <Colonne d={d} largeur={lateral} cote={disp.laterale} selection={selection} choisir={setSelection} tic={tic} espace={espace} setEspace={setEspace}
                     projets={projets} lancer={(cmd: string) => libre && lancer(cmd, true)} ouvrirMenu={ouvrirMenu} ouvrirDetail={ouvrirDetail} detail={detail}
                     maitre={{ etat: etatMaitre(), actif: modeMaitre, claude: lireEtatClaude().etat, basculer: () => setModeMaitre((v) => !v) }} />}
-                {zone}
+                {disp.laterale !== 'droite' && zone}
             </box>
             {quelleTouche !== undefined && <QuelleTouche chemin={quelleTouche} choisir={toucheQT} />}
             <Barre valeur={valeur} cle={cle} setValeur={(v) => {

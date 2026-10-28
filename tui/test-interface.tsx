@@ -43,7 +43,10 @@ async function commande(texte: string) {
     trace('tapé');
     const image = await ecran();
     trace('écran lu');
-    if (!image.includes(`❯ ${texte}`)) throw new Error(`garde-fou : la barre ne contient pas « ${texte} », Entrée non pressée`);
+    if (!image.includes(`❯ ${texte}`)) {
+        process.stderr.write(image.split('\n').slice(-14).map((l) => l.slice(0, 160)).join('\n') + '\n');
+        throw new Error(`garde-fou : la barre ne contient pas « ${texte} », Entrée non pressée`);
+    }
     mockInput.pressEnter();
     trace('Entrée');
     await w(600);
@@ -142,10 +145,28 @@ verifier('Échap referme le détail', !image.includes('SESSIONS CLAUDE ('), imag
 await mockMouse.click(3, 2);
 await ecran();
 
-image = await commande('/recents');
-verifier('/recents : vue pas encore migrée, annoncée', image.includes('pas encore passée à la nouvelle interface'), image);
+// Les dernières vues : ouvrir et refermer seulement (Entrée y lance des actions réelles ;
+// dans Disposition, changer un réglage modifierait la vraie config)
+const vues: [string, string, string][] = [
+    ['/recents', 'PROJETS RÉCENTS', 'Récents'],
+    ['/connexions', '⚿ CONNEXIONS', 'Connexions'],
+    ['/questions', 'EN ATTENTE DE TOI', 'Questions'],
+    ['/ecran', "DISPOSITION DE L'ÉCRAN", 'Disposition'],
+    ['/top', 'Moniteur', 'Moniteur'],
+];
+for (const [cmd, titre, nom] of vues) {
+    image = await commande(cmd);
+    verifier(`${cmd} : vue ${nom} (OpenTUI)`, image.includes(titre) && !image.includes('pas encore passée'), image);
+    image = await echap();
+    verifier(`Échap referme ${nom}`, !image.includes(titre), image);
+}
+// Fichiers (SFTP) sur dev : connexion et liste du dossier, en lecture seule
+image = await commande('/sftp dev');
+await w(4000);
+image = await ecran();
+verifier('/sftp dev : vue Fichiers, dossier listé', image.includes('⇅ FICHIERS · dev') && /\d+ éléments?/.test(image), image);
 image = await echap();
-verifier('Échap referme la vue', !image.includes('pas encore passée'), image);
+verifier('Échap referme Fichiers', !image.includes('⇅ FICHIERS'), image);
 
 image = await commande('/sorties');
 verifier('/sorties : journal complet', image.includes('▤ JOURNAL'), image);

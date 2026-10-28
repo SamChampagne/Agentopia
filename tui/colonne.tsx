@@ -71,14 +71,14 @@ function Maitre({ etat, actif, tic, basculer, claude }: any) {
     );
 }
 
-export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace, projets, lancer, ouvrirMenu, maitre, ouvrirDetail, detail }: any) {
+export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace, projets, lancer, ouvrirMenu, maitre, ouvrirDetail, detail, cote = 'gauche' }: any) {
     const [survol, setSurvol] = useState<string>();
     const [replie, setReplie] = useState<Record<string, boolean>>({ ssh: false, docker: false });
     const docker: string[] = lignesDocker(d);
     const serveurs = d.serveurs.slice(0, 6);
     const survoler = (cle: string) => ({ onMouseOver: () => setSurvol(cle), onMouseOut: () => setSurvol(undefined) });
     return (
-        <box width={largeur} flexShrink={0} flexDirection="column" border={['right']} borderColor={fond.bordure}>
+        <box width={largeur} flexShrink={0} flexDirection="column" border={[cote === 'droite' ? 'left' : 'right']} borderColor={fond.bordure}>
             <box height={1} flexShrink={0} backgroundColor={fond.entete} flexDirection="row">
                 <text> </text>
                 {['sessions', 'projets'].map((e) => (

@@ -6,13 +6,15 @@ import { lignesTranscript } from '../dist/ui/Zones.js';
 import { actionsSession } from '../dist/ui/saisie.js';
 import { dollars } from '../dist/cout.js';
 import { theme, fond, couleurProjet } from '../dist/theme.js';
+import { Boutons } from './vues/commun.tsx';
 
 // Conversation d'une session : ses actions à gauche (la description de celle survolée en dessous),
 // le texte à droite. Défilement natif à la molette, collé en bas : la fin suit en direct ; texte sélectionnable.
 
 const COL = 24;
 
-export function Conversation({ s, largeur, cout, agir }: { s: any; largeur: number; cout?: number; agir: (action: string) => void }) {
+// position (/ecran) : actions en colonne à gauche ou à droite, en rangée en haut, ou cachées (clic droit)
+export function Conversation({ s, largeur, cout, agir, position = 'gauche' }: { s: any; largeur: number; cout?: number; agir: (action: string) => void; position?: string }) {
     // lireTranscript relit seulement la fin ajoutée et rend le même tableau si rien n'a changé (pas de rendu inutile)
     const [messages, setMessages] = useState<any[]>(() => lireTranscript(s.fichier));
     useEffect(() => {
@@ -21,7 +23,8 @@ export function Conversation({ s, largeur, cout, agir }: { s: any; largeur: numb
         const t = setInterval(lire, 1000);
         return () => clearInterval(t);
     }, [s.fichier]);
-    const lignes = useMemo(() => lignesTranscript(messages, largeur - COL - 3), [messages, largeur]);
+    const enColonne = position === 'gauche' || position === 'droite';
+    const lignes = useMemo(() => lignesTranscript(messages, largeur - (enColonne ? COL : 0) - 3), [messages, largeur, enColonne]);
     const [survol, setSurvol] = useState<string>();
     const actions = actionsSession(s);
     const aide = actions.find((a: any) => a.action === survol)?.aide;
@@ -35,8 +38,9 @@ export function Conversation({ s, largeur, cout, agir }: { s: any; largeur: numb
                 </text>
                 {cout !== undefined && <text fg={fond.discret}>{`${dollars(cout)} `}</text>}
             </box>
-            <box flexGrow={1} flexDirection="row">
-                <box width={COL} flexShrink={0} flexDirection="column" paddingLeft={1} paddingTop={1}>
+            {position === 'haut' && <box paddingLeft={1}><Boutons boutons={actions} agir={agir} /></box>}
+            <box flexGrow={1} flexDirection={position === 'droite' ? 'row-reverse' : 'row'}>
+                {enColonne && <box width={COL} flexShrink={0} flexDirection="column" paddingLeft={1} paddingTop={1}>
                     {actions.map((a: any) => {
                         const sur = survol === a.action;
                         const fg = a.action === 'fermer-session' ? '#f87171' : sur ? theme.accent : a.action === 'fermer' ? fond.eteint : fond.texte;
@@ -49,8 +53,8 @@ export function Conversation({ s, largeur, cout, agir }: { s: any; largeur: numb
                     })}
                     <text> </text>
                     {aide && <text fg={fond.discret} wrapMode="word">{aide}</text>}
-                </box>
-                <scrollbox flexGrow={1} scrollY stickyScroll stickyStart="bottom" paddingRight={1}>
+                </box>}
+                <scrollbox flexGrow={1} scrollY stickyScroll stickyStart="bottom" paddingLeft={enColonne ? 0 : 1} paddingRight={1}>
                     {lignes.map((l, i) => <Ansi key={i} texte={l} replier selectionnable />)}
                 </scrollbox>
             </box>
