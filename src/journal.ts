@@ -9,11 +9,14 @@ import { copier } from './lanceurs.js';
 import { c } from './theme.js';
 import { titre, ligneMarkdown } from './affichage.js';
 import { puce } from './dashboard.js';
+import { mettreAJourCout, dollars } from './cout.js';
 
 interface Activite {
     projet: string;
     commits: { hash: string; date: string; sujet: string }[];
     sessions: string[];
+    ids: string[];          // sessionId des conversations (pour le coût du jour)
+    cout?: number;          // équivalent API ($), seulement pour aujourd'hui
 }
 
 function bornes(periode: string): { debut: Date; fin: Date; libelle: string } {
@@ -72,8 +75,9 @@ async function collecter(projets: Projet[], debut: Date, fin: Date): Promise<Act
             })
             .filter((co) => !vus.has(co.hash) && vus.add(co.hash));
         // Seules les conversations touchées pendant la période sont lues (c'était le plus lent)
-        const sessions = sessionsDeLaPeriode(p.chemin, debut, fin).map((s) => s.titre);
-        if (commits.length || sessions.length) activites.push({ projet: p.nom, commits, sessions });
+        const periode = sessionsDeLaPeriode(p.chemin, debut, fin);
+        const sessions = periode.map((s) => s.titre);
+        if (commits.length || sessions.length) activites.push({ projet: p.nom, commits, sessions, ids: periode.map((s) => s.id) });
     });
     return activites.sort((a, b) => b.commits.length + b.sessions.length - a.commits.length - a.sessions.length);
 }
@@ -81,7 +85,7 @@ async function collecter(projets: Projet[], debut: Date, fin: Date): Promise<Act
 function texteBrut(activites: Activite[], libelle: string): string {
     const lignes = [`Journal — ${libelle}`, ''];
     for (const a of activites) {
-        lignes.push(`## ${a.projet}`);
+        lignes.push(`## ${a.projet}${a.cout ? ` (≈ ${dollars(a.cout)})` : ''}`);
         a.commits.forEach((co) => lignes.push(`- ${co.date} ${co.sujet}`));
         a.sessions.forEach((s) => lignes.push(`- (session Claude) ${s}`));
         lignes.push('');
@@ -97,18 +101,25 @@ export async function journal(projets: Projet[], periode = 'jour'): Promise<void
         console.log(c.discret(`Aucune activité trouvée ${libelle}.`));
         return;
     }
+    // Aujourd'hui : ce que chaque projet a consommé (équivalent API)
+    let total = 0;
+    if (periode === 'jour') {
+        const jour = await mettreAJourCout();
+        for (const a of activites) a.cout = a.ids.reduce((n, id) => n + (jour.parSession.get(id)?.cout ?? 0), 0);
+        total = jour.total;
+    }
     const nbCommits = activites.reduce((n, a) => n + a.commits.length, 0);
     const nbSessions = activites.reduce((n, a) => n + a.sessions.length, 0);
-    console.log(titre(`Journal · ${libelle}`) + c.discret(`  ${nbCommits} commits · ${nbSessions} sessions Claude · ${activites.length} projets`));
+    console.log(titre(`Journal · ${libelle}`) + c.discret(`  ${nbCommits} commits · ${nbSessions} sessions Claude · ${activites.length} projets${total ? ` · ≈ ${dollars(total)} (équivalent API)` : ''}`));
     for (const a of activites) {
-        console.log(`\n  ${puce(a.projet)} ${a.projet}`);
+        console.log(`\n  ${puce(a.projet)} ${a.projet}${a.cout ? c.discret(`  ≈ ${dollars(a.cout)}`) : ''}`);
         a.commits.slice(0, 12).forEach((co) => console.log(`    ${c.discret(co.date.padEnd(14))}${co.sujet}`));
         if (a.commits.length > 12) console.log(c.discret(`    … et ${a.commits.length - 12} autres commits`));
         a.sessions.forEach((s) => console.log(`    ${c.discret('session'.padEnd(14))}${c.secondaire(s)}`));
     }
     console.log();
 
-    const brut = texteBrut(activites, libelle);
+    const brut = texteBrut(activites, libelle) + (total ? `\nCoût du jour (équivalent API) : ≈ ${dollars(total)}\n` : '');
     const action = await choisir('Et ensuite ?', [
         { label: '✻ Résumer avec Claude (stand-up)', valeur: 'resume' },
         { label: '⧉ Copier le journal brut', valeur: 'copier' },

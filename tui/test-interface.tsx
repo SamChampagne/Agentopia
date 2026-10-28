@@ -175,7 +175,7 @@ image = await echap();
 verifier('Échap revient au cockpit', image.includes('SESSIONS CLAUDE'), image);
 
 // La session qui a le plus de messages : on vérifie aussi que le texte s'affiche
-// Dans l'ordre des cartes affichées : seulement les actives (ni terminées, ni en pause), 4 lignes par carte
+// Dans l'ordre des cartes affichées : seulement les actives (ni terminées, ni en pause), 5 lignes par carte
 const { cartesLaterales, enPause } = await import('../dist/ui/Laterale.js');
 const donnees = lireDonnees();
 const cartes = cartesLaterales(donnees).filter((x: any) => x.type !== 'session' || (x.s.statut !== 'terminee' && !enPause(x.s, donnees.activites.get(x.s.sessionId))));
@@ -183,9 +183,9 @@ const agents = cartes.map((x: any) => x.s ?? { fichier: '' });
 const tailles = agents.map((a: any) => (a.fichier ? lireTranscript(a.fichier).length : -1));
 const avecMessages = tailles.indexOf(Math.max(...tailles, 0));
 if (avecMessages >= 0) {
-    await mockMouse.click(4, 3 + 4 * avecMessages);
+    await mockMouse.click(4, 3 + 5 * avecMessages);
     image = await ecran();
-    verifier('clic sur une carte : conversation et ses actions', image.includes('← Retour') && image.includes('Copier la réponse'), image);
+    verifier('clic sur une carte : conversation et ses actions', image.includes('← Retour') && image.includes('Copier la réponse') && image.includes('± Changements'), image);
     if (tailles[avecMessages]) {
         // Les résultats d'outils (⎿) n'apparaissent que dans la conversation, quelle que soit la largeur de la colonne
         verifier('le texte de la conversation s’affiche', image.includes('⎿ '), image);
@@ -234,7 +234,8 @@ if (avecMessages >= 0) {
     if (y >= 0) {
         await mockMouse.click(5, y);
         image = await ecran();
-        verifier('clic sur « + N inactives » : elles s’affichent', image.includes('cacher les'), image);
+        // Les cartes dépliées peuvent pousser « cacher les … » sous le bas de la colonne : une carte en pause suffit
+        verifier('clic sur « + N inactives » : elles s’affichent', image.includes('cacher les') || image.includes('◌ en pause'), image);
         const y2 = image.split('\n').findIndex((l) => l.includes('cacher les'));
         await mockMouse.click(5, y2);
         image = await ecran();
@@ -285,6 +286,18 @@ await mockMouse.click(12, 2);
 image = await ecran();
 verifier('onglet Projets', !image.includes('+ Session') && /⎇ /.test(image), image);
 await mockMouse.click(3, 2);
+
+// La mascotte, en haut à droite : une des quatre humeurs
+image = await ecran();
+verifier('mascotte dans la barre du haut', /au travail|besoin de toi|t'attend|tout est calme/.test(image.split('\n')[0]), image);
+
+// Alt+Z : mode focus (ni colonne ni barre du haut), encore Alt+Z pour revenir
+mockInput.pressKey('z', { meta: true });
+image = await ecran();
+verifier('Alt+Z : mode focus', !image.includes('Sessions  Projets') && !image.includes('◈ Config'), image);
+mockInput.pressKey('z', { meta: true });
+image = await ecran();
+verifier('Alt+Z encore : tout revient', image.includes('Sessions  Projets') && image.includes('◈ Config'), image);
 
 process.stderr.write(`\n${ok} réussis · ${ko} échoués\n`);
 process.exit(ko ? 1 : 0);

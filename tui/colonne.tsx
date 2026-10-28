@@ -4,6 +4,7 @@ import { GRAS, SOULIGNE, ANIM, une, couper } from './style.ts';
 import { lignesEspace } from '../dist/ui/espaces.js';
 import { lignesDocker, cartesLaterales, enPause, etatEquipe } from '../dist/ui/Laterale.js';
 import { avancement } from '../dist/equipe.js';
+import { rythme, limiteContexte } from '../dist/agents.js';
 import { ilYa } from '../dist/ui/Panneau.js';
 import { theme, fond, couleurProjet } from '../dist/theme.js';
 import { menuSession, menuServeur, menuDocker } from './menus.ts';
@@ -17,7 +18,43 @@ const droit = (e: any) => e?.button === 2;
 const COULEURS: Record<string, string> = { travaille: '#4ade80', attend: '#facc15', bloquee: '#fb923c', terminee: '#94a3b8' };
 const LIBELLES: Record<string, string> = { travaille: 'travaille', attend: 't’attend', bloquee: 'bloquée', terminee: 'terminée' };
 
-function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu }: any) {
+const BLOCS = ' ▁▂▃▄▅▆▇█';
+// Rythme des 10 dernières minutes, une colonne par minute
+const etincelle = (valeurs: number[]) => {
+    const max = Math.max(1, ...valeurs);
+    return valeurs.map((v) => BLOCS[v ? Math.max(1, Math.round((v / max) * 8)) : 0]).join('');
+};
+// Jauge du contexte : verte, jaune passé la moitié, rouge passé 80 %
+function jaugeContexte(jetons: number, largeur: number) {
+    const part = Math.min(1, jetons / limiteContexte(jetons));
+    const plein = Math.round(part * largeur);
+    return { plein: '▰'.repeat(plein), vide: '▱'.repeat(largeur - plein), couleur: part > 0.8 ? '#f87171' : part > 0.5 ? '#facc15' : '#4ade80', texte: `${Math.round(jetons / 1000)}k` };
+}
+
+// Une session bloquée sur une question (pas une permission) : on peut répondre sans la rejoindre
+function Reponses({ s, largeur, lancer }: any) {
+    const [survol, setSurvol] = useState<string>();
+    const bouton = (cle: string, label: string, cmd: string, fg: string) => (
+        <text key={cle} fg={survol === cle ? fond.texte : fg} attributes={survol === cle ? GRAS : 0}
+            onMouseOver={() => setSurvol(cle)} onMouseOut={() => setSurvol(undefined)}
+            onMouseDown={(e: any) => {
+                e?.stopPropagation?.();
+                lancer(cmd);
+            }}>{label}</text>
+    );
+    const suggestion = s.suggestion ? couper(`✓ « ${une(s.suggestion)} »`, Math.max(12, largeur - 26)) : undefined;
+    return (
+        <>
+            {suggestion && bouton('ok', suggestion, `/envoyer ${s.sessionId} ${une(s.suggestion)}`, '#4ade80')}
+            {suggestion && <text>{'  '}</text>}
+            {bouton('rep', '✎ Répondre', `/repondre ${s.sessionId}`, theme.accent)}
+            <text>{'  '}</text>
+            {bouton('rej', '⤢', `/rejoindre ${s.id}`, fond.eteint)}
+        </>
+    );
+}
+
+function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu, lancer }: any) {
     // En pause : plus de 12 h sans activité (grisée, rangée en bas de la liste)
     const pause = enPause(s, a);
     const couleur = pause ? fond.discret : COULEURS[s.statut] ?? fond.discret;
@@ -27,9 +64,13 @@ function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu }:
     // 3e ligne : ta dernière demande à cette session, sinon depuis quand elle est là
     const demande = a?.dernierUser ? `❯ ${une(a.dernierUser)}` : `depuis ${ilYa(a?.date ?? s.debut)}${s.arrierePlan ? ' · arrière-plan' : ' · onglet'}`;
     const bg = active ? fond.panneauActif : survole ? fond.selection : fond.panneau;
-    const barre = active ? theme.accent : couleur;
+    // Le bord pulse pendant que Claude travaille ; il clignote doucement quand une session t'attend
+    const pulse = !pause && (s.statut === 'travaille' || s.statut === 'bloquee') && tic % 2 === 1;
+    const barre = active ? theme.accent : pulse ? (s.statut === 'travaille' ? '#166534' : '#7c2d12') : couleur;
+    const repondable = !pause && s.statut === 'bloquee' && s.arrierePlan && s.question && !/permission/i.test(s.question);
+    const ctx = a?.contexte ? jaugeContexte(a.contexte, 6) : undefined;
     return (
-        <box height={4} flexShrink={0} onMouseDown={(e: any) => (droit(e) ? menu() : choisir())} onMouseOver={() => survoler(true)} onMouseOut={() => survoler(false)}>
+        <box height={pause ? 4 : 5} flexShrink={0} onMouseDown={(e: any) => (droit(e) ? menu() : choisir())} onMouseOver={() => survoler(true)} onMouseOut={() => survoler(false)}>
             <box height={1} backgroundColor={bg} flexDirection="row">
                 <text fg={barre}>▌ </text>
                 <text flexGrow={1} truncate><span fg={couleurProjet(s.nom)}>● </span><span fg={fond.texte} attributes={GRAS}>{s.nom}</span></text>
@@ -43,6 +84,18 @@ function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu }:
                 <text fg={barre}>▌ </text>
                 <text fg={a?.dernierUser ? theme.secondaire : fond.discret} truncate>{'  ' + couper(demande, largeur - 5)}</text>
             </box>
+            {!pause && (
+                <box height={1} backgroundColor={bg} flexDirection="row">
+                    <text fg={barre}>▌ </text>
+                    <text>{'  '}</text>
+                    {repondable ? <Reponses s={s} largeur={largeur} lancer={lancer} /> : (
+                        <>
+                            <text fg={couleurProjet(s.nom)} flexGrow={1}>{etincelle(rythme(a?.horaires))}</text>
+                            {ctx && <text><span fg={fond.discret}>ctx </span><span fg={ctx.couleur}>{ctx.plein}</span><span fg={fond.discret}>{ctx.vide}</span><span fg="gray">{` ${ctx.texte} `}</span></text>}
+                        </>
+                    )}
+                </box>
+            )}
         </box>
     );
 }
@@ -150,7 +203,7 @@ export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace
                             : <Carte key={x.s.cle} s={x.s} a={d.activites.get(x.s.sessionId)} active={x.s.cle === selection} survole={survol === x.s.cle}
                                 largeur={largeur - 1} tic={tic} choisir={() => choisir(x.s.cle === selection ? undefined : x.s.cle)}
                                 survoler={(v: boolean) => setSurvol(v ? x.s.cle : undefined)}
-                                menu={() => ouvrirMenu(menuSession(x.s, () => choisir(x.s.cle)))} />))}
+                                menu={() => ouvrirMenu(menuSession(x.s, () => choisir(x.s.cle)))} lancer={lancer} />))}
                         {!visibles.length && <text fg={fond.discret}>  aucune session active</text>}
                         {cachees > 0 && (
                             <box height={1} onMouseDown={() => setInactives((v) => !v)} {...survoler('inactives')}>

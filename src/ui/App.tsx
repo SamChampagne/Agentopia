@@ -642,7 +642,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             articles: [
                 { label: '↵ Ouvrir la conversation', valeur: () => setSelection(s.cle) },
                 ...(s.arrierePlan
-                    ? [{ label: '⤢ Rejoindre (plein écran)', valeur: `/rejoindre ${s.id}` }, { label: '★ Mettre en favori', valeur: `/favori-session ${s.sessionId}` }]
+                    ? [{ label: '⤢ Rejoindre (nouvelle fenêtre)', valeur: `/rejoindre ${s.id}` }, { label: '★ Mettre en favori', valeur: `/favori-session ${s.sessionId}` }]
                     : [{ label: '⑂ Continuer ici', valeur: `/copie ${s.sessionId}` }]),
                 { label: '⎘ Copier le dernier bloc de code', valeur: `/copier-code ${s.sessionId}` },
                 { label: '⎘ Copier la dernière réponse', valeur: `/copier-reponse ${s.sessionId}` },

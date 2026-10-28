@@ -17,13 +17,25 @@ export function quotePS(texte: string): string {
 }
 
 // Ouvre un nouvel onglet Windows Terminal dans `dossier` et y exécute `commande`
-// (couleur d'onglet fixe par projet)
-export function ouvrirOnglet(dossier: string, titre: string, commande?: string): void {
+// (couleur d'onglet fixe par projet) ; nouvelleFenetre : dans une fenêtre à part
+export function ouvrirOnglet(dossier: string, titre: string, commande?: string, nouvelleFenetre = false): void {
     const couleur = couleurProjet(path.basename(dossier));
-    const args = ['-w', '0', 'new-tab', '--title', titre, '--tabColor', couleur, '--suppressApplicationTitle',
+    const args = ['-w', nouvelleFenetre ? 'new' : '0', 'new-tab', '--title', titre, '--tabColor', couleur, '--suppressApplicationTitle',
         '-d', dossier, SHELL, '-NoExit'];
     if (commande) args.push('-EncodedCommand', encoder(commande));
     spawn('wt', args, { detached: true, stdio: 'ignore' }).unref();
+}
+
+// Coupe la fenêtre Windows Terminal en deux et exécute `commande` dans le panneau de droite ;
+// hors de Windows Terminal (pas de WT_SESSION), c'est une nouvelle fenêtre. Renvoie false dans ce cas.
+export function ouvrirACote(dossier: string, titre: string, commande: string): boolean {
+    if (!process.env.WT_SESSION) {
+        ouvrirOnglet(dossier, titre, commande, true);
+        return false;
+    }
+    spawn('wt', ['-w', '0', 'split-pane', '-V', '--size', '0.5', '--title', titre, '--suppressApplicationTitle',
+        '-d', dossier, SHELL, '-NoExit', '-EncodedCommand', encoder(commande)], { detached: true, stdio: 'ignore' }).unref();
+    return true;
 }
 
 // Exécute une commande PowerShell et renvoie sa sortie ligne par ligne (l'interface reste affichée)

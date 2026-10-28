@@ -250,10 +250,12 @@ export interface Activite {
     dernierTexte?: string;
     outil?: string;              // dernier outil appelé, s'il est postérieur au dernier texte
     date?: Date;
+    horaires?: number[];         // heures (ms) des derniers messages : le rythme de la carte
+    contexte?: number;           // jetons dans le contexte au dernier tour de Claude
 }
 
 export function activite(messages: Message[]): Activite {
-    const a: Activite = {};
+    const a: Activite = { horaires: messages.slice(-300).flatMap((m) => (m.date ? [m.date.getTime()] : [])) };
     for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
         a.date ??= m.date;
@@ -265,6 +267,61 @@ export function activite(messages: Message[]): Activite {
         }
     }
     return a;
+}
+
+// Activité par minute sur les `minutes` dernières minutes (la plus ancienne d'abord)
+export function rythme(horaires: number[] = [], minutes = 10, maintenant = Date.now()): number[] {
+    const seaux = new Array(minutes).fill(0);
+    for (const h of horaires) {
+        const age = Math.floor((maintenant - h) / 60_000);
+        if (age >= 0 && age < minutes) seaux[minutes - 1 - age]++;
+    }
+    return seaux;
+}
+
+// Taille du contexte au dernier tour de Claude : entrée + cache lu + cache écrit (lu dans la fin du transcript)
+export function contexteSession(fichier: string): number | undefined {
+    try {
+        const taille = fs.statSync(fichier).size;
+        const debut = Math.max(0, taille - 300_000);
+        const { texte } = lireLignes(fichier, debut, taille);
+        const lignes = texte.split('\n');
+        for (let i = lignes.length - 1; i >= 0; i--) {
+            const l = lignes[i];
+            if (!l.includes('"type":"assistant"') || !l.includes('"usage"') || l.includes('"isSidechain":true')) continue;
+            const n = (cle: string) => Number(new RegExp(`"${cle}":(\\d+)`).exec(l)?.[1] ?? 0);
+            return n('input_tokens') + n('cache_read_input_tokens') + n('cache_creation_input_tokens');
+        }
+    } catch {
+        // transcript pas encore créé
+    }
+    return undefined;
+}
+
+// Limite de contexte probable : 200 k, ou 1 M quand la session a déjà dépassé 200 k
+export const limiteContexte = (jetons: number) => (jetons > 200_000 ? 1_000_000 : 200_000);
+
+// Fichiers que la session a créés ou modifiés (Edit, Write, MultiEdit, NotebookEdit), chemins absolus
+export function fichiersModifies(fichier: string): string[] {
+    const fichiers = new Set<string>();
+    let texte = '';
+    try {
+        texte = fs.readFileSync(fichier, 'utf-8');
+    } catch {
+        return [];
+    }
+    for (const ligne of texte.split('\n')) {
+        if (!ligne.includes('"tool_use"') || !/"name":"(Edit|Write|MultiEdit|NotebookEdit)"/.test(ligne)) continue;
+        try {
+            for (const bloc of JSON.parse(ligne).message?.content ?? []) {
+                const chemin = bloc.input?.file_path ?? bloc.input?.notebook_path;
+                if (bloc.type === 'tool_use' && /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(bloc.name) && typeof chemin === 'string') fichiers.add(path.resolve(chemin));
+            }
+        } catch {
+            // ligne illisible
+        }
+    }
+    return [...fichiers];
 }
 
 // ─── Actions ─────────────────────────────────────────────────────────────────

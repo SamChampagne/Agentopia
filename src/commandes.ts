@@ -4,7 +4,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { chargerConfig, sauverConfig, CHEMIN_CONFIG } from './config.js';
 import { Projet, listerProjets, trouverProjet, brancheGit, derniereSessionClaude, etatGit, depuis, correspond } from './projets.js';
-import { ouvrirOnglet, executer, lancerDetache } from './lanceurs.js';
+import { ouvrirOnglet, ouvrirACote, executer, lancerDetache, quotePS } from './lanceurs.js';
+import { spawnSync } from 'child_process';
 import { lancerClaude, reprendreDerniere, choisirSession, nouvelleBranche, nettoyerWorktrees, lancerAvecPrompt } from './actions.js';
 import { recents, projetsRecents, puce } from './dashboard.js';
 import { instantane, sessionsActives, fermerArbre, formatRam } from './systeme.js';
@@ -21,6 +22,7 @@ import { commandesSsh } from './sshGestion.js';
 import { commandesConnexions } from './connexionsCommandes.js';
 import { commandesPlus } from './plus.js';
 import { commandesPrCi } from './prci.js';
+import { commandesM3 } from './m3.js';
 import { commandesSurveillance } from './surveillanceLogs.js';
 import { commandesExport } from './exportImport.js';
 import { commandesApparence } from './apparence.js';
@@ -30,15 +32,51 @@ import { afficherServeurs, testerServeurs, ouvrirSsh, serveursDuProjet } from '.
 import { c } from './theme.js';
 import { tableau, titre, ligneMarkdown } from './affichage.js';
 import { bus, choisir, confirmer, tache, afficherVue, saisir } from './ui/bus.js';
-import { lancerArrierePlan, arreterArrierePlan, retirerArrierePlan, fermerArrierePlan, envoyerMessage } from './agents.js';
+import { SessionVue, lancerArrierePlan, arreterArrierePlan, retirerArrierePlan, fermerArrierePlan, envoyerMessage, fichiersModifies } from './agents.js';
 import { lireDonnees, rafraichirDocker, oublierAgent, annulerOubli } from './ui/donnees.js';
 import { passerLaMain } from './ui/ecran.js';
 import { CLAUDE } from './claude.js';
 
-// Donne le terminal à "claude attach" ; Ctrl+Z dans Claude ramène ici
-export async function rejoindre(id: string): Promise<void> {
-    await passerLaMain(CLAUDE, ['attach', id]);
-    console.log(c.discret(`De retour · la session ${id} continue en arrière-plan`));
+// Ouvre "claude attach" dans une fenêtre à part (ou à côté, dans la même fenêtre) : l'interface reste affichée ici
+export async function rejoindre(id: string, aCote = false): Promise<void> {
+    const s = lireDonnees().agents.find((x) => x.id === id);
+    const dossier = s?.cwd ?? process.cwd();
+    const titre = `🤖 ${s?.nom ?? path.basename(dossier)}`;
+    const commande = `& ${quotePS(CLAUDE)} attach ${id}`;
+    if (aCote && ouvrirACote(dossier, titre, commande)) return void console.log(c.succes(`Session ${id} ouverte à côté · Alt+← / Alt+→ dans Windows Terminal pour passer d'un panneau à l'autre`));
+    if (!aCote) ouvrirOnglet(dossier, titre, commande, true);
+    console.log(c.succes(`Session ${id} ouverte dans une nouvelle fenêtre`) + (aCote ? c.discret(' (« à côté » demande Windows Terminal)') : ''));
+}
+
+// Ce que la session a modifié : les fichiers qu'elle a édités et qui diffèrent encore de git
+async function changements(s: SessionVue): Promise<void> {
+    const racine = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: s.cwd, encoding: 'utf-8' }).stdout?.trim();
+    if (!racine) return void console.log(c.alerte(`${s.nom} n'est pas un dépôt git`));
+    // Seulement les fichiers du dépôt : git refuse tout le status si un chemin est en dehors
+    const edites = fichiersModifies(s.fichier).filter((f) => !path.relative(racine, f).startsWith('..') && !path.isAbsolute(path.relative(racine, f)));
+    if (!edites.length) return void console.log(c.discret(`${s.nom} n'a modifié aucun fichier dans cette session`));
+    const git = (args: string[]) => spawnSync('git', args, { cwd: racine, encoding: 'utf-8', maxBuffer: 20_000_000 }).stdout ?? '';
+    const etat = new Map(git(['status', '--porcelain', '-z', '--', ...edites]).split('\0').filter(Boolean)
+        .map((l) => [path.resolve(racine, l.slice(3)).toLowerCase(), l.slice(0, 2)]));
+    const encore = edites.filter((f) => etat.has(f.toLowerCase()));
+    console.log(titre(`Changements de ${s.nom} · ${s.titre || s.id || ''}`) + c.discret(`  ${edites.length} fichier(s) touché(s) · ${encore.length} encore à commiter`));
+    for (const f of edites) {
+        const code = etat.get(f.toLowerCase());
+        const marque = !code ? c.discret('  ✓ commité') : code.includes('?') ? c.succes('  + nouveau') : code.includes('D') ? c.erreur('  − supprimé') : c.alerte('  ~ modifié');
+        console.log(`${marque.padEnd(24)} ${path.relative(racine, f)}`);
+    }
+    if (!encore.length) return;
+    console.log();
+    const suivis = encore.filter((f) => !etat.get(f.toLowerCase())?.includes('?'));
+    git(['diff', '--color=always', 'HEAD', '--', ...suivis]).split('\n').forEach((l) => console.log(l));
+    for (const f of encore.filter((x) => etat.get(x.toLowerCase())?.includes('?'))) {
+        console.log(c.succes(`+++ nouveau : ${path.relative(racine, f)}`));
+        try {
+            fs.readFileSync(f, 'utf-8').split('\n').slice(0, 40).forEach((l) => console.log(c.succes(`+${l}`)));
+        } catch {
+            // illisible (binaire, supprimé entre-temps)
+        }
+    }
 }
 
 export const config = chargerConfig();
@@ -195,8 +233,10 @@ function afficherAide(): void {
         [c.accent('Alt+M'), 'parler au maître : il gère tes sessions (fermer, relancer, écrire, créer, résumer) · aussi clic sur sa zone à gauche'],
         [c.accent('Alt+T'), 'ouvrir un terminal : PowerShell, cmd, Git Bash, WSL (aussi « ❯ Terminal » à gauche)'],
         [c.accent('texte libre'), 'conversation ouverte : envoyé à Claude · sinon : nouvelle session Claude ici'],
-        [c.accent('Entrée (vide)'), 'conversation ouverte : la rejoindre en plein écran · sinon : menu projet'],
-        [c.accent('Ctrl+Z'), 'dans une session rejointe : revenir au CLI (elle continue)'],
+        [c.accent('Entrée (vide)'), 'conversation ouverte : la rejoindre dans une nouvelle fenêtre · sinon : menu projet'],
+        [c.accent('Alt+Tab'), 'depuis une session rejointe : revenir au CLI (elle continue)'],
+        [c.accent('Alt+J'), 'conversation ouverte : la rejoindre à côté, dans la même fenêtre Windows Terminal'],
+        [c.accent('Alt+Z'), 'mode focus : seulement la conversation et la barre de saisie (encore Alt+Z pour revenir)'],
         [c.accent('Alt+V'), 'joindre l\'image du presse-papiers'],
         [c.accent('Alt+↑ / Alt+↓'), 'session précédente / suivante · Alt+1…9 : carte n°'],
         [c.accent('Échap'), 'vider la saisie · retirer les images · fermer la conversation'],
@@ -286,6 +326,31 @@ export const COMMANDES: Commande[] = [
         nom: 'rejoindre', args: '<id>', groupe: 'Claude', cache: true,
         description: "Entrer dans une session d'arrière-plan",
         executer: async ({ args }) => rejoindre(args[0]),
+    },
+    {
+        nom: 'rejoindre-cote', args: '<id>', groupe: 'Claude', cache: true,
+        description: "Ouvrir une session d'arrière-plan à côté, dans la même fenêtre",
+        executer: async ({ args }) => rejoindre(args[0], true),
+    },
+    {
+        nom: 'repondre', args: '<sessionId> [réponse]', groupe: 'Claude', cache: true,
+        description: 'Répondre à la question d\'une session bloquée',
+        executer: async ({ args }) => {
+            const s = lireDonnees().agents.find((a) => a.sessionId === args[0]);
+            if (!s) return void bus.emit('notice', '✕ Session introuvable');
+            const texte = args.slice(1).join(' ') || await saisir(`Réponse à ${s.nom} : ${s.question ?? ''}`.slice(0, 200), s.suggestion ?? '');
+            if (!texte.trim()) return;
+            await trouverCommande('envoyer')!.executer({ args: [s.sessionId, ...texte.trim().split(' ')], reste: '', apresProjet: '' });
+        },
+    },
+    {
+        nom: 'changements', args: '<sessionId>', groupe: 'Claude', cache: true,
+        description: 'Fichiers modifiés par une session et leur diff',
+        executer: async ({ args }) => {
+            const s = lireDonnees().agents.find((a) => a.sessionId === args[0] || a.id === args[0]);
+            if (!s) return void bus.emit('notice', '✕ Session introuvable');
+            await tache(`Changements de ${s.nom}`, () => changements(s));
+        },
     },
     {
         nom: 'arreter', args: '<id>', groupe: 'Claude', cache: true,
@@ -662,8 +727,8 @@ export const COMMANDES: Commande[] = [
         executer: ({ projet }) => revue(projet!),
     },
     {
-        nom: 'journal', args: '[jour|hier|semaine]', groupe: 'Git',
-        description: 'Ce que tu as fait : commits + sessions, résumé IA',
+        nom: 'journal', alias: ['journee'], args: '[jour|hier|semaine]', groupe: 'Git',
+        description: 'Ce que tu as fait : commits, sessions et coût, résumé IA prêt à coller (stand-up, Teams)',
         executer: ({ args }) => journal(projets, args[0] ?? 'jour'),
     },
     {
@@ -813,6 +878,7 @@ export const COMMANDES: Commande[] = [
     ...commandesConnexions(),
     ...commandesPlus(config),
     ...commandesPrCi(),
+    ...commandesM3(config),
     ...commandesSurveillance(),
     ...commandesExport(config),
     ...commandesApparence(config),

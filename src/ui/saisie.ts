@@ -14,8 +14,10 @@ export function actionsSession(s: SessionVue): ActionSession[] {
     return [
         { label: '← Retour', action: 'fermer', aide: 'Revenir au cockpit. La session continue de tourner.' },
         s.arrierePlan
-            ? { label: '↵ Rejoindre', action: 'rejoindre', aide: 'Ouvrir cette session en plein écran pour lui écrire directement.' }
+            ? { label: '↵ Rejoindre', action: 'rejoindre', aide: 'Ouvrir cette session dans une nouvelle fenêtre pour lui écrire directement.' }
             : { label: '⑂ Continuer ici', action: 'copie', aide: 'Reprendre cette conversation dans une nouvelle session d’arrière-plan.' },
+        ...(s.arrierePlan ? [{ label: '⫿ À côté', action: 'a-cote', aide: 'Ouvrir cette session à côté de Claudetopia, dans la même fenêtre Windows Terminal (Alt+J).' }] : []),
+        { label: '± Changements', action: 'changements', aide: 'Les fichiers que cette session a modifiés et leur diff, prêts à commiter.' },
         { label: '⎘ Copier le code', action: 'copier-code', aide: 'Copier le dernier bloc de code de Claude dans le presse-papiers.' },
         { label: '⎘ Copier la réponse', action: 'copier-reponse', aide: 'Copier la dernière réponse de Claude dans le presse-papiers.' },
         { label: '⌕ Revue du diff', action: 'revue', aide: 'Faire relire par Claude les changements non commités du projet.' },
@@ -33,6 +35,8 @@ export function commandeSession(action: string, s: SessionVue): string | undefin
     if (action === 'dossier') return `/ouvrir ${s.cwd}`;
     if (action === 'terminal') return `/terminal ${terminaux()[0]?.cle ?? ''} ${s.cwd}`;
     if (action === 'rejoindre') return `/rejoindre ${s.id}`;
+    if (action === 'a-cote') return `/rejoindre-cote ${s.id}`;
+    if (action === 'changements') return `/changements ${s.sessionId}`;
     if (action === 'fermer-session') return `/fermer ${s.id ?? s.pid}`;
     if (action === 'copie') return `/copie ${s.sessionId}`;
     if (action === 'code') return `/code ${s.cwd}`;

@@ -18,6 +18,7 @@ import { disposition } from '../dist/ui/disposition.js';
 import { Barre } from './barre.tsx';
 import { Journal } from './journal.tsx';
 import { QuelleTouche } from './quelleTouche.tsx';
+import { Accueil, Mascotte } from './accueil.tsx';
 import { Menu, general, menuSession, menuJournal } from './menus.ts';
 import { demarrerCollecte, lireDonnees, surMajDonnees, rafraichirAgents } from '../dist/ui/donnees.js';
 import { lignesCockpit, JOURNAL } from '../dist/ui/Cockpit.js';
@@ -81,7 +82,16 @@ const sansReprise = () => !!process.env.CLAUDETOPIA_SANS_REPRISE;
 const LATERAL_MIN = 28;
 
 // commandeInitiale : « sp commit saniplan » (lancée puis on quitte) · auDemarrage : l'assistant au premier lancement
-export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () => void; commandeInitiale?: string; auDemarrage?: string }) {
+// accueil : l'écran d'accueil animé, quelques secondes au lancement
+export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }: { quitter: () => void; commandeInitiale?: string; auDemarrage?: string; accueil?: boolean }) {
+    const [splash, setSplash] = useState(accueil);
+    useEffect(() => {
+        if (!splash) return;
+        const t = setTimeout(() => setSplash(false), 2500);
+        return () => clearTimeout(t);
+    }, []);
+    // Mode focus (Alt+Z) : seulement la zone principale et la barre de saisie
+    const [focus, setFocus] = useState(false);
     useVersion(surMajDonnees);
     useVersion(surJournal);
     useVersion(surMaitre);
@@ -475,6 +485,7 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
             ctrlC.current = Date.now();
             return void bus.emit('notice', 'Ctrl+C encore une fois pour quitter');
         }
+        if (splash) return void setTimeout(() => (setSplash(false), remplacer('')), 0);
         if (demande) return;   // les dialogues gèrent leurs touches
         if (quelleTouche !== undefined) {
             if (k.name === 'escape') return setQuelleTouche(undefined);
@@ -515,6 +526,14 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
         if (k.ctrl && k.name === 'k') return void lancer('/palette', true);
         if (alt && k.name === 'm') return setModeMaitre((v) => !v);
         if (alt && k.name === 't') return void lancer('/terminal', true);
+        if (alt && k.name === 'z') {
+            setFocus((v) => !v);
+            return void bus.emit('notice', focus ? 'Mode focus désactivé' : '◎ Mode focus · Alt+Z pour tout réafficher');
+        }
+        if (alt && k.name === 'j') {
+            if (session?.arrierePlan) return void lancer(`/rejoindre-cote ${session.id}`, true);
+            return void bus.emit('notice', 'Alt+J : ouvre d\'abord une session d\'arrière-plan (clic sur sa carte)');
+        }
         if (alt && (k.name === 's' || k.name === 'p')) return setEspace(k.name === 's' ? 'sessions' : 'projets');
         if (alt && /^[1-9]$/.test(k.name)) {
             const s = d.agents[Number(k.name) - 1];
@@ -559,20 +578,25 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
         if (session) {
             if (!session.arrierePlan) return { texte: `${session.nom} tourne dans un onglet : écris-y, ou « ⑂ Continuer ici » pour lui écrire d'ici`, couleur: '#facc15' };
             if (session.statut === 'travaille') return { texte: `${session.nom} travaille : attends qu'il ait fini pour lui écrire, ou Entrée pour le rejoindre`, couleur: '#facc15' };
-            if (session.statut === 'bloquee') return { texte: `${session.nom} attend une permission : Entrée pour le rejoindre et répondre`, couleur: '#fb923c' };
+            if (session.statut === 'bloquee' && session.question && !/permission/i.test(session.question)) {
+                return { texte: `${session.nom} te demande : ${session.question} · écris ta réponse ici${session.suggestion ? `, ou « ✓ » sur sa carte` : ''}`, couleur: '#fb923c' };
+            }
+            if (session.statut === 'bloquee') return { texte: `${session.nom} attend une permission : Entrée pour le rejoindre (Alt+J : à côté)`, couleur: '#fb923c' };
             return { texte: `↳ envoyé à la conversation ${session.nom} (${session.titre || session.id})${t ? '' : ' · Entrée vide = la rejoindre'}`, couleur: couleurProjet(session.nom) };
         }
         return { texte: `↳ nouvelle session Claude dans ${path.basename(process.cwd())} · Ctrl+K pour tout le reste`, couleur: fond.discret };
     }
 
-    const colonneVisible = !pleinEcran && disp.laterale !== 'cachee';
+    const colonneVisible = !pleinEcran && !focus && disp.laterale !== 'cachee';
+    // En mode focus, la barre du haut disparaît aussi : la zone principale commence à la première ligne
+    const haut = focus ? 0 : 2;
     const lateral = !colonneVisible ? 0
         : largeurCol ? Math.max(LATERAL_MIN, Math.min(width - 50, largeurCol)) : Math.max(32, Math.min(56, Math.floor(width / 3)));
     const principal = width - lateral;
     // Début de la zone principale (pour le clic dans le cockpit) : après la colonne si elle est à gauche
     const debutZone = disp.laterale === 'gauche' ? lateral : 0;
     const nbSugg = Math.min(8, suggestions.length);
-    const corps = height - 2 - 4 - nbSugg - (quelleTouche !== undefined ? 2 + Math.ceil(Object.keys(noeudA(quelleTouche).enfants).length / 3) : 0);
+    const corps = height - haut - 4 - nbSugg - (quelleTouche !== undefined ? 2 + Math.ceil(Object.keys(noeudA(quelleTouche).enfants).length / 3) : 0);
 
     let zone;
     if (demande?.type === 'choix') zone = <Choix d={demande} hauteur={corps} />;
@@ -598,7 +622,7 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
             <box flexGrow={1} flexDirection="column" paddingLeft={1}
                 onMouseDown={(e: any) => {
                     if (droit(e)) return void ouvrirMenu({ titre: 'Claudetopia', articles: general(parler) });
-                    const cible = cockpit.cible(e.x - debutZone - 1, e.y - 2);
+                    const cible = cockpit.cible(e.x - debutZone - 1, e.y - haut);
                     if (cible === JOURNAL) setJournalOuvert(true);
                     else if (cible) setSelection(cible);
                 }}>
@@ -612,9 +636,12 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
     if (fige && !demande && zoneAvant.current) zone = zoneAvant.current;
     else zoneAvant.current = zone;
 
+    if (splash) return <Accueil largeur={width} hauteur={height} d={d} fermer={() => setSplash(false)} />;
+    const humeur = Mascotte.etat(d);
+
     return (
         <box width={width} height={height} flexDirection="column" backgroundColor="#0c0c0c">
-            <box height={1} flexShrink={0} flexDirection="row" onMouseDown={(e: any) => droit(e) && ouvrirMenu({ titre: 'Claudetopia', articles: general(parler) })}>
+            {!focus && <box height={1} flexShrink={0} flexDirection="row" onMouseDown={(e: any) => droit(e) && ouvrirMenu({ titre: 'Claudetopia', articles: general(parler) })}>
                 <Ansi texte={degrade(' ✻ ' + (chargerConfig().banniere || 'CLAUDETOPIA').toUpperCase() + ' ')} />
                 {BOUTONS.map((b) => (
                     <text key={b.action} onMouseOver={() => setSurvolHaut(b.action)} onMouseOut={() => setSurvolHaut(undefined)}
@@ -624,8 +651,11 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
                         {`  ${disp.icones || b.label === '⋯' ? b.label : b.label.split(' ').slice(1).join(' ')} `}
                     </text>
                 ))}
-            </box>
-            <box height={1} flexShrink={0}><Ansi texte={degrade('─'.repeat(width))} /></box>
+                <box flexGrow={1} />
+                {/* La mascotte : l'humeur des sessions d'un coup d'œil (masquée si l'écran est étroit) */}
+                {width >= 110 && <text fg={humeur.couleur}>{`${Mascotte.visage(d, tic)} ${humeur.texte} `}</text>}
+            </box>}
+            {!focus && <box height={1} flexShrink={0}><Ansi texte={degrade('─'.repeat(width))} /></box>}
             <box flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden" flexDirection="row">
                 {disp.laterale === 'droite' && zone}
                 {colonneVisible && <Colonne d={d} largeur={lateral} cote={disp.laterale}
@@ -692,5 +722,5 @@ if (import.meta.main) {
         restaurerConsole();
         process.exit(0);
     };
-    createRoot(renderer).render(<App quitter={quitter} commandeInitiale={commandeInitiale} auDemarrage={auDemarrage} />);
+    createRoot(renderer).render(<App quitter={quitter} commandeInitiale={commandeInitiale} auDemarrage={auDemarrage} accueil={!commandeInitiale && !auDemarrage} />);
 }

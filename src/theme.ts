@@ -88,12 +88,25 @@ const POLICE: Record<string, string[]> = {
     Y: ['█▄█', ' █ ', '   '], Z: ['▀█', '█▄', '  '], ' ': [' ', ' ', ' '], '-': ['   ', '▀▀▀', '   '],
 };
 
-export function banniere(texte = config.banniere): string {
+// Les deux lignes de la bannière, sans couleur (l'écran d'accueil les anime)
+export function lignesBanniere(texte = config.banniere): string[] {
     const lignes = ['', ''];
     for (const ch of texte.toUpperCase()) {
         const glyphe = POLICE[ch] ?? POLICE[' '];
         lignes[0] += glyphe[0] + ' ';
         lignes[1] += glyphe[1] + ' ';
     }
-    return degrade(lignes.join('\n'));
+    return lignes;
+}
+
+export function banniere(texte = config.banniere): string {
+    return degrade(lignesBanniere(texte).join('\n'));
+}
+
+// Couleur entre deux autres (t de 0 à 1), en #rrggbb
+export function melange(de: string, a: string, t: number): string {
+    const [r1, g1, b1] = hexVersRgb(de);
+    const [r2, g2, b2] = hexVersRgb(a);
+    const x = (u: number, v: number) => Math.round(u + (v - u) * t).toString(16).padStart(2, '0');
+    return `#${x(r1, r2)}${x(g1, g2)}${x(b1, b2)}`;
 }
