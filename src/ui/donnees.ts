@@ -248,16 +248,16 @@ export function rafraichirAcces(): void {
     publier();
 }
 
+// Abonnement aux mises à jour (renvoie de quoi se désabonner) : pour une interface qui n'utilise pas ce hook
+export function surMajDonnees(f: () => void): () => void {
+    emetteur.on('maj', f);
+    return () => void emetteur.off('maj', f);
+}
+
 // Hook React : se re-rend à chaque mise à jour des données
 export function useDonnees(): Donnees {
     const [, setVersion] = useState(0);
-    useEffect(() => {
-        const surMaj = () => setVersion((v) => v + 1);
-        emetteur.on('maj', surMaj);
-        return () => {
-            emetteur.off('maj', surMaj);
-        };
-    }, []);
+    useEffect(() => surMajDonnees(() => setVersion((v) => v + 1)), []);
     return donnees;
 }
 

@@ -23,19 +23,20 @@ const m = calculerMise(COLS, ROWS);
 
 // Une série d'images provoquées une par une ; on garde la médiane du CPU par image
 async function serie(nom, action, n = 40) {
-    const couts = [];
+    // CPU total de la série (attentes comprises) / n : le compteur Windows avance par pas de ~16 ms
+    const delais = [];
+    const u0 = process.cpuUsage();
     for (let i = 0; i < n; i++) {
         const avant = ecritures;
-        const u0 = process.cpuUsage();
-        action(i);
         const t = performance.now();
+        action(i);
         while (ecritures === avant && performance.now() - t < 1000) await w(1);
+        delais.push(performance.now() - t);
         await w(80);   // fin de l'animation éventuelle
-        const u = process.cpuUsage(u0);
-        couts.push((u.user + u.system) / 1000);
     }
-    couts.sort((a, b) => a - b);
-    process.stderr.write(`${nom.padEnd(22)} CPU par action : médiane ${couts[n >> 1].toFixed(1)} ms · 90e centile ${couts[Math.floor(n * 0.9)].toFixed(1)} ms\n`);
+    const u = process.cpuUsage(u0);
+    delais.sort((a, b) => a - b);
+    process.stderr.write(`${nom.padEnd(22)} CPU moyen par action ${((u.user + u.system) / 1000 / n).toFixed(1)} ms · jusqu'à l'image : médiane ${delais[n >> 1].toFixed(1)} ms, pire ${delais[n - 1].toFixed(1)} ms\n`);
 }
 
 // Nombre pair : chaque « a » est effacé, le champ finit vide. Pas de Ctrl+U : l'interface le lit comme « u »,

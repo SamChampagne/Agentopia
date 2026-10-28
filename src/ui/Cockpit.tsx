@@ -108,6 +108,18 @@ interface AFaire { lignes: string[]; session?: string }
 
 // Redessiné par l'horloge de l'App (une seule image par battement pour tout l'écran)
 export function Cockpit({ d, largeur, hauteur }: { d: Donnees; largeur: number; hauteur: number }) {
+    const { lignes, cible } = lignesCockpit(d, largeur, hauteur);
+    useCockpitCibles(cible);
+    return (
+        <Box flexDirection="column" width={largeur} height={hauteur} paddingLeft={1}>
+            {lignes.slice(0, hauteur - 1).map((l, i) => <Text key={i} wrap="truncate-end">{l}</Text>)}
+            <Text wrap="truncate-end" color={fond.discret}>{'  clic sur « À faire » pour ouvrir la session · sur « Dernières sorties » pour le journal complet'}</Text>
+        </Box>
+    );
+}
+
+// Le contenu du cockpit en lignes colorées (chalk), et la cible d'un clic (x, y) : indépendant du moteur d'affichage
+export function lignesCockpit(d: Donnees, largeur: number, hauteur: number): { lignes: string[]; cible: (x: number, y: number) => string | undefined } {
     const tic = Math.floor(Date.now() / 800);
     const L = largeur - 2;   // marge à gauche et à droite
 
@@ -257,18 +269,12 @@ export function Cockpit({ d, largeur, hauteur }: { d: Donnees; largeur: number; 
     // Clics : une ligne de « À faire » ouvre sa session, le panneau des sorties ouvre le journal
     const debutAFaire = hauteurTuiles + 1;
     const debutSorties = hauteurTuiles + hAFaire;
-    useCockpitCibles((x, y) => {
+    const cible = (x: number, y: number) => {
         if (!vGauche || x > nG + 1) return;
         if (y >= debutSorties && y < debutSorties + hSorties) return JOURNAL;
         return cibles[y - debutAFaire];
-    });
-
-    return (
-        <Box flexDirection="column" width={largeur} height={hauteur} paddingLeft={1}>
-            {lignes.slice(0, hauteur - 1).map((l, i) => <Text key={i} wrap="truncate-end">{l}</Text>)}
-            <Text wrap="truncate-end" color={fond.discret}>{'  clic sur « À faire » pour ouvrir la session · sur « Dernières sorties » pour le journal complet'}</Text>
-        </Box>
-    );
+    };
+    return { lignes, cible };
 }
 
 // Le dernier cockpit dessiné dit à quelle session correspond un clic (App.tsx le consulte)
