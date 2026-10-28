@@ -23,13 +23,25 @@ import { maitre, etatMaitre, prechauffer, demanderAuMaitre, DESTRUCTRICES } from
 import { Selecteur, Saisie } from './Selecteur.js';
 import { Laterale, cartesLaterales, X_TERMINAL } from './Laterale.js';
 import { VueJournal, VueSession, BarreHaut, largeurTitre, toutesLesLignes, lignesTranscript } from './Zones.js';
+import { Cockpit, sessionAuClic, JOURNAL } from './Cockpit.js';
+import { theme as themeCourant, degrade } from '../theme.js';
+
+// Ligne sous la barre du haut : un dégradé fin aux couleurs du thème, calculé une fois par largeur
+let cacheLigne = { cle: '', texte: '' };
+function ligneDegrade(n: number): string {
+    const cle = `${n}|${themeCourant.primaire}|${themeCourant.accent}`;
+    if (cacheLigne.cle !== cle) cacheLigne = { cle, texte: degrade('─'.repeat(n), themeCourant.primaire, themeCourant.accent) };
+    return cacheLigne.texte;
+}
 import { useDonnees, demarrerCollecte, rafraichirAgents, lireDonnees } from './donnees.js';
 import { serveursLateraux, miseLateraleDe, basculerRepli } from './sections.js';
 import { souris, Souris } from './terminal.js';
 import { quitterEcran } from './ecran.js';
 import { journal, lignesJournal, avecRetrait, vider } from './journal.js';
 import { imageDuPressePapiers, joindreImages, fichiersDeposes, EST_IMAGE } from './pressePapiers.js';
-import { calculerMise, miseLaterale, placerBoutons, boutonA, choisirLargeurLaterale, HAUT, CARTE, LATERAL_MIN } from './mise.js';
+import { lateraleADroite, COL_ACTIONS, ActionSession } from './mise.js';
+import { disposition } from './disposition.js';
+import { calculerMise, miseLaterale, placerBoutons, placerBoutonsLignes, nbRangees, boutonRangee, boutonA, choisirLargeurLaterale, HAUT, CARTE, LATERAL_MIN } from './mise.js';
 import { COMMANDES, config, executerLigne, getProjets, rafraichirProjets, trouverCommande } from '../commandes.js';
 import { chargerHistorique, ajouterHistorique, sauverConfig } from '../config.js';
 import { etatGitAsync, correspond, EtatGit } from '../projets.js';
@@ -40,30 +52,49 @@ import { theme, couleurProjet, c, fond } from '../theme.js';
 
 const SPINNER = ['✻', '✼', '✽', '✾', '✿', '❀', '✿', '✾', '✽', '✼'];
 
-// Seulement l'essentiel : Moniteur, Journal, Récents, Aide… sont dans le menu ≡ (et la palette Ctrl+K)
-export const BOUTONS_HAUT = [
-    { label: '≡ Menu', action: '/menu-principal' },
+// Seulement l'essentiel, une icône par vue ; le menu en dernier (il s'ouvre aussi avec Espace et au clic droit).
+// Moniteur, Journal, Récents, Aide… sont dans le menu ⋯ (et la palette Ctrl+K)
+const BOUTONS = [
     { label: '◉ Live', action: '/global' },
-    { label: 'Projets', action: '/projets' },
-    { label: 'Équipes', action: '/equipe' },
-    { label: 'Git', action: '/git' },
-    { label: 'Docker', action: '/docker' },
-    { label: 'SSH', action: '/ssh' },
-    { label: 'Config', action: '/config' },
+    { label: '▦ Projets', action: '/projets' },
+    { label: '◆ Équipes', action: '/equipe' },
+    { label: '⎇ Git', action: '/git' },
+    { label: '◫ Docker', action: '/docker' },
+    { label: '⇄ SSH', action: '/ssh' },
+    { label: '◈ Config', action: '/config' },
+    { label: '⋯', action: '/menu-principal' },
 ];
+// Liaison vivante : suit les icônes de la barre (/ecran)
+const boutonsHautActuels = () => (disposition().icones ? BOUTONS : BOUTONS.map((b) => (b.label === '⋯' ? b : { ...b, label: b.label.split(' ').slice(1).join(' ') })));
+export let BOUTONS_HAUT = boutonsHautActuels();
+bus.on('disposition', () => {
+    BOUTONS_HAUT = boutonsHautActuels();
+});
 
-// Boutons de la conversation ouverte. Revue et Commit agissent sur le projet de la session.
-// 4 boutons seulement : le reste (copier, revue, commit, VS Code, terminal…) est dans « ⋯ Actions » (et au clic droit)
-function boutonsSession(s: SessionVue) {
+// Nouveau style : toutes les actions de la session dans sa barre, sans menu à part (le texte reste visible)
+// La description s'affiche au survol (actions à gauche ou à droite)
+export function actionsSession(s: SessionVue): ActionSession[] {
     return [
-        { label: '← Retour', action: 'fermer' },
-        s.arrierePlan ? { label: '↵ Rejoindre', action: 'rejoindre' } : { label: '⑂ Continuer ici', action: 'copie' },
-        { label: '⋯ Actions', action: 'actions' },
-        { label: '✕ Fermer la session', action: 'fermer-session' },
+        { label: '← Retour', action: 'fermer', aide: 'Revenir au cockpit. La session continue de tourner.' },
+        s.arrierePlan
+            ? { label: '↵ Rejoindre', action: 'rejoindre', aide: 'Ouvrir cette session en plein écran pour lui écrire directement.' }
+            : { label: '⑂ Continuer ici', action: 'copie', aide: 'Reprendre cette conversation dans une nouvelle session d’arrière-plan.' },
+        { label: '⎘ Copier le code', action: 'copier-code', aide: 'Copier le dernier bloc de code de Claude dans le presse-papiers.' },
+        { label: '⎘ Copier la réponse', action: 'copier-reponse', aide: 'Copier la dernière réponse de Claude dans le presse-papiers.' },
+        { label: '⌕ Revue du diff', action: 'revue', aide: 'Faire relire par Claude les changements non commités du projet.' },
+        { label: '✓ Commit', action: 'commit', aide: 'Commiter les changements avec un message écrit par Claude.' },
+        { label: '◧ VS Code', action: 'code', aide: 'Ouvrir le dossier du projet dans VS Code.' },
+        { label: '▤ Dossier', action: 'dossier', aide: 'Ouvrir le dossier du projet dans l’explorateur Windows.' },
+        ...(terminaux().length ? [{ label: '❯ Terminal', action: 'terminal', aide: 'Ouvrir un terminal dans le dossier du projet.' }] : []),
+        ...(s.arrierePlan ? [{ label: '★ Favori', action: 'favori', aide: 'Garder cette session en favori pour la retrouver vite.' }] : []),
+        { label: '✕ Fermer la session', action: 'fermer-session', aide: 'Arrêter Claude dans cette session (elle reste reprenable plus tard).' },
     ];
 }
 
 function commandeSession(action: string, s: SessionVue): string | undefined {
+    if (action === 'copier-reponse') return `/copier-reponse ${s.sessionId}`;
+    if (action === 'dossier') return `/ouvrir ${s.cwd}`;
+    if (action === 'terminal') return `/terminal ${terminaux()[0]?.cle ?? ''} ${s.cwd}`;
     if (action === 'rejoindre') return `/rejoindre ${s.id}`;
     if (action === 'fermer-session') return `/fermer ${s.id ?? s.pid}`;
     if (action === 'copie') return `/copie ${s.sessionId}`;
@@ -194,6 +225,19 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     const [, setVersionMaitre] = useState(0);
     const [messages, setMessages] = useState<Message[]>([]);
     const [defilement, setDefilement] = useState(0);
+    // Le cockpit est l'accueil ; le journal complet s'ouvre pour un long résultat, un clic ou /journal
+    const [journalOuvert, setJournalOuvert] = useState(false);
+    // Disposition de l'écran (/ecran) : tout l'écran se redessine quand elle change
+    const [, setVersionDisposition] = useState(0);
+    useEffect(() => {
+        const f = () => setVersionDisposition((v) => v + 1);
+        bus.on('disposition', f);
+        return () => void bus.off('disposition', f);
+    }, []);
+    // Entre le lancement d'une commande et l'arrivée de sa vue, l'écran précédent reste affiché :
+    // sans ça le cockpit apparaît une fraction de seconde avant chaque vue
+    const attenteVue = useRef(0);
+    const dernierPrincipal = useRef<React.ReactNode>(null);
     const cibleDefilement = useRef(0);
     const animDefilement = useRef<NodeJS.Timeout>();
     const defilementActuel = useRef(0);
@@ -232,7 +276,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         return () => clearTimeout(t);
     }, [selection, demande, vueActive]);
     const [, setVersionMetriques] = useState(0);
-    const regardeServeurs = espace === 'serveurs' || detail?.type === 'serveur';
+    const regardeServeurs = detail?.type === 'serveur';
     useEffect(() => {
         if (!regardeServeurs) return;
         const f = () => setVersionMetriques((v) => v + 1);
@@ -284,7 +328,10 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         demarrerCollecte();
         const surResize = () => setTaille({ c: stdout.columns || 110, r: stdout.rows || 34 });
         const surJournal = () => setVersionJournal((v) => v + 1);
-        const surDemande = (d?: Demande) => setDemande(d);
+        const surDemande = (d?: Demande) => {
+            attenteVue.current = 0;
+            setDemande(d);
+        };
         const surTache = (t?: string) => setTache(t);
         stdout.on('resize', surResize);
         journal.on('maj', surJournal);
@@ -429,7 +476,16 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     const nbSugg = Math.min(8, suggestions.length);
 
     const boutonsHaut = placerBoutons(BOUTONS_HAUT, largeurTitre());
-    const boutonsS = session ? placerBoutons(boutonsSession(session), m.lateral) : [];
+    // Actions de la conversation : en colonne (gauche/droite), en rangées en haut, ou cachées (/ecran)
+    const posActions = disposition().actions;
+    const actionsS = session ? actionsSession(session) : [];
+    const boutonsS = !session || posActions !== 'haut' ? [] : placerBoutonsLignes(actionsS, m.lateral, m.principal - 1, 2);
+    // Colonne d'actions : quelle action est à cette position (x relatif à la zone principale)
+    const actionColonne = (xz: number, by: number): ActionSession | undefined => {
+        if (!session || (posActions !== 'gauche' && posActions !== 'droite')) return undefined;
+        const dedans = posActions === 'gauche' ? xz < COL_ACTIONS - 1 : xz > m.principal - COL_ACTIONS;
+        return dedans ? actionsS[by - 3] : undefined;
+    };
 
     function quitter() {
         quitterEcran();
@@ -442,7 +498,17 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         let texte = ligne.trim();
         const cmd = trouverCommande(texte.split(' ')[0]);
         if (cmd?.nom === 'exit') return quitter();
-        if (cmd?.nom === 'clear') return vider();
+        if (cmd?.nom === 'clear') {
+            setJournalOuvert(false);
+            return vider();
+        }
+        if (cmd?.nom === 'sorties') {
+            setSelection(undefined);
+            setDefilement(0);
+            return setJournalOuvert(true);
+        }
+        const avant = lignesJournal().length;
+        attenteVue.current = Date.now();
         if (texte && !cmd?.cache && !silencieux) {
             historique.unshift(texte);
             ajouterHistorique(texte);
@@ -467,7 +533,10 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             rafraichirProjets();
             rafraichirAgents();   // une session fermée, lancée ou relancée : sa carte suit tout de suite
             lireStatutAsync().then((s) => setStatut(siChange(s)));
+            attenteVue.current = 0;
             setOccupe(false);
+            // Un résultat trop long pour « Dernières sorties » s'ouvre en entier (Échap ramène au cockpit)
+            if (lignesJournal().length - avant > 8) setJournalOuvert(true);
             if (puisQuitter) setTimeout(quitter, 300);
         }
     }
@@ -736,8 +805,10 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             return undefined;
         }
         if (demande) return undefined;
-        if (by === 1 && session) {
-            const b = boutonA(boutonsS, x);
+        const ac = actionColonne(x - m.lateral, by);
+        if (ac) return `session:${ac.action}`;
+        if (session && by >= 1 && by <= nbRangees(boutonsS)) {
+            const b = boutonRangee(boutonsS, x, by - 1);
             return b ? `session:${b.action}` : undefined;
         }
         if (by === 1 && contenuOuvert) {
@@ -748,17 +819,24 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     }
 
     // Le gestionnaire souris est installé une fois : il lit toujours l'état et les fonctions du dernier rendu
-    const courant = { m, demande, occupe, session, suggestions, nbSugg, sugg, boutonsHaut, boutonsS, decalage, donnees, tache, lancer, ouvrirCarte, remplacer, setSelection, redimensionner, menuPour, ouvrirMenu, setModeMaitre, setVueActive, glisserVers, cibleDefilement, animDefilement, defilementActuel, espace, setEspace, ouvrirDetail, contenuOuvert, boutonsD, setSurvol, survol, cibleSurvol, pleinEcran };
+    const courant = { m, demande, occupe, session, suggestions, nbSugg, sugg, boutonsHaut, boutonsS, decalage, donnees, tache, lancer, ouvrirCarte, remplacer, setSelection, redimensionner, menuPour, ouvrirMenu, setModeMaitre, setVueActive, glisserVers, cibleDefilement, animDefilement, defilementActuel, espace, setEspace, ouvrirDetail, contenuOuvert, boutonsD, setSurvol, survol, cibleSurvol, pleinEcran, journalOuvert, actionColonne };
     const etatRef = useRef(courant);
     etatRef.current = courant;
 
     useEffect(() => {
-        const surSouris = (e: Souris) => {
+        const surSouris = (evenement: Souris) => {
+            let e = evenement;
             const { m, demande, occupe, session, suggestions, nbSugg, sugg, boutonsHaut, boutonsS, decalage, donnees, espace, setEspace, ouvrirDetail, contenuOuvert, boutonsD,
                 lancer, ouvrirCarte, remplacer, setSelection, redimensionner, menuPour, ouvrirMenu, setModeMaitre, setVueActive } = etatRef.current;
             const libre = !demande && !occupe;
             const by = e.y - HAUT;
             const molette = (e.bouton === 'molette-haut' ? 1 : e.bouton === 'molette-bas' ? -1 : 0) * (e.crans ?? 1);
+
+            // Colonne des sessions à droite : on ramène les positions du corps à « colonne à gauche, zone principale
+            // à droite », la disposition pour laquelle tout le reste est écrit
+            const divise = !etatRef.current.pleinEcran && m.lateral > 0;
+            const xBrut = e.x;
+            if (divise && lateraleADroite() && by >= 0 && by < m.corps) e = { ...e, x: e.x >= m.principal ? Math.max(0, e.x - m.principal - 1) : e.x + m.lateral };   // -1 : la ligne verticale est à gauche de la colonne
 
             // Survol : seulement quand ce qui est sous la souris change
             if (e.survol) {
@@ -766,17 +844,19 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                 if (id !== etatRef.current.survol) etatRef.current.setSurvol(id);
                 return;
             }
-            // Glisser la ligne verticale entre la colonne de gauche et la zone principale
+            // Glisser la ligne verticale entre la colonne des sessions et la zone principale
+            const largeurVoulue = lateraleADroite() ? m.largeur - xBrut : xBrut + 1;
             if (e.glisse) {
-                if (glisser.current) redimensionner(e.x + 1, false);
+                if (glisser.current) redimensionner(largeurVoulue, false);
                 return;
             }
             if (glisser.current && !e.appui) {
                 glisser.current = false;
-                redimensionner(e.x + 1, true);
+                redimensionner(largeurVoulue, true);
                 return;
             }
-            if (e.appui && e.bouton === 'gauche' && by >= 0 && by < m.corps && Math.abs(e.x - (m.lateral - 1)) <= 1) {
+            const ligneVerticale = lateraleADroite() ? m.principal : m.lateral - 1;
+            if (divise && e.appui && e.bouton === 'gauche' && by >= 0 && by < m.corps && Math.abs(xBrut - ligneVerticale) <= 1) {
                 glisser.current = true;
                 return;
             }
@@ -788,7 +868,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             if (demande && e.appui && ((e.bouton === 'gauche' && ailleurs) || e.bouton === 'droit')) {
                 if (demande.type === 'vue') demande.resoudre();
                 else demande.resoudre(undefined);
-                setTimeout(() => souris.emit('souris', e), 150);
+                setTimeout(() => souris.emit('souris', evenement), 150);
                 return;
             }
 
@@ -844,6 +924,13 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                     if (claude === 'deconnecte' && libre) return void lancer('/connexion-claude', false, true);
                     return setModeMaitre((v) => !v);
                 }
+                // En-tête Docker ou Serveurs SSH : replier / déplier
+                if (ml.afficheDocker && by === ml.ligneDocker) return void basculerRepli('docker').then(() => setTaille((t) => ({ ...t })));
+                if (ml.afficheServeurs && by === ml.ligneServeurs) return void basculerRepli('ssh').then(() => setTaille((t) => ({ ...t })));
+                const iServeur = by - ml.ligneServeurs - 1;
+                if (ml.afficheServeurs && iServeur >= 0 && iServeur < ml.nbServeurs) return ouvrirDetail({ type: 'serveur', cle: serveursLateraux(donnees)[iServeur].nom });
+                // Lignes Docker : ouvre la vue Docker
+                if (ml.nbDocker && by > ml.ligneDocker && by <= ml.ligneDocker + ml.nbDocker && libre) return void lancer('/docker', false, true);
                 return;
             }
 
@@ -877,16 +964,22 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                 if (libre) lancer(b.action, false, true);
                 return;
             }
-            if (session && by === 1) {
-                const b = boutonA(boutonsS, e.x);
+            if (!session && !contenuOuvert && !demande && !etatRef.current.journalOuvert) {
+                const cible = sessionAuClic(e.x - lateral, by);
+                if (cible === JOURNAL) {
+                    setDefilement(0);
+                    return setJournalOuvert(true);
+                }
+                if (cible) return void bus.emit('selectionner', cible);
+            }
+            const ac = session ? etatRef.current.actionColonne(e.x - lateral, by) : undefined;
+            const surBouton = session && by >= 1 && by <= nbRangees(boutonsS);
+            if (session && (ac || surBouton)) {
+                const b = ac ?? boutonRangee(boutonsS, e.x, by - 1);
                 if (!b) return;
                 if (b.action === 'fermer') {
                     appuyer('session:fermer');
                     return setSelection(undefined);
-                }
-                if (b.action === 'actions') {
-                    appuyer('session:actions');
-                    return void ouvrirMenu(menuPour(m.lateral + 1, 1));
                 }
                 const cmd = commandeSession(b.action, session);
                 if (cmd && libre) {
@@ -945,7 +1038,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         // Alt+T : ouvrir un terminal (PowerShell, cmd, Git Bash…)
         if (key.meta && input === 't') return void lancer('/terminal', false, true);
         // Alt+S / P / R / D : espaces Sessions, Projets, seRveurs SSH, Docker
-        if (key.meta && ['s', 'p', 'r', 'd'].includes(input)) return setEspace(({ s: 'sessions', p: 'projets', r: 'serveurs', d: 'docker' } as const)[input as 's']);
+        if (key.meta && ['s', 'p'].includes(input)) return setEspace(input === 's' ? 'sessions' : 'projets');
         // Alt+M : parler au maître (ou revenir)
         if (key.meta && input === 'm') return setModeMaitre((v) => !v);
         // Alt+1..9 : ouvrir la carte N
@@ -972,6 +1065,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             if (saisie) return setSaisie('');
             if (images.length) return setImages([]);
             if (modeMaitre) return setModeMaitre(false);
+            if (journalOuvert && !detail && !selection) return setJournalOuvert(false);
             if (detail) return ouvrirDetail(undefined);
             if (selection) return setSelection(undefined);
             return;
@@ -1013,23 +1107,39 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     } else if (demande?.type === 'vue') {
         principal = demande.rendu(demande.resoudre);
     } else if (session) {
-        principal = <VueSession s={session} messages={messages} boutons={boutonsS} largeur={m.principal} hauteur={hauteurPrincipale} defilement={defilement} git={gitSession} surligne={recherche ? saisie.trim() : undefined} cout={donnees.cout.parSession[session.sessionId]} survol={survol} />;
+        principal = <VueSession s={session} messages={messages} boutons={boutonsS} largeur={m.principal} hauteur={hauteurPrincipale} defilement={defilement} git={gitSession} surligne={recherche ? saisie.trim() : undefined} cout={donnees.cout.parSession[session.sessionId]} survol={survol}
+            colonne={posActions === 'gauche' || posActions === 'droite' ? { cote: posActions, liste: actionsS } : undefined} ecart={2} />;
     } else {
         principal = contenuOuvert
             ? <VueDetail contenu={contenuOuvert} boutons={boutonsD.map((b) => ({ ...b, x: b.x - m.lateral }))} largeur={m.principal} hauteur={hauteurPrincipale} survol={survol} />
-            : <VueJournal lignes={lignesJournal()} largeur={m.principal} hauteur={hauteurPrincipale} defilement={defilement} />;
+            : journalOuvert
+                ? (
+                    <Box flexDirection="column">
+                        <Box height={1} flexShrink={0} paddingLeft={1}>
+                            <Text bold color={theme.accent}>{'▤ JOURNAL '}<Text color={fond.discret}>Échap pour revenir au cockpit · molette pour défiler · /clear pour vider</Text></Text>
+                        </Box>
+                        <VueJournal lignes={lignesJournal()} largeur={m.principal} hauteur={hauteurPrincipale - 1} defilement={defilement} />
+                    </Box>
+                )
+                : <Cockpit d={donnees} largeur={m.principal} hauteur={hauteurPrincipale} />;
     }
+    const surCockpit = !demande && !session && !contenuOuvert && !journalOuvert;
+    if (surCockpit && attenteVue.current && Date.now() - attenteVue.current < 1500 && dernierPrincipal.current) principal = dernierPrincipal.current;
+    else dernierPrincipal.current = principal;
 
+    // Colonne des sessions : à gauche (par défaut), à droite ou cachée (/ecran)
+    const aDroite = lateraleADroite();
+    const laterale = (
+        <Laterale donnees={donnees} largeur={m.lateral} hauteur={m.corps} selection={selection} decalage={decalage} tic={tic} maitre={etatMaitre()} modeMaitre={modeMaitre} claude={lireEtatClaude().etat}
+            espace={espace} survol={survol} ouvert={detail ? `${detail.type}:${detail.cle}` : undefined} projets={getProjets()} cote={aDroite ? 'droite' : 'gauche'} />
+    );
     return (
         <Box flexDirection="column" width={m.largeur} height={m.hauteur} overflow="hidden">
             <BarreHaut boutons={boutonsHaut} largeur={m.largeur} vueActive={demande?.type === 'vue' ? vueActive : undefined} survol={survol}
                 droite={`${config.prenom || os.userInfo().username} · ${heure.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}`} />
-            <Box height={1} flexShrink={0}><Text color={fond.bordure}>{'─'.repeat(m.largeur)}</Text></Box>
+            <Box height={1} flexShrink={0}><Text>{ligneDegrade(m.largeur)}</Text></Box>
             <Box height={m.corps} flexShrink={0} overflow="hidden">
-                {!pleinEcran && (
-                    <Laterale donnees={donnees} largeur={m.lateral} hauteur={m.corps} selection={selection} decalage={decalage} tic={tic} maitre={etatMaitre()} modeMaitre={modeMaitre} claude={lireEtatClaude().etat}
-                        espace={espace} survol={survol} ouvert={detail ? `${detail.type}:${detail.cle}` : undefined} projets={getProjets()} />
-                )}
+                {!pleinEcran && m.lateral > 0 && !aDroite && laterale}
                 <Box flexDirection="column" width={pleinEcran ? m.largeur : m.principal} height={m.corps}>
                     <Box height={hauteurPrincipale} flexDirection="column" overflow="hidden">{principal}</Box>
                     {groupeQT && (
@@ -1060,6 +1170,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                         </Box>
                     )}
                 </Box>
+                {!pleinEcran && m.lateral > 0 && aDroite && laterale}
             </Box>
             <Box height={1} flexShrink={0} paddingX={2} width={m.largeur} overflow="hidden">
                 {notice

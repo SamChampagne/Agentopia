@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import { CLAUDE } from './claude.js';
+import { surPath } from './chemins.js';
 
 // Claude Code est-il installé et connecté ? Vérifié au démarrage, sans bloquer l'interface.
 // Sinon l'interface le dit (zone du maître) et propose de l'installer ou de se connecter, sans quitter l'app.
@@ -37,7 +38,7 @@ export async function verifierClaude(): Promise<EtatClaude> {
         return etat;
     }
     // Installé : claude.exe trouvé à l'emplacement npm, sinon dans le PATH (installateur natif…)
-    const present = CLAUDE !== 'claude' || (await sortie('where', ['claude'])).code === 0;
+    const present = CLAUDE !== 'claude' || !!surPath('claude');
     if (!present) {
         etat = 'absent';
     } else {

@@ -80,7 +80,6 @@ export function commandesApparence(config: Config): Commande[] {
             if (PALETTES[schema]) {
                 appliquerTheme(PALETTES[schema]);
                 config.theme = { ...PALETTES[schema] };
-                config.modeClair = false;
                 sauverConfig(config);
             }
             const r = creerRaccourci();

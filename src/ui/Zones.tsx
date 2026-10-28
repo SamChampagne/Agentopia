@@ -8,7 +8,7 @@ import { Box, Text } from 'ink';
 import { Message } from '../agents.js';
 import { SessionVue } from '../agents.js';
 import { EtatGit } from '../projets.js';
-import { Bouton } from './mise.js';
+import { Bouton, nbRangees, COL_ACTIONS, ActionSession } from './mise.js';
 import { theme, couleurProjet, c, fond, degrade } from '../theme.js';
 import { ligneMarkdown } from '../affichage.js';
 
@@ -96,11 +96,45 @@ export function lignesTranscript(messages: Message[], largeur: number): string[]
 }
 
 // Conversation d'une session, en direct, avec ses boutons (positions fournies par l'appelant)
-export function VueSession({ s, messages, boutons, largeur, hauteur, defilement, git, surligne, cout, survol }:
-    { s: SessionVue; messages: Message[]; boutons: Bouton[]; largeur: number; hauteur: number; defilement: number; git?: EtatGit; surligne?: string; cout?: number; survol?: string }) {
+// Colonne d'actions de la conversation (à gauche ou à droite, /ecran) : une action par ligne,
+// et sous la liste la description de celle qui est survolée. Lignes : titre (rangée 2 du corps), puis une par action.
+function ColonneActions({ liste, hauteur, survol, cote }: { liste: ActionSession[]; hauteur: number; survol?: string; cote: 'gauche' | 'droite' }) {
     const appui = useAppui();
-    const lignes = useMemo(() => lignesTranscript(messages, largeur - 2), [messages, largeur]);
-    const fen = fenetre(lignes, largeur - 2, hauteur - 3, defilement);
+    const interieur = COL_ACTIONS - 1;
+    const survolee = liste.find((a) => survol === `session:${a.action}`);
+    const aide = survolee ? wrapAnsi(survolee.aide, interieur - 2, { hard: true }).split('\n') : ['Survole une action', 'pour voir ce', 'qu’elle fait.'];
+    return (
+        <Box width={COL_ACTIONS} height={hauteur} flexShrink={0} flexDirection="column" overflow="hidden"
+            borderStyle="single" borderTop={false} borderBottom={false} borderLeft={cote === 'droite'} borderRight={cote === 'gauche'} borderColor={fond.bordure}>
+            <Box height={1} flexShrink={0}><Text bold color={theme.primaire}>{' ACTIONS'}</Text></Box>
+            {liste.map((a) => {
+                const actif = survol === `session:${a.action}`;
+                return (
+                    <Box key={a.action} height={1} flexShrink={0} overflow="hidden">
+                        <Text wrap="truncate-end" inverse={appui === `session:${a.action}`} backgroundColor={actif ? fond.selection : undefined} bold={actif}
+                            color={a.action === 'fermer-session' ? '#f87171' : actif ? theme.accent : a.action === 'fermer' ? fond.eteint : fond.texte}>
+                            {` ${a.label}`.padEnd(interieur)}
+                        </Text>
+                    </Box>
+                );
+            })}
+            <Box height={1} flexShrink={0} />
+            {aide.map((l, i) => <Box key={i} height={1} flexShrink={0}><Text color={survolee ? theme.secondaire : fond.discret} wrap="truncate-end">{` ${l}`}</Text></Box>)}
+        </Box>
+    );
+}
+
+export function VueSession({ s, messages, boutons, largeur, hauteur, defilement, git, surligne, cout, survol, colonne, ecart = 1 }:
+    { s: SessionVue; messages: Message[]; boutons: Bouton[]; largeur: number; hauteur: number; defilement: number; git?: EtatGit; surligne?: string; cout?: number; survol?: string;
+      colonne?: { cote: 'gauche' | 'droite'; liste: ActionSession[] }; ecart?: number }) {
+    const appui = useAppui();
+    // Colonne d'actions : la conversation prend le reste de la largeur
+    const largeurTexte = colonne ? largeur - COL_ACTIONS : largeur;
+    const lignes = useMemo(() => lignesTranscript(messages, largeurTexte - 2), [messages, largeurTexte]);
+    // Les boutons peuvent tenir sur plusieurs rangées ; aucune s'ils sont en colonne ou cachés
+    const rangees = nbRangees(boutons);
+    const corps = hauteur - 2 - rangees;
+    const fen = fenetre(lignes, largeurTexte - 2, corps, defilement);
     const visibles = surligne ? fen.visibles.map((l) => surligner(l, surligne)) : fen.visibles;
     return (
         <Box flexDirection="column" width={largeur} height={hauteur}>
@@ -124,12 +158,13 @@ export function VueSession({ s, messages, boutons, largeur, hauteur, defilement,
                     </Box>
                 )}
             </Box>
-            <Box height={1} flexShrink={0} overflow="hidden">
-                {boutons.map((b) => {
+            {Array.from({ length: rangees }, (_, r) => (
+            <Box key={r} height={1} flexShrink={0} overflow="hidden">
+                {boutons.filter((b) => (b.ligne ?? 0) === r).map((b) => {
                     const principal = b.action === 'rejoindre' || b.action === 'copie';
                     const appuye = appui === `session:${b.action}`;
                     return (
-                        <Box key={b.action} marginRight={1} flexShrink={0}>
+                        <Box key={b.action} marginRight={ecart} flexShrink={0}>
                             <Text inverse={appuye} backgroundColor={survol === `session:${b.action}` ? fond.panneauActif : fond.selection} bold={principal || survol === `session:${b.action}`}
                                 color={principal ? theme.accent : b.action === 'fermer-session' ? '#f87171' : theme.secondaire}>
                                 {` ${b.label} `}
@@ -138,9 +173,14 @@ export function VueSession({ s, messages, boutons, largeur, hauteur, defilement,
                     );
                 })}
             </Box>
+            ))}
             <Box height={1} flexShrink={0}><Text color={fond.bordure}>{'─'.repeat(largeur)}</Text></Box>
-            <Box paddingLeft={1}>
-                <Lignes lignes={visibles} hauteur={hauteur - 3} largeur={largeur - 2} />
+            <Box flexDirection="row" height={corps}>
+                {colonne?.cote === 'gauche' && <ColonneActions liste={colonne.liste} hauteur={corps} survol={survol} cote="gauche" />}
+                <Box paddingLeft={1} width={largeurTexte}>
+                    <Lignes lignes={visibles} hauteur={corps} largeur={largeurTexte - 2} />
+                </Box>
+                {colonne?.cote === 'droite' && <ColonneActions liste={colonne.liste} hauteur={corps} survol={survol} cote="droite" />}
             </Box>
         </Box>
     );
@@ -154,12 +194,20 @@ export function BarreHaut({ boutons, largeur, droite, vueActive, survol }: { bou
             <Box flexShrink={1} overflow="hidden">
                 <Text bold>{` ${degrade('✻ ' + titreBarre, theme.accent, theme.primaire)} `}</Text>
                 {boutons.map((b) => {
-                    // Sans fond : appuyé = inversé un instant · vue ouverte = couleur d'accent soulignée
                     const appuye = appui === `haut:${b.action}`;
                     const ouvert = vueActive === b.action;
+                    const survole = survol === `haut:${b.action}`;
+                    // Icône en couleur, vue ouverte en pastille pleine, survol sur fond de sélection
+                    // Sans icône (/ecran) : « Projets » seul ; « ⋯ » est une icône seule
+                    const [icone, ...mots] = b.label.includes(' ') || b.label === '⋯' ? b.label.split(' ') : ['', b.label];
+                    const texte = mots.join(' ');
+                    const fondB = ouvert || appuye ? theme.accent : survole ? fond.selection : undefined;
                     return (
                         <Box key={b.action} marginRight={1} flexShrink={0}>
-                            <Text inverse={appuye} color={ouvert || appuye ? theme.accent : survol === `haut:${b.action}` ? fond.texte : fond.eteint} bold={ouvert || survol === `haut:${b.action}`} underline={ouvert}>{` ${b.label} `}</Text>
+                            <Text backgroundColor={fondB} bold={ouvert || survole}>
+                                <Text color={ouvert || appuye ? fond.panneau : theme.secondaire}>{` ${icone}${icone && texte ? ' ' : ''}`}</Text>
+                                <Text color={ouvert || appuye ? fond.panneau : fond.texte}>{`${texte} `}</Text>
+                            </Text>
                         </Box>
                     );
                 })}

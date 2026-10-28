@@ -163,26 +163,52 @@ function resumerOutil(nom: string, entree: Record<string, unknown> = {}): string
     return `${nom}  ${detail.replace(/\s+/g, ' ')}`.trim();
 }
 
-// Lit la fin du fichier (les transcripts font parfois plusieurs Mo)
-function lireFin(fichier: string, octets: number): string {
+// Lit les octets [debut, fin) du fichier, jusqu'au dernier saut de ligne (une ligne en cours d'écriture attend la prochaine lecture)
+function lireLignes(fichier: string, debut: number, fin: number): { texte: string; jusqua: number } {
+    const fd = fs.openSync(fichier, 'r');
     try {
-        const taille = fs.statSync(fichier).size;
-        const debut = Math.max(0, taille - octets);
-        const fd = fs.openSync(fichier, 'r');
-        const tampon = Buffer.alloc(taille - debut);
-        fs.readSync(fd, tampon, 0, tampon.length, debut);
+        const tampon = Buffer.alloc(fin - debut);
+        const lus = fs.readSync(fd, tampon, 0, tampon.length, debut);
+        const dernier = tampon.lastIndexOf(0x0a, lus - 1);
+        return dernier < 0 ? { texte: '', jusqua: debut } : { texte: tampon.toString('utf-8', 0, dernier), jusqua: debut + dernier + 1 };
+    } finally {
         fs.closeSync(fd);
-        const texte = tampon.toString('utf-8');
-        return debut > 0 ? texte.slice(texte.indexOf('\n') + 1) : texte;   // ligne coupée au début
-    } catch {
-        return '';
     }
 }
 
+// Lecture incrémentale : une session ouverte est relue chaque seconde, seules les lignes ajoutées depuis sont décodées
+const transcripts = new Map<string, { jusqua: number; messages: Message[] }>();
+const MESSAGES_MAX = 5000;
+
 // Les sessions commencent par un gros contexte (~450 Ko) : on lit assez loin pour garder le début de la conversation
 export function lireTranscript(fichier: string, octets = 2_000_000): Message[] {
+    const cle = `${octets}|${fichier}`;
+    try {
+        const taille = fs.statSync(fichier).size;
+        const connu = transcripts.get(cle);
+        if (connu && taille >= connu.jusqua) {
+            if (taille === connu.jusqua) return connu.messages;
+            const { texte, jusqua } = lireLignes(fichier, connu.jusqua, taille);
+            if (texte) connu.messages = [...connu.messages, ...decoderTranscript(texte)].slice(-MESSAGES_MAX);
+            connu.jusqua = jusqua;
+            return connu.messages;
+        }
+        // Première lecture (ou fichier réécrit) : la fin seulement, sans la ligne coupée au début
+        const debut = Math.max(0, taille - octets);
+        let { texte, jusqua } = lireLignes(fichier, debut, taille);
+        if (debut > 0) texte = texte.slice(texte.indexOf('\n') + 1);
+        if (transcripts.size > 60) transcripts.clear();
+        const messages = decoderTranscript(texte);
+        transcripts.set(cle, { jusqua, messages });
+        return messages;
+    } catch {
+        return [];
+    }
+}
+
+function decoderTranscript(texte: string): Message[] {
     const messages: Message[] = [];
-    for (const ligne of lireFin(fichier, octets).split('\n')) {
+    for (const ligne of texte.split('\n')) {
         if (!ligne.includes('"type":"user"') && !ligne.includes('"type":"assistant"')) continue;
         let o;
         try {

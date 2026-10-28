@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import { couleurProjet } from './theme.js';
+import { surPath } from './chemins.js';
 
 // Terminaux qu'on peut ouvrir dans un dossier : PowerShell, cmd, Git Bash, WSL…
 // Dans un nouvel onglet Windows Terminal si présent, sinon dans une nouvelle fenêtre.
@@ -14,7 +15,7 @@ export interface Terminal {
 }
 
 const existe = (p: string | undefined): p is string => !!p && fs.existsSync(p);
-const trouver = (cmd: string) => spawnSync('where', [cmd], { encoding: 'utf-8' }).stdout?.split(/\r?\n/)[0]?.trim() || undefined;
+const trouver = surPath;
 const PROGRAMMES = process.env.ProgramFiles ?? 'C:\\Program Files';
 
 let connus: Terminal[] | undefined;

@@ -45,7 +45,7 @@ if (etapes.includes('base')) {
     const retour = placerBoutons([{ label: '← Retour', action: 'fermer' }], m.lateral)[0];
     await clic(retour.x + 2, 2 + 1);
     ecran('Clic sur ← Retour');
-    const haut = [enHaut('Menu'), enHaut('Projets')];
+    const haut = [BARRE.find((b) => b.action === '/menu-principal'), enHaut('Projets')];
     await clic(haut[1].x + 2, 0, 1000);
     ecran('Clic sur « Projets » (barre du haut)');
     await molette(m.lateral + 10, 10, 'molette-haut');
@@ -62,7 +62,7 @@ if (etapes.includes('base')) {
     ecran('Clic sur la suggestion');
 }
 if (etapes.includes('vues')) {
-    const haut = [enHaut('Menu'), enHaut('Projets'), enHaut('Moniteur'), enHaut('Docker'), enHaut('SSH')];
+    const haut = [BARRE.find((b) => b.action === '/menu-principal'), enHaut('Projets'), enHaut('Moniteur'), enHaut('Docker'), enHaut('SSH')];
     await attendre(4000);   // laisse le temps à docker ps / docker stats
     ecran('Accueil avec section Docker');
     await clic(haut[3].x + 2, 0, 1500);
@@ -78,14 +78,14 @@ if (etapes.includes('vues')) {
     ecran('Vue SSH : clic sur le 2e serveur');
 }
 if (etapes.includes('git')) {
-    const haut = [enHaut('Menu'), enHaut('Projets'), enHaut('Moniteur'), enHaut('Git')];
+    const haut = [BARRE.find((b) => b.action === '/menu-principal'), enHaut('Projets'), enHaut('Moniteur'), enHaut('Git')];
     await clic(haut[3].x + 1, 0, 9000);
     ecran('Vue Git');
     await clic(m.lateral + 6, 2 + 3 + 2, 1500);   // 3e dépôt
     ecran('Vue Git : clic sur le 3e dépôt');
 }
 if (etapes.includes('projets')) {
-    const haut = [enHaut('Menu'), enHaut('Projets'), enHaut('Moniteur'), enHaut('Git')];
+    const haut = [BARRE.find((b) => b.action === '/menu-principal'), enHaut('Projets'), enHaut('Moniteur'), enHaut('Git')];
     await attendre(4000);   // la synchro git démarre en fond
     await clic(haut[1].x + 2, 0, 800);
     ecran('Vue Projets');
@@ -149,7 +149,7 @@ if (etapes.includes('config')) {
     const os = await import('os');
     const fichier = os.homedir() + "/.claudetopia.json";
     const sauvegarde = fs.readFileSync(fichier, 'utf-8');
-    const haut = [enHaut('Menu'), enHaut('Projets'), enHaut('Moniteur'), enHaut('Git'), enHaut('Docker'), enHaut('SSH'), enHaut('Journal'), enHaut('Récents'), enHaut('Config')];
+    const haut = [BARRE.find((b) => b.action === '/menu-principal'), enHaut('Projets'), enHaut('Moniteur'), enHaut('Git'), enHaut('Docker'), enHaut('SSH'), enHaut('Journal'), enHaut('Récents'), enHaut('Config')];
     await clic(haut[8].x + 2, 0, 4000);
     ecran('Vue Configuration');
     await touche(ECHAP, 500);
@@ -172,7 +172,7 @@ if (etapes.includes('session')) {
     ecran('Touche ? : aide');
 }
 if (etapes.includes('jetons')) {
-    const haut = [enHaut('Menu'), enHaut('Projets'), enHaut('Moniteur'), enHaut('Git')];
+    const haut = [BARRE.find((b) => b.action === '/menu-principal'), enHaut('Projets'), enHaut('Moniteur'), enHaut('Git')];
     await clic(haut[3].x + haut[3].largeur - 1, 0, 9000);   // tout au bout du bouton Git (là où le clic échouait)
     ecran('Vue Git (clic au bout du bouton)');
     const b = placerBoutons(['↻ Fetch tout', '⇡ Pousser', '⇣ Tirer', '◷ PR', '⧉ Web', '⚿ Jetons'].map((label) => ({ label, action: label })), 0)[5];
@@ -191,7 +191,7 @@ if (etapes.includes('envoi')) {
     ecran('Après envoi du 2e message');
 }
 if (etapes.includes('menu')) {
-    const haut = [enHaut('Menu'), enHaut('Projets')];
+    const haut = [BARRE.find((b) => b.action === '/menu-principal'), enHaut('Projets')];
     await clic(haut[0].x + 2, 0, 800);
     ecran('Menu ouvert');
     await clic(5, 2 + 1 + 1, 1500);          // 1re carte pendant que le menu est ouvert

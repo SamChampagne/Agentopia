@@ -8,12 +8,12 @@ import { demarrerNotifications } from './commandes.js';
 import { premierLancement, chargerConfig } from './config.js';
 import { choisirLargeurLaterale, choisirTailleCartes } from './ui/mise.js';
 import './chemins.js';
-import { remplacerAncienRaccourci } from './configCommandes.js';
+import { remplacerAncienRaccourci, prechargerBureau } from './configCommandes.js';
 
 // "sp commit saniplan" : exécute la commande dans l'interface puis quitte
 const commandeInitiale = process.argv.slice(2).join(' ').trim() || undefined;
-// Première fois : l'assistant de scan configure les projets
-let auDemarrage = premierLancement ? '/scan' : undefined;
+// Première fois sur ce poste : l'assistant demande l'essentiel (prénom, disposition, thème, sessions, projets, connexions)
+let auDemarrage = premierLancement ? '/bienvenue' : undefined;
 
 capturerConsole();
 choisirLargeurLaterale(chargerConfig().largeurLaterale);
@@ -21,6 +21,8 @@ choisirTailleCartes(!!chargerConfig().cartesDetaillees);
 if (!commandeInitiale) demarrerNotifications();
 // Premier lancement après le changement de nom : le raccourci « CLI Perso » devient « Claudetopia »
 setTimeout(remplacerAncienRaccourci, 3000);
+// Dossier du bureau lu en fond : la vue Config s'ouvre sans attendre PowerShell
+setTimeout(prechargerBureau, 3500);
 // Notifications cliquables : le lien claudetopia: ouvre la session concernée
 // (le lien lui-même s'active dans le centre de connexions)
 setTimeout(() => void import('./notifications.js').then((n) => n.surveillerLiens()), 2000);

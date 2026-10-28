@@ -1,3 +1,4 @@
+import { commandesAssistant } from './assistantCommandes.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -815,8 +816,10 @@ export const COMMANDES: Commande[] = [
     ...commandesSurveillance(),
     ...commandesExport(config),
     ...commandesApparence(config),
+    ...commandesAssistant(config),
     { nom: 'aide', alias: ['help', '?'], groupe: 'Config', description: 'Cette aide', executer: afficherAide },
-    { nom: 'clear', alias: ['cls'], groupe: 'Config', description: 'Effacer l\'écran', executer: () => { /* géré par l'interface */ } },
+    { nom: 'clear', alias: ['cls'], groupe: 'Config', description: 'Vider le journal et revenir au cockpit', executer: () => { /* géré par l'interface */ } },
+    { nom: 'sorties', groupe: 'Config', description: 'Voir le journal complet des commandes (Échap pour revenir)', executer: () => { /* géré par l'interface */ } },
     { nom: 'exit', alias: ['quit', 'q'], groupe: 'Config', description: 'Quitter', executer: () => { /* géré par l'interface */ } },
 ];
 

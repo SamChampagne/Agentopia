@@ -152,22 +152,6 @@ export function commandesPlus(config: Config): Commande[] {
             },
         },
         {
-            nom: 'mode', args: '<clair|sombre>', groupe: 'Config',
-            description: 'Fond du terminal : sombre (défaut) ou clair (terminal à fond blanc)',
-            executer: async ({ args }) => {
-                const { appliquerMode, appliquerTheme, PALETTES, c } = await import('./theme.js');
-                const clair = args[0] ? args[0] === 'clair' : !config.modeClair;
-                config.modeClair = clair;
-                appliquerMode(clair);
-                // En clair, des couleurs foncées pour rester lisible ; en sombre, la palette par défaut
-                const palette = clair ? PALETTES['Clair'] : PALETTES['Océan'];
-                appliquerTheme(palette);
-                config.theme = { ...palette };
-                await sauver();
-                console.log(c.succes(`Mode ${clair ? 'clair' : 'sombre'} · /theme pour une autre palette`));
-            },
-        },
-        {
             nom: 'cartes', args: '<compactes|detaillees>', groupe: 'Config',
             description: 'Cartes de session : compactes (2 lignes) ou détaillées (3 lignes, avec ta dernière demande)',
             executer: async ({ args }) => {

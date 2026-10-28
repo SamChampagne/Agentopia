@@ -23,6 +23,11 @@ await w(Number(process.env.ATTENTE ?? 7000));
 // Un long journal, pour que la molette ait quelque chose à faire défiler
 for (let i = 0; i < 2000; i++) console.log(`ligne ${i} [36mavec couleur[0m et un texte assez long pour remplir la largeur de la zone principale ${'·'.repeat(i % 80)}`);
 await w(1500);
+// L'accueil est le cockpit : on ouvre le journal complet, sinon la molette n'a rien à faire défiler
+taper('/sorties');
+await w(300);
+taper('\r');
+await w(1500);
 const m = calculerMise(COLS, ROWS);
 async function mesurer(nom, action, n = 10) {
     const delais = []; let octets = 0;

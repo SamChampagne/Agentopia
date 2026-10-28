@@ -1,4 +1,11 @@
 import stringWidth from 'string-width';
+import { disposition } from './disposition.js';
+
+// Où est la colonne des sessions (/ecran)
+export const lateraleCachee = () => disposition().laterale === 'cachee';
+export const lateraleADroite = () => disposition().laterale === 'droite';
+// Largeur de la colonne d'actions d'une conversation (actions à gauche ou à droite)
+export const COL_ACTIONS = 22;
 
 // Géométrie de l'écran plein : tout est calculé ici pour que les clics retrouvent
 // exactement ce qui est affiché (Ink ne donne pas la position absolue des éléments).
@@ -33,7 +40,8 @@ export function calculerMise(colonnes: number, lignes: number): Mise {
     const largeur = Math.max(70, colonnes - 2);
     const hauteur = Math.max(20, lignes - 1);
     const auto = Math.max(34, Math.min(48, Math.floor(largeur * 0.33)));
-    const lateral = largeurChoisie ? Math.max(LATERAL_MIN, Math.min(largeur - 50, largeurChoisie)) : auto;
+    // La colonne des sessions peut être cachée (/ecran)
+    const lateral = lateraleCachee() ? 0 : largeurChoisie ? Math.max(LATERAL_MIN, Math.min(largeur - 50, largeurChoisie)) : auto;
     return { largeur, hauteur, corps: hauteur - HAUT - BAS, lateral, principal: largeur - lateral };
 }
 
@@ -95,6 +103,7 @@ export interface Bouton {
     action: string;
     x: number;
     largeur: number;
+    ligne?: number;   // rangée (0 = la première) quand les boutons passent sur plusieurs lignes
 }
 
 // Place des boutons sur une ligne à partir de x ; renvoie leur position pour les clics.
@@ -108,6 +117,25 @@ export function placerBoutons(boutons: { label: string; action: string }[], x0: 
         return bouton;
     });
 }
+
+// Comme placerBoutons, mais ce qui dépasse la largeur passe à la rangée suivante
+export interface ActionSession { label: string; action: string; aide: string }
+
+export function placerBoutonsLignes(boutons: { label: string; action: string }[], x0: number, largeurMax: number, ecart = 1): Bouton[] {
+    let x = x0, ligne = 0;
+    return boutons.map((b) => {
+        const largeur = stringWidth(b.label) + 2;
+        if (x > x0 && x + largeur > x0 + largeurMax) {
+            x = x0;
+            ligne++;
+        }
+        const bouton = { ...b, x, largeur, ligne };
+        x += largeur + ecart;
+        return bouton;
+    });
+}
+export const nbRangees = (boutons: Bouton[]) => (boutons.length ? Math.max(...boutons.map((b) => b.ligne ?? 0)) + 1 : 0);
+export const boutonRangee = (boutons: Bouton[], x: number, rangee: number) => boutonA(boutons.filter((b) => (b.ligne ?? 0) === rangee), x);
 
 // Un clic sur l'espace entre deux boutons compte pour celui de gauche
 export const boutonA = (boutons: Bouton[], x: number) => boutons.find((b) => x >= b.x && x <= b.x + b.largeur);

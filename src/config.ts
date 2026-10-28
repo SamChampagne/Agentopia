@@ -24,9 +24,9 @@ export interface Config {
     equipe: { parallele: number; permissions: string };   // équipes d'agents : agents en même temps, mode de permissions
     sectionsMasquees: string[];         // sections de la colonne de gauche masquées (docker, ssh)
     sectionsRepliees?: string[];        // sections repliées (en-tête seul) ; par défaut : ssh
-    modeClair?: boolean;                // terminal à fond blanc : fonds et bordures clairs
     cartesDetaillees?: boolean;         // cartes de session sur 3 lignes (avec ta dernière demande)
     planifications?: import('./planificateur.js').Planification[];   // tâches planifiées (/planifier)
+    ecran?: import('./ui/disposition.js').Disposition;   // disposition de l'écran (/ecran)
     budgetJour?: number;                // alerte au-delà de ce coût du jour en $ (équivalent API) ; 0 = aucune
     maitre: { actif: boolean; modele: string; veille?: number };   // veille : minutes d'inactivité avant de libérer sa mémoire (0 = jamais)
     sftp: import('./sftp.js').ConnexionSftp[];   // connexions SFTP (le mot de passe est chiffré à part)   // l'agent maître (gère les sessions) : haiku = rapide
@@ -69,6 +69,12 @@ export function chargerConfig(): Config {
     try {
         const brut = JSON.parse(fs.readFileSync(CHEMIN_CONFIG, 'utf-8'));
         const config = { ...CONFIG_DEFAUT, ...brut, theme: { ...CONFIG_DEFAUT.theme, ...brut.theme } };
+        // L'ancien mode clair n'existe plus : sa palette (couleurs foncées) est illisible sur fond sombre
+        if ('modeClair' in brut) {
+            if (brut.modeClair) config.theme = { ...CONFIG_DEFAUT.theme };
+            delete config.modeClair;
+            sauverConfig(config);
+        }
         // Écrit les nouvelles clés dans le fichier pour qu'elles soient faciles à modifier
         if (Object.keys(CONFIG_DEFAUT).some((k) => !(k in brut))) sauverConfig(config);
         return config;

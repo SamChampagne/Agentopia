@@ -10,6 +10,7 @@ import { lireSynchro } from './synchro.js';
 import { lireHotes, clesDisponibles } from './sshConfig.js';
 import { lireAcces } from './ssh.js';
 import { lireDonnees } from './ui/donnees.js';
+import { surPath } from './chemins.js';
 
 // Tout ce que Claudetopia peut connecter, avec son état et l'action qui le règle en un clic.
 // Les vérifications tournent en parallèle ; les plus lentes (API, versions) sont mises en cache.
@@ -37,7 +38,7 @@ const sortie = (programme: string, args: string[]): Promise<{ code: number | nul
         ok({ code, texte: texte.trim() });
     });
 });
-const present = async (cmd: string) => (await sortie('where', [cmd])).code === 0;
+const present = async (cmd: string) => !!surPath(cmd);
 
 // ─── Comptes Git en ligne : à qui appartient ce jeton ? ──────────────────────
 

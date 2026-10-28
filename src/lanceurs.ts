@@ -1,9 +1,10 @@
 import * as path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import { couleurProjet } from './theme.js';
+import { surPath } from './chemins.js';
 
 // PowerShell 7 si dispo, sinon Windows PowerShell
-const SHELL = spawnSync('where', ['pwsh']).status === 0 ? 'pwsh' : 'powershell';
+const SHELL = surPath('pwsh') ? 'pwsh' : 'powershell';
 
 // -EncodedCommand évite tous les problèmes de guillemets / ; avec wt
 function encoder(commande: string): string {
@@ -54,7 +55,8 @@ export function executer(commande: string, dossier: string, surLigne: (ligne: st
 export function copier(texte: string): void {
     const b64 = Buffer.from(texte, 'utf-8').toString('base64');
     const script = `Set-Clipboard -Value ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))`;
-    spawnSync(SHELL, ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoder(script)]);
+    // Sans attendre : PowerShell met près d'une seconde à démarrer, l'interface ne doit pas figer
+    spawn(SHELL, ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoder(script)], { stdio: 'ignore', windowsHide: true }).on('error', () => {});
 }
 
 // Lance un programme GUI sans attendre (code, explorer...)

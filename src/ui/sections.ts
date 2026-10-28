@@ -39,5 +39,5 @@ export async function basculerRepli(s: Section): Promise<void> {
 }
 
 // Géométrie de la colonne de gauche pour ces données : la même pour l'affichage et pour les clics
-// (Docker et SSH ont maintenant leur propre espace de travail : l'espace Sessions n'a que les cartes et le maître)
-export const miseLateraleDe = (corps: number, d: Donnees) => miseLaterale(corps, 0, 0, {}, cartesLaterales(d).length);
+export const miseLateraleDe = (corps: number, d: Donnees) =>
+    miseLaterale(corps, serveursLateraux(d).length, dockerLateral(d).length, { docker: repliees.has('docker'), ssh: repliees.has('ssh') }, cartesLaterales(d).length);

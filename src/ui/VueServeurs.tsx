@@ -6,7 +6,8 @@ import { useTailleVue, useClicsVue, LigneBoutons, Separateur, Titre } from './Vu
 import { serveursPertinents, ilYa } from './Panneau.js';
 import { placerBoutons, boutonA } from './mise.js';
 import { Serveur, testerAcces, lireAcces, sauverAcces } from '../ssh.js';
-import { chargerConfig, sauverConfig } from '../config.js';
+import { sauverConfig } from '../config.js';
+import { config } from '../commandes.js';
 import { nomDossierClaude } from '../usage.js';
 import { ouvrirOnglet } from '../lanceurs.js';
 import { getProjets } from '../commandes.js';
@@ -45,7 +46,6 @@ export function VueServeurs({ fermer, initial }: { fermer: () => void; initial?:
     const [choix, setChoix] = useState<string | undefined>(initial);
     const [message, setMessage] = useState('');
     const [debut, setDebut] = useState(0);
-    const config = chargerConfig();
 
     const liste = tous ? d.serveurs : serveursPertinents(d);
     const courant = liste.find((s) => s.nom === choix) ?? liste[0];

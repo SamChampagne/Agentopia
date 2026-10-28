@@ -57,7 +57,7 @@ export function lireCoutJour(): CoutJour {
     return etat;
 }
 
-// Asynchrone : une pause après chaque fichier lu, la première lecture du jour ne fige pas l'interface
+// Asynchrone : lu par morceaux avec une pause entre chacun, la première lecture du jour ne fige pas l'interface
 export async function mettreAJourCout(): Promise<CoutJour> {
     const jour = cleJour();
     if (jour !== etat.jour) {
@@ -89,42 +89,69 @@ export async function mettreAJourCout(): Promise<CoutJour> {
                 continue;
             }
             if (st.mtime < minuit) continue;
-            const deja = lus.get(chemin) ?? 0;
-            if (st.size <= deja) continue;
-            await new Promise((r) => setImmediate(r));
-            // Seulement la partie nouvelle du fichier
-            const fd = fs.openSync(chemin, 'r');
-            const tampon = Buffer.alloc(st.size - deja);
-            fs.readSync(fd, tampon, 0, tampon.length, deja);
-            fs.closeSync(fd);
-            const texte = tampon.toString('utf-8');
-            const fin = texte.lastIndexOf('\n');
-            if (fin < 0) continue;
-            lus.set(chemin, deja + Buffer.byteLength(texte.slice(0, fin + 1)));
-            const session = f.slice(0, -6);
-            for (const ligne of texte.slice(0, fin).split('\n')) {
-                if (!ligne.includes('"usage"') || !ligne.includes('"assistant"')) continue;
-                try {
-                    const o = JSON.parse(ligne);
-                    const u: Usage | undefined = o.message?.usage;
-                    const id = o.message?.id;
-                    if (!u || !id || vus.has(id) || new Date(o.timestamp) < minuit) continue;
-                    vus.add(id);
-                    const cout = coutMessage(String(o.message.model ?? ''), u);
-                    const jetons = (u.input_tokens ?? 0) + (u.output_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-                    etat.total += cout;
-                    etat.jetons += jetons;
-                    const s = etat.parSession.get(session) ?? { cout: 0, jetons: 0 };
-                    s.cout += cout;
-                    s.jetons += jetons;
-                    etat.parSession.set(session, s);
-                } catch {
-                    // ligne illisible
+            if (st.size <= (lus.get(chemin) ?? 0)) continue;
+            // Seulement la partie nouvelle, par morceaux lus sans bloquer (un transcript du jour fait parfois des dizaines de Mo)
+            const fichier = await fs.promises.open(chemin, 'r').catch(() => undefined);
+            if (!fichier) continue;
+            try {
+                let taille = MORCEAU;
+                while (true) {
+                    const deja = lus.get(chemin) ?? 0;
+                    const reste = st.size - deja;
+                    if (reste <= 0) break;
+                    const tampon = Buffer.alloc(Math.min(taille, reste));
+                    const { bytesRead } = await fichier.read(tampon, 0, tampon.length, deja);
+                    const fin = tampon.lastIndexOf(0x0a, bytesRead - 1);
+                    if (fin < 0) {
+                        // Une ligne plus longue que le morceau : on relit plus grand ; sinon la dernière ligne s'écrit encore
+                        if (bytesRead < reste) taille *= 2;
+                        else break;
+                        continue;
+                    }
+                    taille = MORCEAU;
+                    lus.set(chemin, deja + fin + 1);
+                    compter(tampon.subarray(0, fin), f.slice(0, -6), minuit);
+                    await new Promise((r) => setImmediate(r));
                 }
+            } finally {
+                await fichier.close();
             }
         }
     }
     return etat;
+}
+
+const MORCEAU = 256 * 1024;
+
+const USAGE = Buffer.from('"usage"');
+
+// Cherche « "usage" » dans les octets et ne décode que ces lignes : le reste (sorties d'outils, fichiers lus) est l'essentiel du volume
+function compter(octets: Buffer, session: string, minuit: Date): void {
+    for (let i = octets.indexOf(USAGE); i >= 0;) {
+        const debut = octets.lastIndexOf(0x0a, i) + 1;
+        let fin = octets.indexOf(0x0a, i);
+        if (fin < 0) fin = octets.length;
+        const ligne = octets.toString('utf-8', debut, fin);
+        i = octets.indexOf(USAGE, fin);
+        if (!ligne.includes('"assistant"')) continue;
+        try {
+            const o = JSON.parse(ligne);
+            const u: Usage | undefined = o.message?.usage;
+            const id = o.message?.id;
+            if (!u || !id || vus.has(id) || new Date(o.timestamp) < minuit) continue;
+            vus.add(id);
+            const cout = coutMessage(String(o.message.model ?? ''), u);
+            const jetons = (u.input_tokens ?? 0) + (u.output_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+            etat.total += cout;
+            etat.jetons += jetons;
+            const s = etat.parSession.get(session) ?? { cout: 0, jetons: 0 };
+            s.cout += cout;
+            s.jetons += jetons;
+            etat.parSession.set(session, s);
+        } catch {
+            // ligne illisible
+        }
+    }
 }
 
 export const dollars = (n: number) => (n >= 100 ? `${Math.round(n)} $` : `${n.toFixed(2).replace('.', ',')} $`);

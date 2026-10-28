@@ -5,15 +5,8 @@ const config = chargerConfig();
 // Copie modifiable : le menu Configuration change le thème en direct (appliquerTheme)
 export const theme = { ...config.theme };
 
-// Fonds, bordures et textes discrets : sombres par défaut, clairs pour un terminal à fond blanc (/mode clair)
-const FONDS = {
-    sombre: { selection: '#1e293b', entete: '#172033', bordure: '#334155', discret: '#475569', eteint: '#64748b', texte: 'white', panneau: '#141a26', panneauActif: '#1f2a40' },
-    clair: { selection: '#dbeafe', entete: '#e2e8f0', bordure: '#cbd5e1', discret: '#94a3b8', eteint: '#94a3b8', texte: '#0f172a', panneau: '#f1f5f9', panneauActif: '#dbeafe' },
-};
-export const fond = { ...FONDS[config.modeClair ? 'clair' : 'sombre'] };
-export function appliquerMode(clair: boolean): void {
-    Object.assign(fond, FONDS[clair ? 'clair' : 'sombre']);
-}
+// Fonds, bordures et textes discrets (toujours sombres)
+export const fond = { selection: '#1e293b', entete: '#172033', bordure: '#334155', discret: '#475569', eteint: '#64748b', texte: 'white', panneau: '#141a26', panneauActif: '#1f2a40' };
 
 export const c = {
     primaire: chalk.hex(theme.primaire),
@@ -27,8 +20,6 @@ export const c = {
 };
 
 export const PALETTES: Record<string, typeof theme> = {
-    // Couleurs foncées : lisibles sur un terminal à fond blanc (avec /mode clair)
-    'Clair': { primaire: '#0369a1', secondaire: '#0e7490', accent: '#be185d' },
     'Catppuccin': { primaire: '#89b4fa', secondaire: '#94e2d5', accent: '#f5c2e7' },
     'Tokyo Night': { primaire: '#7aa2f7', secondaire: '#7dcfff', accent: '#bb9af7' },
     'Dracula': { primaire: '#bd93f9', secondaire: '#8be9fd', accent: '#ff79c6' },

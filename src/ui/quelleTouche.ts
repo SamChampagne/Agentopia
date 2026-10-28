@@ -16,8 +16,6 @@ export const ARBRE: Groupe = {
             nom: 'Espaces', enfants: {
                 s: { nom: 'Sessions', commande: 'espace:sessions' },
                 p: { nom: 'Projets', commande: 'espace:projets' },
-                r: { nom: 'Serveurs SSH', commande: 'espace:serveurs' },
-                d: { nom: 'Docker', commande: 'espace:docker' },
             },
         },
         s: {

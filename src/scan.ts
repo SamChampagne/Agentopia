@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { dossierSessions } from './sessions.js';
+import { surPath } from './chemins.js';
 
 // Dossiers jamais explorés (systèmes, dépendances, caches, sorties de build)
 const IGNORES = new Set([
@@ -219,5 +220,5 @@ export function outils(): Outil[] {
         { nom: 'GitHub CLI', commande: 'gh', installer: 'winget install GitHub.cli', role: 'PR ouvertes' },
         { nom: 'PowerShell 7', commande: 'pwsh', installer: 'winget install Microsoft.PowerShell', role: 'onglets (sinon Windows PowerShell)' },
     ];
-    return liste.map((o) => ({ ...o, present: spawnSync('where', [o.commande]).status === 0 }));
+    return liste.map((o) => ({ ...o, present: !!surPath(o.commande) }));
 }

@@ -32,11 +32,8 @@ await clic(5, 2 + 2);   // 1er projet
 voir('Panneau de détail du 1er projet', 2, 22, m.lateral - 2, COLS);
 taper('\x1b');
 await w(500);
-await clic(onglet('serveurs').x + 1, 2, 9000);
-voir('Onglet SSH (relevés des serveurs)', 2, 14, 0, 60);
-await clic(onglet('docker').x + 1, 2);
-voir('Onglet Docker', 2, 12, 0, 60);
 await clic(onglet('sessions').x + 1, 2);
+voir('Onglet Sessions : Docker et SSH en bas de la colonne', 0, ROWS, 0, 60);
 taper(' ');
 await w(500);
 voir('Espace : « Quelle touche ? »', ROWS - 14, ROWS, m.lateral - 2, COLS);

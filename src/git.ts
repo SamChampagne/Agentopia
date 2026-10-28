@@ -3,6 +3,7 @@ import * as path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import { Projet, estWorktree } from './projets.js';
 import { Hebergeur, jeton } from './jetons.js';
+import { surPath } from './chemins.js';
 
 // État git de tous les projets : ce qui reste à pousser / tirer, modifs, PR
 
@@ -96,25 +97,46 @@ export function trouverDepot(chemin: string): string | undefined {
     }
 }
 
+const derniersCommits = new Map<string, { oid: string; ok: boolean; sortie: string }>();
+
+// URL de « origin » lue dans .git/config (même résultat que git remote get-url origin, sans processus)
+function urlOrigin(dossier: string): string | undefined {
+    try {
+        const config = fs.readFileSync(path.join(dossier, 'config'), 'utf-8');
+        const section = /^\s*\[remote\s+"origin"\]\s*$([\s\S]*?)(?=^\s*\[|(?![\s\S]))/m.exec(config)?.[1] ?? '';
+        return /^\s*url\s*=\s*(.+?)\s*$/m.exec(section)?.[1];
+    } catch {
+        return undefined;
+    }
+}
+
 export async function lireDepot(projet: Projet): Promise<Depot | undefined> {
     const cheminGit = trouverDepot(projet.chemin);
     if (!cheminGit) return undefined;
-    const [statut, log, remote] = await Promise.all([
-        git(['status', '--porcelain=v2', '--branch'], cheminGit),
-        git(['log', '-1', '--format=%ct%x09%s'], cheminGit),
-        git(['remote', 'get-url', 'origin'], cheminGit),
-    ]);
+    // Un seul processus git par relecture : chaque lancement fige l'interface quelques ms sous Windows.
+    // Le dernier commit n'est relu que si HEAD a bougé, le remote vient de .git/config.
+    const statut = await git(['status', '--porcelain=v2', '--branch'], cheminGit);
     if (!statut.ok) return undefined;
     const lignes = statut.sortie.split('\n');
     const champ = (cle: string) => lignes.find((l) => l.startsWith(`# branch.${cle} `))?.slice(`# branch.${cle} `.length);
     const ab = /\+(\d+) -(\d+)/.exec(champ('ab') ?? '');
+    const oid = champ('oid') ?? '';
+    let log = derniersCommits.get(cheminGit);
+    if (log?.oid !== oid) {
+        log = { oid, ...await git(['log', '-1', '--format=%ct%x09%s'], cheminGit) };
+        derniersCommits.set(cheminGit, log);
+    }
     const [ts, ...sujet] = log.sortie.trim().split('\t');
     let dernierFetch: Date | undefined;
+    let dossier: string | undefined;
     try {
-        dernierFetch = fs.statSync(path.join(dossierGit(cheminGit), 'FETCH_HEAD')).mtime;
+        dossier = dossierGit(cheminGit);
+        dernierFetch = fs.statSync(path.join(dossier, 'FETCH_HEAD')).mtime;
     } catch {
         // jamais fetché
     }
+    const url = dossier ? urlOrigin(dossier) : undefined;
+    const remote = url ? { ok: true, sortie: url } : { ok: false, sortie: '' };
     return {
         projet,
         cheminGit,
@@ -175,7 +197,7 @@ export async function commitsAPousser(d: Depot): Promise<string[]> {
 // ─── Pull requests GitHub (via GitHub CLI, si installé et connecté) ──────────
 
 export function etatGh(): 'absent' | 'deconnecte' | 'connecte' {
-    if (spawnSync('where', ['gh']).status !== 0) return 'absent';
+    if (!surPath('gh')) return 'absent';
     return spawnSync('gh', ['auth', 'status'], { encoding: 'utf-8', timeout: 10_000 }).status === 0 ? 'connecte' : 'deconnecte';
 }
 

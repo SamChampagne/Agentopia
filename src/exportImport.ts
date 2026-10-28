@@ -21,7 +21,7 @@ interface Export {
 
 // Réglages copiés tels quels (les chemins et les secrets sont traités à part)
 const REGLAGES: (keyof Config)[] = ['banniere', 'prenom', 'theme', 'couleurs', 'notifications', 'prompts', 'lancement', 'equipe', 'maitre',
-    'fetchAuto', 'sectionsMasquees', 'sectionsRepliees', 'modeClair', 'cartesDetaillees', 'budgetJour', 'largeurLaterale', 'dockerDistant'];
+    'fetchAuto', 'sectionsMasquees', 'sectionsRepliees','cartesDetaillees', 'budgetJour', 'largeurLaterale', 'dockerDistant'];
 
 const nomDe = (chemin: string) => path.basename(chemin.replace(/[\\/]+$/, ''));
 

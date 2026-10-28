@@ -62,3 +62,29 @@ export function migrerAnciensFichiers(): boolean {
 
 // Fait dès le chargement de ce module : avant toute lecture de la config
 export const ANCIENS_REPRIS = migrerAnciensFichiers();
+
+// Programme trouvé dans le PATH, sans lancer « where » (chaque processus fige l'interface quelques ms sous Windows).
+// Chaque dossier du PATH est listé une fois (relisté après 30 s : un outil installé entre-temps est vu).
+let contenus: { date: number; dossiers: [string, Set<string>][] } | undefined;
+const norme = (f: string) => (process.platform === 'win32' ? f.toLowerCase() : f);   // Windows ignore la casse
+export function surPath(cmd: string): string | undefined {
+    if (!contenus || Date.now() - contenus.date > 30_000) {
+        contenus = {
+            date: Date.now(),
+            dossiers: (process.env.PATH ?? '').split(path.delimiter).filter(Boolean).map((d): [string, Set<string>] => {
+                try {
+                    return [d, new Set(fs.readdirSync(d).map(norme))];
+                } catch {
+                    return [d, new Set()];
+                }
+            }),
+        };
+    }
+    // Sous Windows, les extensions exécutables d'abord (« claude » sans extension est un script pour bash)
+    const extensions = process.platform === 'win32' ? [...(process.env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').toLowerCase().split(';').filter(Boolean), ''] : [''];
+    for (const [dossier, fichiers] of contenus.dossiers) {
+        const e = extensions.find((x) => fichiers.has(norme(cmd + x)));
+        if (e !== undefined) return path.join(dossier, cmd + e);
+    }
+    return undefined;
+}

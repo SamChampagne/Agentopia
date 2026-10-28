@@ -22,10 +22,10 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
         compteClaude().then(setClaude);
     }, []);
 
-    const config = chargerConfig();
-    const git = identiteGit();
-    const jetons = jetonsConfigures();
-    const raccourci = fs.existsSync(cheminRaccourci());
+    // Lus une fois à l'ouverture : git et le bureau lancent des processus, trop lents à chaque flèche
+    const [{ config, git, jetons, raccourci }] = useState(() => ({
+        config: chargerConfig(), git: identiteGit(), jetons: jetonsConfigures(), raccourci: fs.existsSync(cheminRaccourci()),
+    }));
 
     const lignes: Ligne[] = [
         { type: 'section', texte: 'COMPTES' },
@@ -44,9 +44,10 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
             valeur: jetons.includes(h) ? 'jeton enregistré (pull requests visibles)' : 'aucun jeton', couleur: jetons.includes(h) ? '#4ade80' : 'gray',
         })),
         { type: 'section', texte: 'INTERFACE' },
+        { type: 'reglage', label: 'Disposition de l’écran', valeur: 'sessions, actions, icônes, panneaux du cockpit', commande: '/ecran', aide: 'régler (avec aperçu)' },
+        { type: 'reglage', label: 'Assistant de départ', valeur: 'prénom, disposition, thème, sessions, projets, connexions', commande: '/bienvenue', aide: 'relancer' },
         { type: 'reglage', label: 'Thème', valeur: nomPalette(), couleur: theme.accent, commande: '/theme', aide: 'changer' },
         { type: 'reglage', label: 'Apparence du terminal', valeur: 'couleurs, police, transparence (profil Windows Terminal)', commande: '/apparence', aide: 'choisir' },
-        { type: 'reglage', label: 'Fond du terminal', valeur: config.modeClair ? 'clair' : 'sombre', commande: `/mode ${config.modeClair ? 'sombre' : 'clair'}`, aide: 'basculer' },
         { type: 'reglage', label: 'Cartes de session', valeur: config.cartesDetaillees ? 'détaillées (3 lignes)' : 'compactes (2 lignes)', commande: `/cartes ${config.cartesDetaillees ? 'compactes' : 'detaillees'}`, aide: 'basculer' },
         { type: 'reglage', label: 'Nom en haut à gauche', valeur: (config.banniere || 'CLAUDETOPIA').toUpperCase(), commande: '/nom', aide: 'modifier' },
         { type: 'reglage', label: 'Prénom', valeur: config.prenom || '(non défini)', commande: '/prenom', aide: 'modifier' },

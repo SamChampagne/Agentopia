@@ -13,6 +13,7 @@ import { definirTitre } from './ui/Zones.js';
 import { jetonsConfigures } from './jetons.js';
 import { PALETTES, appliquerTheme, nomPalette, c } from './theme.js';
 import { tableau, titre } from './affichage.js';
+import { surPath } from './chemins.js';
 
 // Dossier du CLI (dist/ est un niveau sous la racine du projet)
 // Commande externe sans bloquer l'interface (npm passe par le shell sous Windows)
@@ -60,18 +61,47 @@ export async function compteClaude(): Promise<CompteClaude> {
     }
 }
 
+// Lue dans ~/.gitconfig (deux « git config » synchrones figeaient l'interface ~250 ms) ; git seulement si rien n'y est
 export function identiteGit(): { nom: string; email: string } {
+    const dans = (texte: string, cle: string) => {
+        const section = /^\s*\[user\]\s*$([\s\S]*?)(?=^\s*\[|(?![\s\S]))/im.exec(texte)?.[1] ?? '';
+        return new RegExp(`^\\s*${cle}\\s*=\\s*"?(.*?)"?\\s*$`, 'im').exec(section)?.[1] ?? '';
+    };
+    const maison = process.env.HOME || os.homedir();
+    const texte = [path.join(maison, '.gitconfig'), path.join(process.env.XDG_CONFIG_HOME || path.join(maison, '.config'), 'git', 'config')]
+        .map((f) => {
+            try {
+                return fs.readFileSync(f, 'utf-8');
+            } catch {
+                return '';
+            }
+        }).join('\n');
+    const id = { nom: dans(texte, 'name'), email: dans(texte, 'email') };
+    if (id.nom || id.email) return id;
     const lire = (cle: string) => spawnSync('git', ['config', '--global', cle], { encoding: 'utf-8' }).stdout?.trim() ?? '';
     return { nom: lire('user.name'), email: lire('user.email') };
 }
 
-const present = (cmd: string) => spawnSync('where', [cmd]).status === 0;
+const present = (cmd: string) => !!surPath(cmd);
 
 // ─── Raccourci sur le bureau ─────────────────────────────────────────────────
 
+// Gardé en mémoire : PowerShell met une seconde à démarrer (lu en fond au lancement par prechargerBureau)
+let bureauConnu: string | undefined;
+const COMMANDE_BUREAU = ['-NoProfile', '-NonInteractive', '-Command', "[Environment]::GetFolderPath('Desktop')"];
+
 export function bureau(): string {
-    const res = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', "[Environment]::GetFolderPath('Desktop')"], { encoding: 'utf-8' });
-    return res.stdout?.trim() || path.join(os.homedir(), 'Desktop');
+    if (bureauConnu) return bureauConnu;
+    const res = spawnSync('powershell', COMMANDE_BUREAU, { encoding: 'utf-8' });
+    return (bureauConnu = res.stdout?.trim() || path.join(os.homedir(), 'Desktop'));
+}
+
+export function prechargerBureau(): void {
+    let sortie = '';
+    const p = spawn('powershell', COMMANDE_BUREAU, { windowsHide: true });
+    p.stdout.on('data', (b) => (sortie += b));
+    p.on('close', () => (bureauConnu ??= sortie.trim() || undefined));
+    p.on('error', () => {});
 }
 
 export function cheminRaccourci(): string {
@@ -97,7 +127,7 @@ export function remplacerAncienRaccourci(): void {
 // Ouvre le CLI dans Windows Terminal si présent (souris, couleurs), sinon dans cmd
 export function creerRaccourci(): { ok: boolean; message: string } {
     const lanceur = path.join(RACINE_CLI, 'Claudetopia.bat');
-    const wt = spawnSync('where', ['wt'], { encoding: 'utf-8' }).stdout?.split(/\r?\n/)[0]?.trim();
+    const wt = surPath('wt');
     // Avec le profil Windows Terminal « Claudetopia » (/apparence) : ses couleurs, sa police, sa transparence
     const profil = fs.existsSync(path.join(process.env.LOCALAPPDATA ?? '', 'Microsoft', 'Windows Terminal', 'Fragments', 'Claudetopia', 'claudetopia.json'));
     const [cible, args] = wt
