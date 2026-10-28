@@ -86,6 +86,26 @@ image = await ecran();
 image = await echap();
 verifier('Échap referme SSH', !image.includes('⇄ Se connecter'), image);
 
+// Git : ouvrir, se déplacer, refermer (ni f/p/l/c : fetch, push, pull, clone)
+image = await commande('/git');
+verifier('/git : vue Git (OpenTUI)', image.includes('GIT') && image.includes('↻ Fetch tout') && image.includes('⎇ '), image);
+mockInput.pressArrow('down');
+image = await ecran();
+verifier('Git : détail du dépôt choisi', image.includes('Pull requests :') || image.includes('Pas encore cloné'), image);
+image = await echap();
+verifier('Échap referme Git', !image.includes('↻ Fetch tout'), image);
+
+// Projets : les lettres filtrent ; Échap efface le filtre puis ferme (pas d'Entrée : elle ouvre les actions)
+image = await commande('/projets');
+verifier('/projets : vue Projets (OpenTUI)', image.includes('PROJETS') && image.includes('tape pour filtrer'), image);
+await mockInput.typeText('zzqx');
+image = await ecran();
+verifier('Projets : le filtre s’applique', image.includes('« zzqx »') && image.includes('aucun projet ne correspond'), image);
+image = await echap();
+verifier('Échap efface le filtre', image.includes('tape pour filtrer'), image);
+image = await echap();
+verifier('Échap referme Projets', !image.includes('tape pour filtrer'), image);
+
 image = await commande('/recents');
 verifier('/recents : vue pas encore migrée, annoncée', image.includes('pas encore passée à la nouvelle interface'), image);
 image = await echap();
