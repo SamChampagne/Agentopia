@@ -1,0 +1,15 @@
+{
+  "name": "claudetopia-tui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun app.tsx",
+    "bench": "bun bench.tsx",
+    "test:reseau": "bun test-reseau.mjs"
+  },
+  "dependencies": {
+    "@opentui/core": "0.7.0",
+    "@opentui/react": "0.7.0",
+    "react": "19.3.1"
+  }
+}
