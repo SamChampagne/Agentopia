@@ -29,7 +29,8 @@ export interface Config {
     ecran?: import('./ui/disposition.js').Disposition;   // disposition de l'écran (/ecran)
     modelesSession?: import('./modelesSession.js').ModeleSession[];   // recettes de session (/modele)
     gardeFou?: { serveurs: string[]; branches: string[] };   // serveurs SSH « prod » et branches protégées (/garde-fou)
-    sons?: boolean;                     // petit son quand une session finit ou a besoin de toi
+    ecranVeille?: number;               // minutes sans clavier ni souris avant l'écran de veille (0 = jamais ; 5 par défaut)
+    sons?: boolean;                    // petit son quand une session finit ou a besoin de toi
     themeAuto?: { mode: 'heure' | 'windows'; jour: string; soir: string };   // palette qui change le soir, ou selon le mode clair/sombre de Windows
     budgetJour?: number;                // alerte au-delà de ce coût du jour en $ (équivalent API) ; 0 = aucune
     maitre: { actif: boolean; modele: string; veille?: number };   // veille : minutes d'inactivité avant de libérer sa mémoire (0 = jamais)

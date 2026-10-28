@@ -52,6 +52,12 @@ export async function rejoindre(id: string, aCote = false): Promise<void> {
     console.log(c.succes(`Session ${id} ouverte dans une nouvelle fenêtre`) + (aCote ? c.discret(' (« à côté » demande Windows Terminal)') : ''));
 }
 
+// Vues de la nouvelle interface (grille, fichiers chauds) : c'est elle qui les affiche
+function ouvrirZone(zone: string): void {
+    if (bus.listenerCount('zone')) bus.emit('zone', zone);
+    else console.log(c.alerte('Cette vue existe seulement dans la nouvelle interface (Claudetopia sous Bun)'));
+}
+
 // Ce que la session a modifié : les fichiers qu'elle a édités et qui diffèrent encore de git
 async function changements(s: SessionVue): Promise<void> {
     const racine = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: s.cwd, encoding: 'utf-8' }).stdout?.trim();
@@ -241,6 +247,10 @@ function afficherAide(): void {
         [c.accent('Alt+Tab'), 'depuis une session rejointe : revenir au CLI (elle continue)'],
         [c.accent('Alt+J'), 'conversation ouverte : la rejoindre à côté, dans la même fenêtre Windows Terminal'],
         [c.accent('Alt+Z'), 'mode focus : seulement la conversation et la barre de saisie (encore Alt+Z pour revenir)'],
+        [c.accent('Alt+G'), 'grille : jusqu\'à 4 conversations en direct'],
+        [c.accent('Alt+H'), 'fichiers chauds : ce que tes sessions modifient, et les conflits'],
+        [c.accent('Alt+D'), 'cacher / montrer le diff en direct sous la conversation'],
+        [c.accent('Alt+O'), 'globe 3D des serveurs SSH (glisser pour le tourner)'],
         [c.accent('Alt+V'), 'joindre l\'image du presse-papiers'],
         [c.accent('Alt+↑ / Alt+↓'), 'session précédente / suivante · Alt+1…9 : carte n°'],
         [c.accent('Échap'), 'vider la saisie · retirer les images · fermer la conversation'],
@@ -335,6 +345,21 @@ export const COMMANDES: Commande[] = [
         nom: 'rejoindre-cote', args: '<id>', groupe: 'Claude', cache: true,
         description: "Ouvrir une session d'arrière-plan à côté, dans la même fenêtre",
         executer: async ({ args }) => rejoindre(args[0], true),
+    },
+    {
+        nom: 'grille', groupe: 'Claude',
+        description: 'Plusieurs conversations à la fois, en direct (Alt+G)',
+        executer: () => ouvrirZone('grille'),
+    },
+    {
+        nom: 'chauds', alias: ['fichiers'], groupe: 'Claude',
+        description: 'Les fichiers que tes sessions modifient en ce moment, et les conflits (Alt+H)',
+        executer: () => ouvrirZone('chauds'),
+    },
+    {
+        nom: 'globe', groupe: 'Système',
+        description: 'Globe 3D de tes serveurs SSH : qui répond, reliés à ton poste (Alt+O)',
+        executer: () => ouvrirZone('globe'),
     },
     {
         nom: 'repondre', args: '<sessionId> [réponse]', groupe: 'Claude', cache: true,
@@ -861,6 +886,21 @@ export const COMMANDES: Commande[] = [
             sauverConfig(config);
             demarrerNotifications();
             console.log(config.notifications ? c.succes('🔔 Notifications activées') : c.discret('🔕 Notifications désactivées'));
+        },
+    },
+    {
+        nom: 'veille', args: '[minutes|maintenant]', groupe: 'Système',
+        description: 'Écran de veille animé (constellation des sessions) : délai en minutes, 0 pour le couper',
+        executer: async ({ args }) => {
+            if (args[0] === 'maintenant' || !args[0]) {
+                if (bus.listenerCount('veille')) return void bus.emit('veille');
+                return void console.log(c.alerte('L\'écran de veille existe seulement dans la nouvelle interface'));
+            }
+            const minutes = Number(args[0]);
+            if (!Number.isFinite(minutes) || minutes < 0) return void console.log(c.erreur('Indique un nombre de minutes (0 pour couper)'));
+            config.ecranVeille = minutes;
+            sauverConfig(config);
+            console.log(minutes ? c.succes(`Écran de veille après ${minutes} min sans clavier ni souris`) : c.discret('Écran de veille coupé'));
         },
     },
     {

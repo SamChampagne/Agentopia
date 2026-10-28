@@ -12,7 +12,8 @@ const w = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const ecran = async () => (await flush(), await w(150), await flush(), captureCharFrame());
 await w(1500);
 let image = await ecran();
-const accueil = image.includes('Bonjour') && image.includes('une touche ou un clic');
+// L'anneau 3D : ses caractères d'ombrage, au-dessus de la bannière
+const accueil = image.includes('Bonjour') && image.includes('une touche ou un clic') && /[$#@]{2,}/.test(image);
 process.stderr.write(`${accueil ? '✓' : '✗'} écran d'accueil\n${process.env.VOIR ? image : ''}`);
 mockInput.pressKey('x');
 await w(300);

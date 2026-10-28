@@ -55,6 +55,7 @@ export function menuServeur(s: any): Menu {
             { label: '≡ Détails du serveur', valeur: `/ssh vue ${s.nom}` },
             { label: '+ Ajouter un serveur', valeur: '/ssh-ajouter' },
             { label: '⇄ Tous les serveurs', valeur: '/ssh' },
+            { label: '◍ Globe des serveurs (Alt+O)', valeur: '/globe' },
         ],
     };
 }

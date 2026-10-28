@@ -19,6 +19,13 @@ import { Barre } from './barre.tsx';
 import { Journal } from './journal.tsx';
 import { QuelleTouche } from './quelleTouche.tsx';
 import { Accueil, Mascotte } from './accueil.tsx';
+import { Grille } from './grille.tsx';
+import { Chauds } from './chauds.tsx';
+import { Veille } from './veille.tsx';
+import { Globe } from './globe.tsx';
+import { Transition } from './transition.tsx';
+
+type Zone = 'grille' | 'chauds' | 'globe';
 import { Menu, general, menuSession, menuJournal } from './menus.ts';
 import { demarrerCollecte, lireDonnees, surMajDonnees, rafraichirAgents } from '../dist/ui/donnees.js';
 import { lignesCockpit, JOURNAL } from '../dist/ui/Cockpit.js';
@@ -47,6 +54,7 @@ extend({ text: Texte } as any);
 
 const BOUTONS = [
     { label: '◉ Live', action: '/global' }, { label: '▦ Projets', action: '/projets' }, { label: '◆ Équipes', action: '/equipe' },
+    { label: '⊞ Grille', action: '/grille' }, { label: '♨ Chauds', action: '/chauds' },
     { label: '⎇ Git', action: '/git' }, { label: '◫ Docker', action: '/docker' }, { label: '⇄ SSH', action: '/ssh' },
     { label: '◈ Config', action: '/config' }, { label: '⋯', action: '/menu-principal' },
 ];
@@ -87,11 +95,32 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     const [splash, setSplash] = useState(accueil);
     useEffect(() => {
         if (!splash) return;
-        const t = setTimeout(() => setSplash(false), 2500);
+        const t = setTimeout(() => setSplash(false), 3500);
         return () => clearTimeout(t);
     }, []);
     // Mode focus (Alt+Z) : seulement la zone principale et la barre de saisie
     const [focus, setFocus] = useState(false);
+    // Vues de la zone principale propres à cette interface : grille de conversations (Alt+G), fichiers chauds (Alt+H)
+    const [vueZone, setVueZone] = useState<Zone>();
+    // Diff en direct sous la conversation (Alt+D pour le cacher)
+    const [diffDirect, setDiffDirect] = useState(true);
+    // Écran de veille : après quelques minutes sans clavier ni souris
+    const [veille, setVeille] = useState(false);
+    const derniereActivite = useRef(Date.now());
+    const activite = () => {
+        derniereActivite.current = Date.now();
+    };
+    useEffect(() => {
+        const t = setInterval(() => {
+            const minutes = chargerConfig().ecranVeille ?? 5;
+            if (minutes > 0 && !sansReprise() && Date.now() - derniereActivite.current > minutes * 60_000) setVeille(true);
+        }, 10_000);
+        return () => clearInterval(t);
+    }, []);
+    const reveiller = () => {
+        activite();
+        setVeille(false);
+    };
     useVersion(surMajDonnees);
     useVersion(surJournal);
     useVersion(surMaitre);
@@ -103,12 +132,24 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     // Panneau de détail (projet, serveur, conteneur) : il remplace la conversation dans la zone principale, et inversement
     const [detail, setDetailEtat] = useState<any>();
     const setSelection = (cle?: string) => {
-        if (cle) setDetailEtat(undefined);
+        if (cle) {
+            setDetailEtat(undefined);
+            setVueZone(undefined);
+        }
         setSelectionEtat(cle);
     };
     const ouvrirDetail = (dt?: any) => {
-        if (dt) setSelectionEtat(undefined);
+        if (dt) {
+            setSelectionEtat(undefined);
+            setVueZone(undefined);
+        }
         setDetailEtat(dt);
+    };
+    // Grille ou fichiers chauds : remplace la conversation ou le détail ouvert
+    const ouvrirZone = (v: Zone) => {
+        setSelectionEtat(undefined);
+        setDetailEtat(undefined);
+        setVueZone(v);
     };
     // Plein écran (vue globale) : la colonne de gauche disparaît le temps de la vue
     const [pleinEcran, setPleinEcran] = useState(false);
@@ -141,6 +182,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     // sinon le cockpit apparaît une fraction de seconde entre les deux (500 ms au plus)
     const [fige, setFige] = useState(false);
     const zoneAvant = useRef<any>();
+    const cleAvant = useRef('cockpit');
     // Un clic passe d'une vue à l'autre : la fin de l'ancienne commande ne doit pas dégeler l'écran avant que la nouvelle démarre
     const changement = useRef(false);
     const minuterieFige = useRef<ReturnType<typeof setTimeout>>();
@@ -447,6 +489,11 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         const surSelection = (id: string) => setASelectionner(id);
         const surDetail = (dt: any) => setTimeout(() => ouvrirDetailRef.current(dt), 50);
         const surPleinEcran = (v: boolean) => setPleinEcran(v);
+        const surZone = (v: Zone) => ouvrirZone(v);
+        bus.on('zone', surZone);
+        // /veille maintenant : un peu plus tard, sinon la touche Entrée qui l'a lancée la referme aussitôt
+        const surVeille = () => setTimeout(() => setVeille(true), 400);
+        bus.on('veille', surVeille);
         bus.on('detail', surDetail);
         bus.on('plein-ecran', surPleinEcran);
         const surLancer = async (commandes: string | string[]) => {
@@ -463,6 +510,8 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             bus.off('notice', surNotice);
             bus.off('selectionner', surSelection);
             liens.off('demande', surLien);
+            bus.off('zone', surZone);
+            bus.off('veille', surVeille);
             bus.off('detail', surDetail);
             bus.off('plein-ecran', surPleinEcran);
             bus.off('lancer', surLancer);
@@ -484,6 +533,12 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             if (Date.now() - ctrlC.current < 1500) return quitter();
             ctrlC.current = Date.now();
             return void bus.emit('notice', 'Ctrl+C encore une fois pour quitter');
+        }
+        activite();
+        // Écran de veille : la touche réveille seulement (la barre garde ce qui y était écrit)
+        if (veille) {
+            const avant = valeurRef.current;
+            return void setTimeout(() => (setVeille(false), remplacer(avant)), 0);
         }
         if (splash) return void setTimeout(() => (setSplash(false), remplacer('')), 0);
         if (demande) return;   // les dialogues gèrent leurs touches
@@ -534,6 +589,14 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             if (session?.arrierePlan) return void lancer(`/rejoindre-cote ${session.id}`, true);
             return void bus.emit('notice', 'Alt+J : ouvre d\'abord une session d\'arrière-plan (clic sur sa carte)');
         }
+        if (alt && (k.name === 'g' || k.name === 'h' || k.name === 'o')) {
+            const v: Zone = k.name === 'g' ? 'grille' : k.name === 'h' ? 'chauds' : 'globe';
+            return vueZone === v ? setVueZone(undefined) : ouvrirZone(v);
+        }
+        if (alt && k.name === 'd') {
+            setDiffDirect((v) => !v);
+            return void bus.emit('notice', diffDirect ? 'Diff en direct caché · Alt+D pour le réafficher' : '✎ Diff en direct affiché sous la conversation');
+        }
         if (alt && (k.name === 's' || k.name === 'p')) return setEspace(k.name === 's' ? 'sessions' : 'projets');
         if (alt && /^[1-9]$/.test(k.name)) {
             const s = d.agents[Number(k.name) - 1];
@@ -544,6 +607,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             if (valeurRef.current) return remplacer('');
             if (session) return setSelection(undefined);
             if (detail) return ouvrirDetail(undefined);
+            if (vueZone) return setVueZone(undefined);
             if (journalOuvert) return setJournalOuvert(false);
             return;
         }
@@ -612,10 +676,13 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         zone = (
             <box flexGrow={1} onMouseDown={(e: any) => droit(e) && ouvrirMenu(menuSession(session, () => undefined))}>
                 <Conversation s={session} largeur={principal} cout={d.cout.parSession[session.sessionId]} agir={agir} position={disp.actions}
-                    recherche={recherche ? valeur.trim() : ''} occurrence={occurrence} surTrouvees={setTrouvees} />
+                    recherche={recherche ? valeur.trim() : ''} occurrence={occurrence} surTrouvees={setTrouvees} diff={diffDirect} />
             </box>
         );
-    } else if (journalOuvert) zone = <box flexGrow={1} onMouseDown={(e: any) => droit(e) && ouvrirMenu(menuJournal(parler))}><Journal /></box>;
+    } else if (vueZone === 'grille') zone = <Grille d={d} largeur={principal} hauteur={corps} tic={tic} ouvrir={setSelection} />;
+    else if (vueZone === 'chauds') zone = <Chauds d={d} largeur={principal} tic={tic} ouvrir={setSelection} />;
+    else if (vueZone === 'globe') zone = <Globe d={d} largeur={principal} hauteur={corps} ouvrir={(s: any) => ouvrirDetail({ type: 'serveur', cle: s.nom })} />;
+    else if (journalOuvert) zone = <box flexGrow={1} onMouseDown={(e: any) => droit(e) && ouvrirMenu(menuJournal(parler))}><Journal /></box>;
     else {
         const cockpit = lignesCockpit(d, principal - 1, corps);
         zone = (
@@ -633,14 +700,24 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     }
 
     // Une commande lancée d'un clic n'a pas encore ouvert sa vue : l'écran d'avant reste
-    if (fige && !demande && zoneAvant.current) zone = zoneAvant.current;
-    else zoneAvant.current = zone;
+    // La clé de ce qui est affiché : quand elle change, la nouvelle vue arrive en transition
+    let cleZone = demande?.type === 'vue' ? `vue:${vueActive}` : demande ? `${demande.type}:${demande.message ?? ''}`
+        : detail ? `detail:${detail.type}:${detail.cle}` : session ? `session:${session.cle}` : vueZone ? `zone:${vueZone}` : journalOuvert ? 'journal' : 'cockpit';
+    if (fige && !demande && zoneAvant.current) {
+        zone = zoneAvant.current;
+        cleZone = cleAvant.current;
+    } else {
+        zoneAvant.current = zone;
+        cleAvant.current = cleZone;
+    }
+    zone = <Transition cle={cleZone}>{zone}</Transition>;
 
     if (splash) return <Accueil largeur={width} hauteur={height} d={d} fermer={() => setSplash(false)} />;
+    if (veille) return <Veille largeur={width} hauteur={height} d={d} reveiller={reveiller} />;
     const humeur = Mascotte.etat(d);
 
     return (
-        <box width={width} height={height} flexDirection="column" backgroundColor="#0c0c0c">
+        <box width={width} height={height} flexDirection="column" backgroundColor="#0c0c0c" onMouseMove={activite} onMouseDown={activite}>
             {!focus && <box height={1} flexShrink={0} flexDirection="row" onMouseDown={(e: any) => droit(e) && ouvrirMenu({ titre: 'Claudetopia', articles: general(parler) })}>
                 <Ansi texte={degrade(' ✻ ' + (chargerConfig().banniere || 'CLAUDETOPIA').toUpperCase() + ' ')} />
                 {BOUTONS.map((b) => (

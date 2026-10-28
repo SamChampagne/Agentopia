@@ -11,6 +11,7 @@ import { chargerConfig } from '../config.js';
 import { toast, jouerSon } from '../notifications.js';
 import { bus } from './bus.js';
 import { mettreAJourCout, dollars } from '../cout.js';
+import { fichiersChauds } from '../modifications.js';
 import { verifierPlanifications } from '../planificateur.js';
 import { Equipe, equipes, lireEquipes, avancerEquipes, agentsDesEquipes, suivreFichierEquipes } from '../equipe.js';
 import {
@@ -154,6 +155,20 @@ async function lireAgents(): Promise<void> {
     avancerEquipes(donnees.agents);
     donnees.equipes = lireEquipes();
     signalerChangements(avant);
+    signalerConflits();
+}
+
+// Deux sessions actives qui modifient le même fichier dans les 10 dernières minutes : on prévient une fois par fichier
+const conflitsVus = new Set<string>();
+function signalerConflits(): void {
+    for (const f of fichiersChauds(donnees.agents, 10 * 60_000).filter((x) => x.conflit)) {
+        const cle = `${f.chemin.toLowerCase()}|${f.sessions.map((s) => s.sessionId).sort().join(',')}`;
+        if (conflitsVus.has(cle)) continue;
+        conflitsVus.add(cle);
+        const qui = f.sessions.map((s) => s.titre || s.nom).join(' et ');
+        bus.emit('notice', `⚠ Conflit possible : ${path.basename(f.chemin)} modifié par ${qui} · Alt+H pour voir les fichiers chauds`);
+        if (chargerConfig().notifications) toast(`⚠ Conflit possible sur ${path.basename(f.chemin)}`, `${qui} modifient le même fichier`, undefined, 'alerte');
+    }
 }
 
 // Relecture immédiate (après une fermeture, un lancement…) : les cartes suivent sans attendre le prochain tour

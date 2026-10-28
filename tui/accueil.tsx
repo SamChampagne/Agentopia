@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { GRAS } from './style.ts';
 import { chargerConfig } from '../dist/config.js';
 import { theme, fond, lignesBanniere, melange } from '../dist/theme.js';
+import { enPause } from '../dist/ui/Laterale.js';
+import { Logo3D } from './logo3d.tsx';
 
 // Écran d'accueil (quelques secondes au lancement) et mascotte de la barre du haut
 
@@ -28,6 +30,8 @@ export function Accueil({ largeur, hauteur, d, fermer }: { largeur: number; haut
     const visibles = Math.min(l, Math.floor(phase * 60));
     return (
         <box width={largeur} height={hauteur} backgroundColor="#0c0c0c" flexDirection="column" alignItems="center" justifyContent="center" onMouseDown={fermer}>
+            {/* Le logo 3D qui tourne, si l'écran est assez haut */}
+            {hauteur >= 26 && <Logo3D largeur={Math.min(64, largeur - 4)} hauteur={Math.min(24, hauteur - 12)} />}
             {lignes.map((ligne, n) => (
                 <text key={n}>
                     {[...ligne].map((ch, i) => <span key={i} fg={vague(i, l, phase)}>{i < visibles ? ch : ' '}</span>)}
@@ -45,9 +49,11 @@ export function Accueil({ largeur, hauteur, d, fermer }: { largeur: number; haut
 // La mascotte réagit à l'état des sessions : elle dort, travaille, ou attend ton aide
 export const Mascotte = {
     etat(d: any): { visage: string; texte: string; couleur: string } {
-        const bloquees = d.agents.filter((a: any) => a.statut === 'bloquee').length;
-        const travaillent = d.agents.filter((a: any) => a.statut === 'travaille').length;
-        const attendent = d.agents.filter((a: any) => a.statut === 'attend').length;
+        // Les vieilles sessions en pause (plus de 12 h sans activité) ne comptent pas
+        const actives = d.agents.filter((a: any) => !enPause(a, d.activites.get(a.sessionId)));
+        const bloquees = actives.filter((a: any) => a.statut === 'bloquee').length;
+        const travaillent = actives.filter((a: any) => a.statut === 'travaille').length;
+        const attendent = actives.filter((a: any) => a.statut === 'attend').length;
         if (bloquees) return { visage: 'alerte', texte: `${bloquees} a besoin de toi`, couleur: '#fb923c' };
         if (travaillent) return { visage: 'travail', texte: `${travaillent} au travail`, couleur: '#4ade80' };
         if (attendent) return { visage: 'attente', texte: `${attendent} t'attend${attendent > 1 ? 'ent' : ''}`, couleur: '#facc15' };
