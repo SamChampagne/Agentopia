@@ -235,7 +235,7 @@ export function commandesConfig(config: Config): Commande[] {
                     await sortieDe(CLAUDE, ['auth', 'logout']);
                 } else {
                     // La connexion ouvre le navigateur et attend dans le terminal : on lui passe la main
-                    passerLaMain(CLAUDE, ['auth', 'login']);
+                    await passerLaMain(CLAUDE, ['auth', 'login']);
                 }
                 const apres = await compteClaude();
                 console.log(apres.connecte ? c.succes(`Claude : connecté (${apres.email ?? apres.methode})`) : c.alerte('Claude : non connecté'));

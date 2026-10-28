@@ -4,13 +4,15 @@ import { createTestRenderer } from '@opentui/core/testing';
 import { createRoot } from '@opentui/react';
 import { App } from './app.tsx';
 import { demarrerCollecte } from '../dist/ui/donnees.js';
+import { capturerConsole } from '../dist/ui/journal.js';
 
 const COLS = Number(process.env.COLS ?? 220), ROWS = Number(process.env.ROWS ?? 55);
 demarrerCollecte();
 const { renderer, mockInput, mockMouse, flush, captureCharFrame } = await createTestRenderer({ width: COLS, height: ROWS, useMouse: true, enableMouseMovement: true });
 let images = 0;
 renderer.postProcessFns?.push?.(() => void images++);
-createRoot(renderer).render(<App />);
+capturerConsole();
+createRoot(renderer).render(<App quitter={() => process.exit(0)} />);
 const w = (ms: number) => new Promise((r) => setTimeout(r, ms));
 await w(Number(process.env.ATTENTE ?? 9000));
 await flush();

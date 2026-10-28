@@ -28,7 +28,7 @@ export async function lancerClaude(projet: Projet, promptInitial?: string, mode:
         bus.emit('selectionner', id);
     } else {
         const { rejoindre } = await import('./commandes.js');
-        rejoindre(id);
+        await rejoindre(id);
     }
 }
 

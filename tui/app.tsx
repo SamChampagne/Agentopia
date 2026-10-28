@@ -1,211 +1,287 @@
-// Prototype : l'écran d'accueil de Claudetopia sous OpenTUI, au même style, avec les vraies données.
-// Colonne de gauche (Sessions / Projets, cartes, maître, Docker et SSH en bas), cockpit, vue d'une session, saisie.
+// Claudetopia sous OpenTUI : même style que l'interface Ink, avec les mêmes données et les mêmes commandes.
 // Lancer : bun tui/app.tsx   (Ctrl+C pour quitter)
-import { useEffect, useState } from 'react';
-import { createCliRenderer, TextAttributes } from '@opentui/core';
+import * as path from 'path';
+import { useEffect, useRef, useState } from 'react';
+import { createCliRenderer } from '@opentui/core';
 import { createRoot, useKeyboard, useTerminalDimensions } from '@opentui/react';
 import { Ansi } from './ansi.tsx';
-import { demarrerCollecte, lireDonnees, surMajDonnees } from '../dist/ui/donnees.js';
+import { GRAS } from './style.ts';
+import { Colonne } from './colonne.tsx';
+import { Conversation } from './conversation.tsx';
+import { Choix, Saisie, VueNonMigree } from './dialogues.tsx';
+import { Barre } from './barre.tsx';
+import { Journal } from './journal.tsx';
+import { demarrerCollecte, lireDonnees, surMajDonnees, rafraichirAgents } from '../dist/ui/donnees.js';
 import { lignesCockpit, JOURNAL } from '../dist/ui/Cockpit.js';
-import { lignesEspace } from '../dist/ui/espaces.js';
-import { lignesDocker } from '../dist/ui/Laterale.js';
-import { lireTranscript } from '../dist/agents.js';
-import { listerProjets } from '../dist/projets.js';
-import { chargerConfig } from '../dist/config.js';
-import { demarrerSynchro } from '../dist/synchro.js';
-import { theme, fond, couleurProjet, degrade } from '../dist/theme.js';
+import { bus, Annule } from '../dist/ui/bus.js';
+import { journal, lignesJournal, avecRetrait, vider, capturerConsole } from '../dist/ui/journal.js';
+import { definirPassage } from '../dist/ui/ecran.js';
+import { calculerSuggestions, commandeSession } from '../dist/ui/saisie.js';
+import { executerLigne, trouverCommande, rafraichirProjets, getProjets } from '../dist/commandes.js';
+import { chargerConfig, chargerHistorique, ajouterHistorique } from '../dist/config.js';
+import { theme, fond, couleurProjet, degrade, c } from '../dist/theme.js';
 
-const COULEURS: Record<string, string> = { travaille: '#4ade80', attend: '#facc15', bloquee: '#fb923c', terminee: '#94a3b8' };
-const LIBELLES: Record<string, string> = { travaille: 'travaille', attend: 't’attend', bloquee: 'bloquée', terminee: 'terminée' };
-const ANIM = ['✻', '✼', '✽', '✾', '✿', '❀'];
-const BOUTONS = ['◉ Live', '▦ Projets', '◆ Équipes', '⎇ Git', '◫ Docker', '⇄ SSH', '⋯'];
-const une = (s: string) => s.replace(/\s+/g, ' ').trim();
-const couper = (s: string, n: number) => ([...s].length > n ? [...s].slice(0, Math.max(0, n - 1)).join('') + '…' : s);
-const B = TextAttributes.BOLD;
+const BOUTONS = [
+    { label: '◉ Live', action: '/global' }, { label: '▦ Projets', action: '/projets' }, { label: '◆ Équipes', action: '/equipe' },
+    { label: '⎇ Git', action: '/git' }, { label: '◫ Docker', action: '/docker' }, { label: '⇄ SSH', action: '/ssh' },
+    { label: '◈ Config', action: '/config' }, { label: '⋯', action: '/menu-principal' },
+];
+const SPINNER = ['✻', '✼', '✽', '✾', '✿', '❀', '✿', '✾', '✽', '✼'];
+const historique: string[] = chargerHistorique();
 
-function useDonnees() {
+function useVersion(abonner: (f: () => void) => () => void) {
     const [, setV] = useState(0);
-    useEffect(() => surMajDonnees(() => setV((v) => v + 1)), []);
-    return lireDonnees();
+    useEffect(() => abonner(() => setV((v) => v + 1)), []);
 }
+const surJournal = (f: () => void) => {
+    journal.on('maj', f);
+    return () => void journal.off('maj', f);
+};
 
-// Une seule horloge : 800 ms si quelque chose s'anime, sinon 1 s (comme l'appli actuelle)
-function useBattement(anime: boolean) {
+export function App({ quitter }: { quitter: () => void }) {
+    useVersion(surMajDonnees);
+    useVersion(surJournal);
+    const d = lireDonnees();
+    const { width, height } = useTerminalDimensions();
+    const [selection, setSelection] = useState<string>();
+    const [aSelectionner, setASelectionner] = useState<string>();
+    const [espace, setEspace] = useState('sessions');
+    const [demande, setDemande] = useState<any>();
+    const [tache, setTache] = useState<string>();
+    const [notice, setNotice] = useState<string>();
+    const [occupe, setOccupe] = useState(false);
+    const [journalOuvert, setJournalOuvert] = useState(false);
+    const [valeur, setValeur] = useState('');
+    const [cle, setCle] = useState(0);
+    const [indexSugg, setIndexSugg] = useState(0);
+    const posHistorique = useRef(-1);
+    const [survolHaut, setSurvolHaut] = useState<string>();
+    const [projets] = useState(() => getProjets());
+
+    // Une seule horloge : 800 ms si quelque chose s'anime, sinon 1 s (comme l'interface Ink)
+    const anime = !!tache || d.agents.some((a: any) => a.statut === 'travaille');
     const [tic, setTic] = useState(0);
     useEffect(() => {
         const t = setTimeout(() => setTic((x) => x + 1), anime ? 800 : 1000);
         return () => clearTimeout(t);
     }, [tic, anime]);
-    return tic;
-}
 
-function Carte({ s, a, active, survole, largeur, tic, choisir, survoler }: any) {
-    const couleur = COULEURS[s.statut] ?? fond.discret;
-    const icone = s.statut === 'travaille' ? ANIM[tic % ANIM.length] : s.statut === 'bloquee' ? '!' : s.statut === 'terminee' ? '✓' : '○';
-    const etat = `${icone} ${LIBELLES[s.statut] ?? s.statut}`;
-    const action = s.question ? `? ${une(s.question)}` : a?.outil ? `▸ ${une(a.outil)}` : a?.dernierTexte ? une(a.dernierTexte) : s.titre || 'pas encore d’activité';
-    const bg = active ? fond.panneauActif : survole ? fond.selection : fond.panneau;
-    const n = largeur - 3;
-    return (
-        <box height={3} flexShrink={0} onMouseDown={choisir} onMouseOver={() => survoler(true)} onMouseOut={() => survoler(false)}>
-            <box height={1} backgroundColor={bg} flexDirection="row">
-                <text fg={active ? theme.accent : couleur}>▌ </text>
-                <text flexGrow={1} truncate><span fg={couleurProjet(s.nom)}>● </span><span fg={fond.texte} attributes={B}>{s.nom}</span></text>
-                <text fg={couleur}>{etat} </text>
-            </box>
-            <box height={1} backgroundColor={bg} flexDirection="row">
-                <text fg={active ? theme.accent : couleur}>▌ </text>
-                <text fg="#94a3b8" truncate>{'  ' + couper(action, n - 2)}</text>
-            </box>
-        </box>
-    );
-}
+    const session = d.agents.find((a: any) => a.cle === selection);
+    const libre = !demande && !occupe;
+    const suggestions = calculerSuggestions(valeur);
+    const sugg = Math.min(indexSugg, Math.max(0, suggestions.length - 1));
 
-function Entete({ titre, droite = '', clic }: { titre: string; droite?: string; clic?: () => void }) {
-    return (
-        <box height={1} flexShrink={0} backgroundColor={fond.entete} flexDirection="row" onMouseDown={clic}>
-            <text fg={theme.primaire} attributes={B} flexGrow={1}>{` ${titre}`}</text>
-            <text fg="gray">{`${droite} `}</text>
-        </box>
-    );
-}
+    const remplacer = (texte: string) => {
+        setValeur(texte);
+        setCle((k) => k + 1);
+        setIndexSugg(0);
+    };
 
-function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace, projets }: any) {
-    const [survol, setSurvol] = useState<string>();
-    const [replie, setReplie] = useState<Record<string, boolean>>({ ssh: false, docker: false });
-    const docker: string[] = lignesDocker(d);
-    const serveurs = d.serveurs.slice(0, 6);
-    return (
-        <box width={largeur} flexShrink={0} flexDirection="column" border={['right']} borderColor={fond.bordure}>
-            <box height={1} flexShrink={0} backgroundColor={fond.entete} flexDirection="row">
-                <text> </text>
-                {['sessions', 'projets'].map((e) => (
-                    <text key={e} onMouseDown={() => setEspace(e)} onMouseOver={() => setSurvol(`onglet:${e}`)} onMouseOut={() => setSurvol(undefined)}
-                        fg={espace === e ? theme.accent : survol === `onglet:${e}` ? fond.texte : fond.eteint}
-                        attributes={espace === e ? B | TextAttributes.UNDERLINE : 0}>{e === 'sessions' ? 'Sessions' : 'Projets'}  </text>
-                ))}
-            </box>
-            {espace === 'projets' ? (
-                // Défilement natif à la molette : plus de calcul de décalage à la main
-                <scrollbox flexGrow={1} scrollY>
-                    {lignesEspace('projets', d, projets).map((l: any) => (
-                        <box key={l.cle} height={1} flexDirection="row" backgroundColor={survol === l.cle ? fond.selection : undefined}
-                            onMouseOver={() => setSurvol(l.cle)} onMouseOut={() => setSurvol(undefined)}>
-                            <text flexGrow={1} truncate>{'  '}{l.morceaux.map((m: any, i: number) => <span key={i} fg={m.c} attributes={m.gras ? B : 0}>{m.t}</span>)}</text>
-                            <text fg={l.couleurDroite}>{`${l.droite ?? ''} `}</text>
-                        </box>
-                    ))}
-                </scrollbox>
-            ) : (
-                <box flexGrow={1} flexDirection="column">
-                    <scrollbox flexGrow={1} scrollY>
-                        {d.agents.map((s: any) => (
-                            <Carte key={s.cle} s={s} a={d.activites.get(s.sessionId)} active={s.cle === selection} survole={survol === s.cle}
-                                largeur={largeur - 1} tic={tic} choisir={() => choisir(s.cle)} survoler={(v: boolean) => setSurvol(v ? s.cle : undefined)} />
-                        ))}
-                    </scrollbox>
-                    <text>{' '}<span fg={theme.accent}>+ Session</span>{'   '}<span fg={theme.secondaire}>❯ Terminal</span></text>
-                    <text> </text>
-                    <Entete titre="◇ MAÎTRE" droite="Alt+M" />
-                    <text fg="gray">{' ex. « lance les tests sur dev »'}</text>
-                </box>
-            )}
-            <text> </text>
-            <Entete titre="DOCKER" droite={replie.docker ? '▸' : '▾'} clic={() => setReplie((r) => ({ ...r, docker: !r.docker }))} />
-            {!replie.docker && docker.slice(0, 4).map((l, i) => <box key={i} height={1} paddingLeft={1}><Ansi texte={l} /></box>)}
-            <text> </text>
-            <Entete titre="SERVEURS SSH" droite={`${d.serveurs.length} ${replie.ssh ? '▸' : '▾'}`} clic={() => setReplie((r) => ({ ...r, ssh: !r.ssh }))} />
-            {!replie.ssh && serveurs.map((s: any) => {
-                const ok = d.joignables.get(s);
-                const acces = d.acces[s.nom];
-                return (
-                    <box key={s.nom} height={1} paddingLeft={1} flexDirection="row" backgroundColor={survol === `ssh:${s.nom}` ? fond.selection : undefined}
-                        onMouseOver={() => setSurvol(`ssh:${s.nom}`)} onMouseOut={() => setSurvol(undefined)}>
-                        <text truncate>
-                            <span fg={ok === undefined ? 'gray' : ok ? '#4ade80' : '#f87171'}>● </span>
-                            <span>{couper(s.nom, 24).padEnd(24)}</span>
-                            <span fg={acces ? (acces.ok ? '#4ade80' : '#facc15') : 'gray'}>{acces ? (acces.ok ? 'clé' : 'mdp') : ''}</span>
-                        </text>
-                    </box>
-                );
-            })}
-        </box>
-    );
-}
+    // silencieux : lancé par un clic, une action ou une vue ; la commande n'est ni affichée ni gardée dans l'historique
+    async function lancer(ligne: string, silencieux = false) {
+        const texte = ligne.trim();
+        const cmd = trouverCommande(texte.split(' ')[0]);
+        if (cmd?.nom === 'exit') return quitter();
+        if (cmd?.nom === 'clear') {
+            setJournalOuvert(false);
+            return vider();
+        }
+        if (cmd?.nom === 'sorties') {
+            setSelection(undefined);
+            return setJournalOuvert(true);
+        }
+        const avant = lignesJournal().length;
+        if (texte && !cmd?.cache && !silencieux) {
+            historique.unshift(texte);
+            ajouterHistorique(texte);
+        }
+        // Une commande ordinaire affiche son résultat dans le journal : on referme la conversation ouverte
+        if (!cmd?.cache) setSelection(undefined);
+        if (!silencieux) console.log(`\n${c.accent('❯')} ${texte || c.discret('(menu)')}`);
+        setOccupe(true);
+        try {
+            await (silencieux ? executerLigne(texte) : avecRetrait(() => executerLigne(texte)));
+        } catch (err) {
+            if (err instanceof Annule || (err as Error)?.name === 'Annule') {
+                if (!silencieux) console.log(c.discret('Annulé'));
+            } else console.log(c.erreur(`✗ ${(err as Error).message}`));
+        } finally {
+            rafraichirProjets();
+            rafraichirAgents();
+            setOccupe(false);
+            // Un résultat trop long pour « Dernières sorties » s'ouvre en entier (Échap ramène au cockpit)
+            if (lignesJournal().length - avant > 8) setJournalOuvert(true);
+        }
+    }
+    const lancerRef = useRef(lancer);
+    lancerRef.current = lancer;
 
-// Conversation d'une session : défilement natif, collé en bas (la fin suit en direct), texte sélectionnable à la souris
-function VueSession({ s }: any) {
-    const [messages, setMessages] = useState<any[]>([]);
+    function soumettre(v: string) {
+        const s = suggestions[sugg];
+        if (s) {
+            if (s.executer) {
+                remplacer('');
+                void lancer(s.texte);
+            } else remplacer(s.texte);
+            return;
+        }
+        // Entrée sur une ligne vide avec une session d'arrière-plan ouverte : on la rejoint
+        if (!v.trim() && session?.arrierePlan) return void lancer(`/rejoindre ${session.id}`, true);
+        remplacer('');
+        posHistorique.current = -1;
+        // Une conversation est ouverte et ce n'est ni une commande ni du shell : le texte lui est envoyé
+        if (session && v.trim() && !/^[/!]/.test(v.trim())) {
+            console.log(`\n${c.accent('❯')} ${v.trim()} ${c.discret(`→ ${session.nom}`)}`);
+            return void lancer(`/envoyer ${session.sessionId} ${v.trim()}`, true);
+        }
+        void lancer(v);
+    }
+
+    function agir(action: string) {
+        if (action === 'fermer') return setSelection(undefined);
+        const cmd = session && commandeSession(action, session);
+        if (cmd && libre) void lancer(cmd, true);
+    }
+
+    // Ce que les commandes demandent à l'interface (bus.ts)
     useEffect(() => {
-        const lire = () => setMessages(lireTranscript(s.fichier));
-        lire();
-        const t = setInterval(lire, 1000);
-        return () => clearInterval(t);
-    }, [s.fichier]);
-    const couleur: Record<string, string> = { user: theme.accent, assistant: fond.texte, outil: theme.secondaire, resultat: '#64748b' };
-    const prefixe: Record<string, string> = { user: '❯ ', assistant: '', outil: '▸ ', resultat: '  ⎿ ' };
-    return (
-        <box flexGrow={1} flexDirection="column" paddingLeft={1}>
-            <text><span fg={couleurProjet(s.nom)}>● </span><span attributes={B}>{s.nom}</span><span fg="gray">{`  ${s.titre ?? ''}  · Échap pour revenir`}</span></text>
-            <scrollbox flexGrow={1} scrollY stickyScroll stickyStart="bottom">
-                {messages.slice(-400).map((m, i) => (
-                    <text key={i} selectable fg={couleur[m.role]} wrapMode="word">{prefixe[m.role] + m.texte}</text>
-                ))}
-            </scrollbox>
-        </box>
-    );
-}
-
-export function App() {
-    const d = useDonnees();
-    const { width, height } = useTerminalDimensions();
-    const [selection, setSelection] = useState<string>();
-    const [espace, setEspace] = useState('sessions');
-    const [survolHaut, setSurvolHaut] = useState<string>();
-    const anime = d.agents.some((a: any) => a.statut === 'travaille');
-    const tic = useBattement(anime);
-    const [projets] = useState(() => listerProjets(chargerConfig()));
-    useEffect(() => demarrerSynchro(projets), []);
-    useKeyboard((k) => {
-        if (k.name === 'escape') setSelection(undefined);
+        let minuterie: ReturnType<typeof setTimeout> | undefined;
+        const surDemande = (x?: any) => setDemande(x);
+        const surTache = (t?: string) => setTache(t);
+        const surNotice = (t: string) => {
+            setNotice(t);
+            clearTimeout(minuterie);
+            minuterie = setTimeout(() => setNotice(undefined), 6000);
+        };
+        const surSelection = (id: string) => setASelectionner(id);
+        const surLancer = async (commandes: string | string[]) => {
+            for (const commande of ([] as string[]).concat(commandes)) await lancerRef.current(commande, true);
+        };
+        bus.on('demande', surDemande);
+        bus.on('tache', surTache);
+        bus.on('notice', surNotice);
+        bus.on('selectionner', surSelection);
+        bus.on('lancer', surLancer);
+        return () => {
+            bus.off('demande', surDemande);
+            bus.off('tache', surTache);
+            bus.off('notice', surNotice);
+            bus.off('selectionner', surSelection);
+            bus.off('lancer', surLancer);
+        };
+    }, []);
+    // Une session vient d'être lancée : on l'ouvre dès que sa carte apparaît
+    useEffect(() => {
+        const s = aSelectionner && d.agents.find((a: any) => a.id === aSelectionner || a.sessionId === aSelectionner);
+        if (s) {
+            setSelection(s.cle);
+            setASelectionner(undefined);
+        }
     });
+
+    useKeyboard((k) => {
+        if (demande) return;   // les dialogues gèrent leurs touches
+        if (k.name === 'escape') {
+            if (valeur) return remplacer('');
+            if (session) return setSelection(undefined);
+            if (journalOuvert) return setJournalOuvert(false);
+            return;
+        }
+        if (k.name === 'tab' && suggestions[sugg]) return remplacer(suggestions[sugg].texte);
+        if (k.name === 'up' || k.name === 'down') {
+            const sens = k.name === 'up' ? -1 : 1;
+            if (suggestions.length) return setIndexSugg(Math.max(0, Math.min(Math.min(8, suggestions.length) - 1, sugg + sens)));
+            // Historique : ↑ remonte, ↓ redescend
+            const p = Math.max(-1, Math.min(historique.length - 1, posHistorique.current - sens));
+            posHistorique.current = p;
+            setValeur(p < 0 ? '' : historique[p]);
+            setCle((x) => x + 1);
+        }
+    });
+
+    function indication(): { texte: string; couleur: string } {
+        if (tache) return { texte: `${SPINNER[tic % SPINNER.length]} ${tache}…`, couleur: theme.accent };
+        if (notice) return { texte: notice, couleur: theme.secondaire };
+        if (occupe) return { texte: 'commande en cours…', couleur: 'gray' };
+        const t = valeur.trim();
+        if (t.startsWith('/')) return { texte: 'commande du CLI', couleur: 'gray' };
+        if (t.startsWith('!')) return { texte: `commande PowerShell dans ${path.basename(process.cwd())}`, couleur: theme.accent };
+        if (session) {
+            if (!session.arrierePlan) return { texte: `${session.nom} tourne dans un onglet : écris-y, ou « ⑂ Continuer ici » pour lui écrire d'ici`, couleur: '#facc15' };
+            if (session.statut === 'travaille') return { texte: `${session.nom} travaille : attends qu'il ait fini pour lui écrire, ou Entrée pour le rejoindre`, couleur: '#facc15' };
+            if (session.statut === 'bloquee') return { texte: `${session.nom} attend une permission : Entrée pour le rejoindre et répondre`, couleur: '#fb923c' };
+            return { texte: `↳ envoyé à la conversation ${session.nom} (${session.titre || session.id})${t ? '' : ' · Entrée vide = la rejoindre'}`, couleur: couleurProjet(session.nom) };
+        }
+        return { texte: `↳ nouvelle session Claude dans ${path.basename(process.cwd())} · Ctrl+K pour tout le reste`, couleur: fond.discret };
+    }
+
     const lateral = Math.max(32, Math.min(56, Math.floor(width / 3)));
     const principal = width - lateral;
-    const corps = height - 5;
-    const session = d.agents.find((a: any) => a.cle === selection);
-    const cockpit = lignesCockpit(d, principal - 1, corps);
+    const nbSugg = Math.min(8, suggestions.length);
+    const corps = height - 2 - 4 - nbSugg;
+
+    let zone;
+    if (demande?.type === 'choix') zone = <Choix d={demande} hauteur={corps} />;
+    else if (demande?.type === 'saisie') zone = <box flexGrow={1} flexDirection="column"><Saisie d={demande} /></box>;
+    else if (demande?.type === 'vue') zone = <VueNonMigree d={demande} />;
+    else if (session) zone = <Conversation s={session} largeur={principal} cout={d.cout.parSession[session.sessionId]} agir={agir} />;
+    else if (journalOuvert) zone = <Journal />;
+    else {
+        const cockpit = lignesCockpit(d, principal - 1, corps);
+        zone = (
+            <box flexGrow={1} flexDirection="column" paddingLeft={1}
+                onMouseDown={(e: any) => {
+                    const cible = cockpit.cible(e.x - lateral - 1, e.y - 2);
+                    if (cible === JOURNAL) setJournalOuvert(true);
+                    else if (cible) setSelection(cible);
+                }}>
+                {cockpit.lignes.slice(0, corps - 1).map((l: string, i: number) => <Ansi key={i} texte={l} />)}
+                <text fg={fond.discret}>{'  clic sur « À faire » pour ouvrir la session · sur « Dernières sorties » pour le journal complet'}</text>
+            </box>
+        );
+    }
+
     return (
         <box width={width} height={height} flexDirection="column" backgroundColor="#0c0c0c">
             <box height={1} flexDirection="row">
                 <Ansi texte={degrade(' ✻ ' + (chargerConfig().banniere || 'CLAUDETOPIA').toUpperCase() + ' ')} />
                 {BOUTONS.map((b) => (
-                    <text key={b} onMouseOver={() => setSurvolHaut(b)} onMouseOut={() => setSurvolHaut(undefined)}
-                        fg={survolHaut === b ? fond.texte : fond.eteint} attributes={survolHaut === b ? B : 0}>{`  ${b} `}</text>
+                    <text key={b.action} onMouseOver={() => setSurvolHaut(b.action)} onMouseOut={() => setSurvolHaut(undefined)}
+                        onMouseDown={() => libre && lancer(b.action, true)}
+                        fg={survolHaut === b.action ? fond.texte : fond.eteint} attributes={survolHaut === b.action ? GRAS : 0}>{`  ${b.label} `}</text>
                 ))}
             </box>
             <Ansi texte={degrade('─'.repeat(width))} />
             <box flexGrow={1} flexDirection="row">
-                <Colonne d={d} largeur={lateral} selection={selection} choisir={setSelection} tic={tic} espace={espace} setEspace={setEspace} projets={projets} />
-                {session ? <VueSession s={session} /> : (
-                    <box flexGrow={1} flexDirection="column" paddingLeft={1}
-                        onMouseDown={(e: any) => {
-                            const c = cockpit.cible(e.x - lateral - 1, e.y - 2);
-                            if (c && c !== JOURNAL) setSelection(c);
-                        }}>
-                        {cockpit.lignes.slice(0, corps).map((l: string, i: number) => <Ansi key={i} texte={l} />)}
-                    </box>
-                )}
+                <Colonne d={d} largeur={lateral} selection={selection} choisir={setSelection} tic={tic} espace={espace} setEspace={setEspace}
+                    projets={projets} lancer={(cmd: string) => libre && lancer(cmd, true)} />
+                {zone}
             </box>
-            <box height={3} border borderStyle="rounded" borderColor={fond.bordure} flexDirection="row" paddingLeft={1}>
-                <text fg={theme.primaire}>❯ </text>
-                <input flexGrow={1} focused placeholder="Tape / pour les commandes, une question pour Claude, ou Entrée pour le menu" />
-            </box>
+            <Barre valeur={valeur} cle={cle} setValeur={(v) => {
+                setValeur(v);
+                setIndexSugg(0);
+            }} soumettre={soumettre} suggestions={suggestions} indexSugg={sugg}
+                choisirSugg={(i) => (suggestions[i]?.executer ? (remplacer(''), void lancer(suggestions[i].texte)) : remplacer(suggestions[i].texte))}
+                indication={indication()} actif={!demande} />
         </box>
     );
 }
 
 if (import.meta.main) {
     demarrerCollecte();
-    const renderer = await createCliRenderer({ exitOnCtrlC: true, useMouse: true, enableMouseMovement: true });
-    createRoot(renderer).render(<App />);
+    const renderer = await createCliRenderer({ exitOnCtrlC: true, useMouse: true, enableMouseMovement: true, consoleMode: 'disabled' });
+    // Tout ce que les commandes écrivent va au journal (affiché dans « Dernières sorties » et /sorties)
+    capturerConsole();
+    // claude attach, ssh, connexion : on rend le terminal au programme, puis on le reprend
+    definirPassage(async () => {
+        await renderer.suspend();
+        process.stdout.write('\x1b[2J\x1b[H');
+    }, async () => {
+        await renderer.resume();
+    });
+    const quitter = () => {
+        renderer.destroy();
+        process.exit(0);
+    };
+    createRoot(renderer).render(<App quitter={quitter} />);
 }

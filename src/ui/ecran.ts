@@ -24,13 +24,25 @@ export function quitterEcran(): void {
     desactiver();
 }
 
-export function passerLaMain(programme: string, args: string[], cwd?: string): number {
+// Comment l'interface rend le terminal puis le reprend : Ink par défaut, une autre interface (tui/) fournit les siens
+let ceder: () => void | Promise<void> = () => {
     demonter();
     desactiver();
     process.stdout.write('\x1b[2J\x1b[H');
-    const res = spawnSync(programme, args, { stdio: 'inherit', cwd, shell: programme === 'claude' });
+};
+let reprendre: () => void | Promise<void> = () => {
     activer();
     invaliderEcran();
     monter();
+};
+export function definirPassage(c: () => void | Promise<void>, r: () => void | Promise<void>): void {
+    ceder = c;
+    reprendre = r;
+}
+
+export async function passerLaMain(programme: string, args: string[], cwd?: string): Promise<number> {
+    await ceder();
+    const res = spawnSync(programme, args, { stdio: 'inherit', cwd, shell: programme === 'claude' });
+    await reprendre();
     return res.status ?? 1;
 }

@@ -216,7 +216,7 @@ export function commandesPlus(config: Config): Commande[] {
                     const { passerLaMain } = await import('./ui/ecran.js');
                     console.log(c.discret(action === 'logs' ? 'Logs en continu · Ctrl+C pour revenir' : 'Shell dans le conteneur · exit pour revenir'));
                     const [prog, a2] = commandeInteractive(action, id, h.serveur);
-                    passerLaMain(prog, a2);
+                    await passerLaMain(prog, a2);
                     return;
                 }
                 if (!['start', 'stop', 'restart'].includes(action)) return;

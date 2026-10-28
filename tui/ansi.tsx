@@ -74,10 +74,12 @@ export function morceauxAnsi(texte: string): Morceau[] {
     return res;
 }
 
-// Une ligne colorée par chalk, telle quelle, dans un <text>
-export function Ansi({ texte, fg }: { texte: string; fg?: string }) {
+// Une ligne colorée par chalk, telle quelle, dans un <text> ; replier : coupée aux mots si elle dépasse la largeur
+export function Ansi({ texte, fg, replier = false, selectionnable = false }: { texte: string; fg?: string; replier?: boolean; selectionnable?: boolean }) {
+    // Une ligne vide garde sa hauteur
+    if (!texte.replace(/\x1b\[[0-9;]*m/g, '')) return <text> </text>;
     return (
-        <text fg={fg} wrapMode="none">
+        <text fg={fg} wrapMode={replier ? 'word' : 'none'} selectable={selectionnable}>
             {morceauxAnsi(texte).map((m, i) => <span key={i} fg={m.fg} bg={m.bg} attributes={m.attributs}>{m.t}</span>)}
         </text>
     );

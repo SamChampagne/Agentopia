@@ -66,7 +66,7 @@ export function VueDocker({ fermer }: { fermer: () => void }) {
         }
         if (action === 'logs' || action === 'shell') {
             const [programme, args] = commandeInteractive(action, c.id, hote.serveur);
-            passerLaMain(programme, args);
+            void passerLaMain(programme, args);
             return;
         }
         setMessage(`${action === 'start' ? 'Démarrage' : action === 'stop' ? 'Arrêt' : 'Redémarrage'} de ${c.nom}…`);

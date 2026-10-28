@@ -36,8 +36,8 @@ import { passerLaMain } from './ui/ecran.js';
 import { CLAUDE } from './claude.js';
 
 // Donne le terminal à "claude attach" ; Ctrl+Z dans Claude ramène ici
-export function rejoindre(id: string): void {
-    passerLaMain(CLAUDE, ['attach', id]);
+export async function rejoindre(id: string): Promise<void> {
+    await passerLaMain(CLAUDE, ['attach', id]);
     console.log(c.discret(`De retour · la session ${id} continue en arrière-plan`));
 }
 
@@ -285,7 +285,7 @@ export const COMMANDES: Commande[] = [
     {
         nom: 'rejoindre', args: '<id>', groupe: 'Claude', cache: true,
         description: "Entrer dans une session d'arrière-plan",
-        executer: ({ args }) => rejoindre(args[0]),
+        executer: async ({ args }) => rejoindre(args[0]),
     },
     {
         nom: 'arreter', args: '<id>', groupe: 'Claude', cache: true,
@@ -304,7 +304,7 @@ export const COMMANDES: Commande[] = [
             const { id, sortie } = await tache('Copie de la conversation en arrière-plan', () => lancerArrierePlan(s.cwd, `${s.nom}-suite`, undefined, s.sessionId));
             if (!id) return console.log(c.erreur(sortie));
             console.log(c.succes(`Copie créée (${id}) : la session d'origine reste dans son onglet`));
-            rejoindre(id);
+            await rejoindre(id);
         },
     },
     {
@@ -546,7 +546,7 @@ export const COMMANDES: Commande[] = [
             const { verifierClaude, lireEtatClaude } = await import('./etatClaude.js');
             console.log(c.discret('Le navigateur s\'ouvre : connecte-toi, puis reviens ici.'));
             // La connexion attend dans le terminal : on lui passe la main, puis l'interface revient
-            passerLaMain(CLAUDE, ['auth', 'login']);
+            await passerLaMain(CLAUDE, ['auth', 'login']);
             const etat = await tache('Vérification du compte', verifierClaude);
             console.log(etat === 'pret' ? c.succes(`✓ Connecté à Claude${lireEtatClaude().compte ? ` (${lireEtatClaude().compte})` : ''}`) : c.alerte('Toujours pas connecté : recommence avec /connexion-claude'));
         },

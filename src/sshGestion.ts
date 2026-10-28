@@ -32,7 +32,7 @@ async function installerCle(h: HoteSsh): Promise<void> {
     if ('erreur' in cle) return console.log(c.erreur(`✗ Impossible de créer une clé : ${cle.erreur}`));
     if (cle.creee) console.log(c.succes(`✓ Nouvelle clé créée : ${cle.prive}`));
     console.log(c.discret(`Connexion à ${h.alias} : tape ton mot de passe une dernière fois, la clé sera installée.`));
-    passerLaMain('ssh', [h.alias, commandeInstallationCle(cle.publique)]);
+    await passerLaMain('ssh', [h.alias, commandeInstallationCle(cle.publique)]);
     console.log(c.succes(`Terminé · « ✓ Tester l'accès » dans la vue SSH pour vérifier que Claude peut s'y connecter seul`));
 }
 
