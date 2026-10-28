@@ -73,6 +73,23 @@ mockInput.pressEscape();
 image = await ecran();
 verifier('Échap referme le globe', !image.includes('GLOBE DES SERVEURS'), image);
 
+// Vue Live : les sessions en cartes ; la flèche en choisit une (ses actions apparaissent), Entrée ouvre sa conversation
+if (lireDonnees().agents.some((s: any) => s.statut !== 'terminee')) {
+    bus.emit('lancer', '/global');
+    await w(1500);
+    image = await ecran();
+    verifier('Live : sessions en cartes avec leur contexte', image.includes('VUE GLOBALE') && image.includes('╭') && image.includes('ctx '), image);
+    mockInput.pressArrow('right');
+    image = await ecran();
+    verifier('Live : la flèche choisit une carte et montre ses actions', image.includes('↵ Ouvrir') && image.includes('± Diff'), image);
+    mockInput.pressEnter();
+    await w(500);
+    image = await ecran();
+    verifier('Live : Entrée ouvre la conversation', !image.includes('VUE GLOBALE') && image.includes('← Retour'), image);
+    mockInput.pressEscape();
+    await ecran();
+}
+
 // L'écran de veille, puis une touche ramène l'interface
 bus.emit('veille');
 await w(700);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useKeyboard, useTerminalDimensions } from '@opentui/react';
 import { GRAS, ANIM, une, couper } from '../style.ts';
 import { useDonnees } from '../donnees.ts';
@@ -16,13 +16,12 @@ import { theme, couleurProjet, fond, melange } from '../../dist/theme.js';
 
 // Vue globale, en direct : un centre de contrôle.
 // En haut, les grands chiffres ; puis le pouls de toutes les sessions sur la dernière heure ;
-// en bas, chaque session avec sa bande d'activité, les serveurs en cartes à jauges, Docker et les équipes.
+// en bas, les sessions en cartes interactives (courbe d'activité, contexte, actions), les serveurs en cartes à jauges, Docker et les équipes.
 // Plein écran (la colonne de gauche disparaît) ; un clic ouvre la conversation ou le panneau de détail.
 
 const NOIR = '#0c0c0c';
 const VERT = '#4ade80', JAUNE = '#facc15', ORANGE = '#fb923c', ROUGE = '#f87171';
 const STATUTS: Record<string, { t: string; c: string }> = { travaille: { t: 'travaille', c: VERT }, attend: { t: 't’attend', c: JAUNE }, bloquee: { t: 'bloquée', c: ORANGE }, terminee: { t: 'terminée', c: 'gray' } };
-const BLOCS = ' ▁▂▃▄▅▆▇█';
 
 // Un grand nombre lisible (police 3 × 5 en demi-blocs, 3 lignes)
 function GrandNombre({ n, couleur }: { n: string; couleur: string }) {
@@ -112,6 +111,89 @@ function Jauge({ nom, pct, largeur }: { nom: string; pct?: number; largeur: numb
     return <text flexShrink={0} wrapMode="none"><span fg="gray">{`${nom} `}</span><span fg={c}>{'▰'.repeat(plein)}</span><span fg={fond.bordure}>{'▱'.repeat(largeur - plein)}</span><span fg={c}>{` ${String(Math.round(pct)).padStart(3)}% `}</span></text>;
 }
 
+// Courbe d'activité d'une session (30 dernières minutes), pleine, en braille, aux couleurs du projet
+function Activite({ horaires, largeur, hauteur, couleur, vif }: { horaires?: number[]; largeur: number; hauteur: number; couleur: string; vif: boolean }) {
+    const toile = new Toile(largeur, hauteur);
+    const minutes = 30;
+    const valeurs = rythme(horaires, minutes);
+    const max = Math.max(3, ...valeurs);
+    for (let x = 0; x < toile.largeurPx; x++) {
+        const p = (x / (toile.largeurPx - 1)) * (minutes - 1);
+        const i = Math.floor(p), f = p - i;
+        const v = (valeurs[i] * (1 - f) + (valeurs[Math.min(minutes - 1, i + 1)] ?? 0) * f) / max;
+        if (v <= 0.001) {
+            if (x % 4 === 0) toile.point(x, toile.hauteurPx - 1, fond.bordure, 0);
+            continue;
+        }
+        const haut = Math.min(toile.hauteurPx - 2, Math.round((1 - v) * (toile.hauteurPx - 1)));
+        for (let y = toile.hauteurPx - 1; y >= haut; y--) toile.point(x, y, y === haut ? (vif ? '#ffffff' : couleur) : melange(NOIR, couleur, 0.35 + 0.4 * (1 - y / toile.hauteurPx)), y === haut ? 2 : 1);
+    }
+    return <RenduToile toile={toile} />;
+}
+
+// Une session en carte : son état, sa courbe d'activité, son contexte, ce qu'elle fait ;
+// au survol ou à la sélection (flèches), ses actions apparaissent en bas
+function CarteSession({ s, a, cout, largeur, tic, choisie, survolee, agir, survoler }: {
+    s: any; a: any; cout?: number; largeur: number; tic: number; choisie: boolean; survolee: boolean; agir: (action: string) => void; survoler: (oui: boolean) => void;
+}) {
+    const [bouton, setBouton] = useState<string>();
+    const st = STATUTS[s.statut] ?? STATUTS.terminee;
+    const projet = couleurProjet(s.nom);
+    const travaille = s.statut === 'travaille', bloquee = s.statut === 'bloquee';
+    // Le bord : accent si choisie, pulse aux couleurs du projet si elle travaille, orange qui clignote si elle t'attend
+    const bord = choisie || survolee ? theme.accent : bloquee ? (tic % 2 ? ORANGE : '#7c2d12') : travaille ? (tic % 2 ? projet : melange(NOIR, projet, 0.5)) : melange(NOIR, projet, 0.4);
+    const iw = largeur - 4;
+    const action = s.question ? `? ${une(s.question)}` : a?.outil ? `▸ ${une(a.outil)}` : une(a?.dernierTexte ?? s.titre ?? 'pas encore d’activité');
+    const ctx = a?.contexte;
+    const limite = ctx ? (ctx > 200_000 ? 1_000_000 : 200_000) : 0;
+    const part = ctx ? Math.min(1, ctx / limite) : 0;
+    const lc = Math.max(4, Math.min(12, iw - 24));
+    const repondable = bloquee && s.arrierePlan && s.question && !/permission/i.test(s.question);
+    const boutons = [
+        { cle: 'ouvrir', t: ' ↵ Ouvrir ' },
+        ...(repondable ? [{ cle: 'repondre', t: ' ✎ Répondre ' }] : []),
+        ...(s.arrierePlan ? [{ cle: 'cote', t: ' ⫿ À côté ' }] : []),
+        { cle: 'changements', t: ' ± Diff ' },
+    ];
+    const depuis = a?.date ? Math.round((Date.now() - a.date.getTime()) / 60_000) : undefined;
+    return (
+        <box width={largeur} height={9} flexShrink={0} border borderStyle="rounded" borderColor={bord} flexDirection="column" paddingLeft={1} paddingRight={1}
+            backgroundColor={choisie ? '#111827' : undefined}
+            onMouseOver={() => survoler(true)} onMouseOut={() => survoler(false)} onMouseDown={() => agir('ouvrir')}>
+            <box height={1} flexDirection="row">
+                <text flexShrink={0} fg={st.c}>{travaille ? `${ANIM[tic % ANIM.length]} ` : bloquee ? '! ' : '○ '}</text>
+                <text flexGrow={1} fg={projet} attributes={GRAS} wrapMode="none" truncate>{s.nom}</text>
+                <text flexShrink={0} fg={st.c} attributes={bloquee ? GRAS : 0}>{` ${st.t}`}</text>
+            </box>
+            <text fg={fond.eteint} wrapMode="none">{couper(`${s.titre || s.id || ''} · ${s.arrierePlan ? 'arrière-plan' : 'onglet'}${cout ? ` · ${dollars(cout)}` : ''}`, iw)}</text>
+            <Activite horaires={a?.horaires} largeur={iw} hauteur={2} couleur={projet} vif={travaille && tic % 2 === 0} />
+            <text wrapMode="none">
+                <span fg="gray">ctx </span>
+                <span fg={part > 0.8 ? ROUGE : part > 0.5 ? JAUNE : VERT}>{'▰'.repeat(Math.round(part * lc))}</span>
+                <span fg={fond.bordure}>{'▱'.repeat(lc - Math.round(part * lc))}</span>
+                <span fg="gray">{ctx ? ` ${Math.round(ctx / 1000)}k` : ' ?'}</span>
+                <span fg={fond.discret}>{depuis === undefined ? '' : depuis < 1 ? '  · à l’instant' : `  · il y a ${depuis} min`}</span>
+            </text>
+            <text fg={s.question ? '#fdba74' : '#cbd5e1'} wrapMode="none">{couper(action, iw)}</text>
+            {/* Les actions : visibles quand la carte est survolée ou choisie au clavier */}
+            {choisie || survolee ? (
+                <box height={1} flexDirection="row" columnGap={1}>
+                    {boutons.map((b) => (
+                        <text key={b.cle} flexShrink={0} fg={bouton === b.cle ? NOIR : theme.accent} bg={bouton === b.cle ? theme.accent : undefined} attributes={GRAS}
+                            onMouseOver={() => setBouton(b.cle)} onMouseOut={() => setBouton(undefined)}
+                            onMouseDown={(e: any) => {
+                                e?.stopPropagation?.();
+                                agir(b.cle);
+                            }}>{b.t}</text>
+                    ))}
+                </box>
+            ) : (
+                <text fg={a?.dernierUser ? theme.secondaire : fond.discret} wrapMode="none">{couper(a?.dernierUser ? `❯ ${une(a.dernierUser)}` : 'survole pour les actions', iw)}</text>
+            )}
+        </box>
+    );
+}
+
 export function VueGlobale({ fermer }: { fermer: () => void }) {
     const { width, height } = useTerminalDimensions();
     const d = useDonnees();
@@ -132,9 +214,32 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
             clearInterval(horloge);
         };
     }, []);
+    // Flèches : choisir une carte · Entrée : l'ouvrir · j : à côté · d : ses changements
+    const [choix, setChoix] = useState(-1);
+    const ordre = useRef<any[]>([]);
+    const parLigne = useRef(1);
     useKeyboard((k) => {
-        if (k.name === 'escape' || k.sequence === 'q') fermer();
+        if (k.name === 'escape' || k.sequence === 'q') return fermer();
+        const n = ordre.current.length;
+        if (!n) return;
+        const pas = k.name === 'right' ? 1 : k.name === 'left' ? -1 : k.name === 'down' ? parLigne.current : k.name === 'up' ? -parLigne.current : 0;
+        if (pas) return setChoix((c) => (c < 0 ? 0 : Math.max(0, Math.min(n - 1, c + pas))));
+        const s = ordre.current[choix];
+        if (!s) return;
+        if (k.name === 'return') agirSession(s, 'ouvrir');
+        else if (k.sequence === 'j') agirSession(s, 'cote');
+        else if (k.sequence === 'd') agirSession(s, 'changements');
+        else if (k.sequence === 'r') agirSession(s, 'repondre');
     });
+    // Une action de carte : ouvrir la conversation ici, ou lancer la commande après avoir refermé la vue
+    const agirSession = (s: any, action: string) => {
+        if (action === 'ouvrir') return ouvrirSession(s.cle);
+        const cmd = action === 'cote' ? (s.arrierePlan ? `/rejoindre-cote ${s.id}` : undefined)
+            : action === 'changements' ? `/changements ${s.sessionId}` : action === 'repondre' ? `/repondre ${s.sessionId}` : undefined;
+        if (!cmd) return;
+        fermer();
+        setTimeout(() => bus.emit('lancer', cmd), 50);
+    };
     const ouvrirSession = (cle: string) => {
         fermer();
         bus.emit('selectionner', cle);
@@ -185,38 +290,28 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
             extra={d.docker.slice(0, 2).map((h: any) => [{ t: `${h.serveur ? h.nom : 'ce poste'} `, c: '#cbd5e1' }, { t: h.erreur ? 'indisponible' : `${h.conteneurs.filter((c: any) => c.enMarche).length}/${h.conteneurs.length}`, c: h.erreur ? ROUGE : 'gray' }])} />,
     ].slice(0, nbTuiles);
 
-    // ─── Les sessions : une bande d'activité de 30 minutes chacune ───
+    // ─── Les sessions : des cartes, autant par rangée que la largeur le permet ───
     const deuxColonnes = largeur >= 130;
-    const lg = deuxColonnes ? Math.floor(largeur * 0.58) : largeur;
+    const lg = deuxColonnes ? Math.floor(largeur * 0.62) : largeur;
     const ld = largeur - lg - 2;
-    const bande = Math.max(10, Math.min(30, lg - 52));
-    const lignesSessions = d.agents
-        .filter((s: any) => s.statut !== 'terminee' && !enPause(s, d.activites.get(s.sessionId)))
-        .map((s: any) => {
-            const a = d.activites.get(s.sessionId);
-            const st = STATUTS[s.statut] ?? STATUTS.terminee;
-            const valeurs = rythme(a?.horaires, bande);
-            const max = Math.max(3, ...valeurs);
-            const action = s.question ? `? ${une(s.question)}` : a?.outil ? `▸ ${une(a.outil)}` : une(a?.dernierTexte ?? s.titre ?? '');
-            const cout = d.cout.parSession[s.sessionId];
-            return (
-                <box key={s.cle} height={1} flexDirection="row" backgroundColor={survol === s.cle ? fond.selection : undefined} {...survoler(s.cle)} onMouseDown={() => ouvrirSession(s.cle)}>
-                    <text flexShrink={0} fg={st.c}>{s.statut === 'travaille' ? ` ${ANIM[tic % ANIM.length]} ` : s.statut === 'bloquee' ? (tic % 2 ? ' ! ' : '   ') : ' ○ '}</text>
-                    <text flexShrink={0} fg={couleurProjet(s.nom)} attributes={GRAS}>{couper(s.nom, 16).padEnd(17)}</text>
-                    <text flexShrink={0}>{valeurs.map((v: number, i: number) => <span key={i} fg={v ? melange(NOIR, couleurProjet(s.nom), 0.4 + 0.6 * (v / max)) : fond.bordure}>{v ? BLOCS[Math.max(1, Math.round((v / max) * 8))] : '·'}</span>)}</text>
-                    <text flexShrink={0} fg={st.c}>{` ${st.t.padEnd(10)}`}</text>
-                    <text flexShrink={0} fg={cout ? 'gray' : fond.discret}>{(cout ? dollars(cout) : '').padStart(8)}</text>
-                    <text fg={s.question ? '#fdba74' : fond.eteint} truncate flexGrow={1}>{`  ${action}`}</text>
-                </box>
-            );
-        });
+    const actives = sessions;
+    // Au moins 38 colonnes par carte ; avec peu de sessions, elles s'élargissent pour remplir la rangée
+    const nbParLigne = Math.max(1, Math.min(Math.floor(lg / 38), actives.length));
+    const lc = Math.floor(lg / nbParLigne);
+    ordre.current = actives;
+    parLigne.current = nbParLigne;
+    const cartesSessions = actives.map((s: any, i: number) => (
+        <CarteSession key={s.cle} s={s} a={d.activites.get(s.sessionId)} cout={d.cout.parSession[s.sessionId]} largeur={lc} tic={tic}
+            choisie={i === choix} survolee={survol === s.cle} survoler={(oui) => setSurvol(oui ? s.cle : undefined)}
+            agir={(action) => agirSession(s, action)} />
+    ));
 
     // ─── Les serveurs : une carte à jauges chacun ───
-    const actives = d.connexions.map((cx: any) => decrireConnexion(cx, d));
+    const connexions = d.connexions.map((cx: any) => decrireConnexion(cx, d));
     const cartesServeurs = serveurs.map((s: any) => {
         const ok = d.joignables.get(s);
         const m = metriquesDe(s.nom);
-        const connecte = actives.filter((x: any) => x.serveur === s).length;
+        const connecte = connexions.filter((x: any) => x.serveur === s).length;
         const charge = m && !m.erreur && m.charge !== undefined ? Math.min(100, (m.charge / (m.coeurs || 1)) * 100) : undefined;
         const cle = `srv:${s.nom}`;
         const lj = Math.max(4, Math.min(14, Math.floor((ld - 3 - 3 * 13) / 3)));
@@ -289,11 +384,11 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
                 <box flexDirection={deuxColonnes ? 'row' : 'column'}>
                     <box flexDirection="column" width={deuxColonnes ? lg : undefined} flexShrink={0} marginRight={deuxColonnes ? 2 : 0}>
                         <box flexDirection="row">
-                            <text fg={theme.primaire} attributes={GRAS}>{` SESSIONS (${lignesSessions.length})`.padEnd(21)}</text>
-                            <text fg={fond.discret}>{`activité, ${bande} dernières min`}</text>
+                            <text fg={theme.primaire} attributes={GRAS}>{` SESSIONS (${cartesSessions.length})`.padEnd(16)}</text>
+                            <text fg={fond.discret}>courbe : 30 dernières min · flèches pour choisir, Entrée ouvrir, j à côté, d changements</text>
                         </box>
-                        {lignesSessions}
-                        {!lignesSessions.length && <text fg={fond.discret}>   aucune session active</text>}
+                        <box flexDirection="row" flexWrap="wrap">{cartesSessions}</box>
+                        {!cartesSessions.length && <text fg={fond.discret}>   aucune session active</text>}
                         {!deuxColonnes && <text> </text>}
                     </box>
                     {colonneDroite}
