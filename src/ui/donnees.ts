@@ -5,10 +5,10 @@ const DOSSIER_MAITRE = path.resolve(CHEMINS.maitre).toLowerCase();
 import { EventEmitter } from 'events';
 import { useEffect, useState } from 'react';
 import { SessionActive, sessionsActives } from '../systeme.js';
-import { SessionVue, Activite, listerAgents, lireTranscript, activite, contexteSession, DOSSIERS_AGENTS } from '../agents.js';
+import { SessionVue, Activite, listerAgents, lireTranscript, activite, contexteSession, limiteContexte, DOSSIERS_AGENTS } from '../agents.js';
 import { Hote, listerConteneurs } from '../docker.js';
 import { chargerConfig } from '../config.js';
-import { toast } from '../notifications.js';
+import { toast, jouerSon } from '../notifications.js';
 import { bus } from './bus.js';
 import { mettreAJourCout, dollars } from '../cout.js';
 import { verifierPlanifications } from '../planificateur.js';
@@ -99,8 +99,30 @@ function activiteDe(fichier: string): ReturnType<typeof activite> {
 // Notifications basées sur les cartes (onglets ET arrière-plan) : une session qui travaillait
 // et qui s'arrête t'attend ; une session qui passe en "bloquée" attend une permission
 const debutTravail = new Map<string, number>();
+// Sessions déjà prévenues que leur contexte est presque plein (on reprévient après un /compact)
+const contextePlein = new Set<string>();
+let contexteVu = false;
+function signalerContexte(): void {
+    // Premier passage : les sessions déjà pleines au lancement sont notées sans alerte (seul le passage du seuil prévient)
+    const silencieux = !contexteVu;
+    contexteVu = true;
+    for (const a of donnees.agents) {
+        const jetons = donnees.activites.get(a.sessionId)?.contexte;
+        if (!jetons || a.statut === 'terminee') continue;
+        const part = jetons / limiteContexte(jetons);
+        if (part < 0.5) contextePlein.delete(a.sessionId);
+        if (part < 0.8 || contextePlein.has(a.sessionId)) continue;
+        contextePlein.add(a.sessionId);
+        if (silencieux) continue;
+        const message = `${Math.round(part * 100)} % du contexte utilisé · ouvre-la et tape /compact, ou termine la tâche et repars d'une session neuve`;
+        bus.emit('notice', `◔ ${a.nom} : ${message}`);
+        if (chargerConfig().notifications) toast(`◔ ${a.nom} : contexte presque plein`, message, `claudetopia:session/${a.id ?? a.sessionId}`, 'alerte');
+    }
+}
+
 function signalerChangements(avant: Map<string, string>): void {
-    if (!chargerConfig().notifications) return;
+    signalerContexte();
+    const notifier = chargerConfig().notifications;
     const membres = agentsDesEquipes();
     for (const a of donnees.agents) {
         const precedent = avant.get(a.sessionId);
@@ -112,11 +134,13 @@ function signalerChangements(avant: Map<string, string>): void {
         debutTravail.delete(a.sessionId);
         if (precedent !== 'travaille') continue;
         if (a.statut === 'bloquee') {
-            toast(`⚠ ${a.nom} attend ${a.question ? 'ta réponse' : 'ta permission'}`, a.question || a.titre || 'Clique pour ouvrir la session', `claudetopia:session/${a.id ?? a.sessionId}`);
+            if (notifier) toast(`⚠ ${a.nom} attend ${a.question ? 'ta réponse' : 'ta permission'}`, a.question || a.titre || 'Clique pour ouvrir la session', `claudetopia:session/${a.id ?? a.sessionId}`, 'alerte');
+            else jouerSon('alerte');
             bus.emit('notice', `! ${a.nom} attend ta permission · clique sa carte`);
         } else if (duree >= 15_000 && !membres.has(a.id ?? '')) {
             const minutes = Math.round(duree / 60_000);
-            toast(`✓ ${a.nom} a fini`, `${a.titre || 'Claude t\'attend'}${minutes ? ` · ${minutes} min de travail` : ''} · clic pour ouvrir`, `claudetopia:session/${a.id ?? a.sessionId}`);
+            if (notifier) toast(`✓ ${a.nom} a fini`, `${a.titre || 'Claude t\'attend'}${minutes ? ` · ${minutes} min de travail` : ''} · clic pour ouvrir`, `claudetopia:session/${a.id ?? a.sessionId}`);
+            else jouerSon('fini');
             bus.emit('notice', `✓ ${a.nom} a fini${minutes ? ` (${minutes} min)` : ''} · clique sa carte pour voir`);
         }
     }
@@ -184,6 +208,8 @@ export function demarrerCollecte(): void {
         }
     }, 30_000), 5000);
     boucle(() => rafraichirDocker(false), 15_000);
+    // Thème automatique (/theme-auto) : la palette suit l'heure ou le mode de Windows
+    boucle(async () => (await import('../themeAuto.js')).appliquerThemeAuto(), 60_000);
     suivreFichierEquipes();
     equipes.on('maj', () => {
         donnees.equipes = lireEquipes();

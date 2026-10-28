@@ -11,7 +11,7 @@ import { recents, projetsRecents, puce } from './dashboard.js';
 import { instantane, sessionsActives, fermerArbre, formatRam } from './systeme.js';
 import { serveursDev } from './serveurs.js';
 import { calculerUsage, formatTokens, nomDossierClaude } from './usage.js';
-import { demarrerSurveillance, toast } from './notifications.js';
+import { demarrerSurveillance, toast, jouerSon } from './notifications.js';
 import { demanderClaude, parLignes } from './claude.js';
 import { revue, commit } from './gitia.js';
 import { journal } from './journal.js';
@@ -22,7 +22,11 @@ import { commandesSsh } from './sshGestion.js';
 import { commandesConnexions } from './connexionsCommandes.js';
 import { commandesPlus } from './plus.js';
 import { commandesPrCi } from './prci.js';
-import { commandesM3 } from './m3.js';
+import { commandesTicket } from './ticket.js';
+import { commandesModeles } from './modelesSession.js';
+import { commandesHistorique } from './historiqueCout.js';
+import { commandesGardeFou } from './gardeFou.js';
+import { commandesThemeAuto } from './themeAuto.js';
 import { commandesSurveillance } from './surveillanceLogs.js';
 import { commandesExport } from './exportImport.js';
 import { commandesApparence } from './apparence.js';
@@ -370,6 +374,18 @@ export const COMMANDES: Commande[] = [
             if (!id) return console.log(c.erreur(sortie));
             console.log(c.succes(`Copie créée (${id}) : la session d'origine reste dans son onglet`));
             await rejoindre(id);
+        },
+    },
+    {
+        nom: 'continuer', args: '<sessionId>', groupe: 'Claude', cache: true,
+        description: 'Reprendre une session terminée (avec son historique) en arrière-plan',
+        executer: async ({ args }) => {
+            const s = lireDonnees().agents.find((a) => a.sessionId === args[0]);
+            if (!s) return void bus.emit('notice', '✕ Session introuvable');
+            const { id, sortie } = await tache(`Reprise de ${s.nom}`, () => lancerArrierePlan(s.cwd, s.titre || s.nom, undefined, s.sessionId));
+            if (!id) return console.log(c.erreur(sortie.split('\n')[0] || 'Échec de la reprise'));
+            console.log(c.succes(`${s.nom} reprend (${id}) avec tout son historique · écris-lui dans la barre du bas`));
+            bus.emit('selectionner', id);
         },
     },
     {
@@ -847,6 +863,20 @@ export const COMMANDES: Commande[] = [
             console.log(config.notifications ? c.succes('🔔 Notifications activées') : c.discret('🔕 Notifications désactivées'));
         },
     },
+    {
+        nom: 'sons', args: '[on|off|test]', groupe: 'Système',
+        description: 'Petit son quand une session finit (doux) ou a besoin de toi (plus marqué)',
+        executer: async ({ args }) => {
+            if (args[0] === 'test') {
+                jouerSon('fini');
+                return void setTimeout(() => jouerSon('alerte'), 1200);
+            }
+            config.sons = args[0] ? args[0] !== 'off' : config.sons === false;
+            sauverConfig(config);
+            console.log(config.sons ? c.succes('♪ Sons activés · « /sons test » pour les entendre') : c.discret('♪ Sons coupés (les notifications restent, en silence)'));
+            if (config.sons) jouerSon('fini');
+        },
+    },
 
     // Config
     {
@@ -878,7 +908,11 @@ export const COMMANDES: Commande[] = [
     ...commandesConnexions(),
     ...commandesPlus(config),
     ...commandesPrCi(),
-    ...commandesM3(config),
+    ...commandesTicket(getProjets),
+    ...commandesModeles(config, getProjets),
+    ...commandesHistorique(getProjets),
+    ...commandesGardeFou(config),
+    ...commandesThemeAuto(config),
     ...commandesSurveillance(),
     ...commandesExport(config),
     ...commandesApparence(config),

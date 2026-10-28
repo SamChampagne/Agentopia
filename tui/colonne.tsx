@@ -88,7 +88,12 @@ function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu, l
                 <box height={1} backgroundColor={bg} flexDirection="row">
                     <text fg={barre}>▌ </text>
                     <text>{'  '}</text>
-                    {repondable ? <Reponses s={s} largeur={largeur} lancer={lancer} /> : (
+                    {repondable ? <Reponses s={s} largeur={largeur} lancer={lancer} /> : s.statut === 'terminee' ? (
+                        <text fg={theme.accent} attributes={survole ? GRAS : 0} onMouseDown={(e: any) => {
+                            e?.stopPropagation?.();
+                            lancer(`/continuer ${s.sessionId}`);
+                        }}>↻ Continuer (avec son historique)</text>
+                    ) : (
                         <>
                             <text fg={couleurProjet(s.nom)} flexGrow={1}>{etincelle(rythme(a?.horaires))}</text>
                             {ctx && <text><span fg={fond.discret}>ctx </span><span fg={ctx.couleur}>{ctx.plein}</span><span fg={fond.discret}>{ctx.vide}</span><span fg="gray">{` ${ctx.texte} `}</span></text>}

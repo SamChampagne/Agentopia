@@ -15,9 +15,10 @@ export const general = (parlerAuMaitre: () => void): Article[] => [
     { label: '⚿ Connexions (comptes, serveurs, outils)', valeur: '/connexions' },
     { label: '+ Nouvelle session Claude', valeur: '/nouvelle' },
     { label: '◆ Nouvelle équipe d\'agents', valeur: '/equipe nouvelle' },
+    { label: '⚑ Tâche depuis un ticket', valeur: '/ticket' },
+    { label: '▸ Session depuis un modèle', valeur: '/modele' },
     { label: '☀ Ma journée (résumé + coût)', valeur: '/journee' },
-    { label: '▦ Analyser des scripts H5 (M3)', valeur: '/analyze' },
-    ...ici(process.cwd()),
+    { label: '$ Dépenses des 30 derniers jours', valeur: '/depenses' },    ...ici(process.cwd()),
 ];
 
 export function menuSession(s: any, ouvrir: () => void): Menu {
@@ -31,6 +32,7 @@ export function menuSession(s: any, ouvrir: () => void): Menu {
                 : [{ label: '⑂ Continuer ici', valeur: `/copie ${s.sessionId}` }]),
             ...(s.statut === 'bloquee' && s.arrierePlan && s.question && !/permission/i.test(s.question)
                 ? [{ label: '✎ Répondre à sa question', valeur: `/repondre ${s.sessionId}`, description: s.question }] : []),
+            ...(s.statut === 'terminee' ? [{ label: '↻ Continuer (avec son historique)', valeur: `/continuer ${s.sessionId}` }] : []),
             { label: '± Voir ses changements', valeur: `/changements ${s.sessionId}` },
             { label: '⎘ Copier le dernier bloc de code', valeur: `/copier-code ${s.sessionId}` },
             { label: '⎘ Copier la dernière réponse', valeur: `/copier-reponse ${s.sessionId}` },
