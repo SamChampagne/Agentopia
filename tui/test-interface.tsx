@@ -74,6 +74,18 @@ verifier('↓ dans Config déplace la sélection', /❯ Claude/.test(image), ima
 image = await echap();
 verifier('Échap referme Config', !image.includes('CONFIGURATION'), image);
 
+// Docker et SSH : ouvrir, se déplacer, refermer (ni Entrée, ni s/r/t/f : ils agiraient sur un vrai conteneur ou serveur)
+image = await commande('/docker');
+verifier('/docker : vue Docker (OpenTUI)', image.includes('DOCKER') && image.includes('▶ Démarrer') && image.includes('Échap fermer'), image);
+image = await echap();
+verifier('Échap referme Docker', !image.includes('▶ Démarrer'), image);
+image = await commande('/ssh');
+verifier('/ssh : vue Serveurs SSH (OpenTUI)', image.includes('SERVEURS SSH') && image.includes('⇄ Se connecter') && image.includes('Claude :'), image);
+mockInput.pressArrow('down');
+image = await ecran();
+image = await echap();
+verifier('Échap referme SSH', !image.includes('⇄ Se connecter'), image);
+
 image = await commande('/recents');
 verifier('/recents : vue pas encore migrée, annoncée', image.includes('pas encore passée à la nouvelle interface'), image);
 image = await echap();
