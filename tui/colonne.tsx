@@ -24,10 +24,12 @@ function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu }:
     const icone = pause ? '◌' : s.statut === 'travaille' ? ANIM[tic % ANIM.length] : s.statut === 'bloquee' ? '!' : s.statut === 'terminee' ? '✓' : '○';
     const etat = pause ? `en pause · ${ilYa(a?.date ?? s.debut)}` : LIBELLES[s.statut] ?? s.statut;
     const action = s.question ? `? ${une(s.question)}` : a?.outil ? `▸ ${une(a.outil)}` : a?.dernierTexte ? une(a.dernierTexte) : s.titre || 'pas encore d’activité';
+    // 3e ligne : ta dernière demande à cette session, sinon depuis quand elle est là
+    const demande = a?.dernierUser ? `❯ ${une(a.dernierUser)}` : `depuis ${ilYa(a?.date ?? s.debut)}${s.arrierePlan ? ' · arrière-plan' : ' · onglet'}`;
     const bg = active ? fond.panneauActif : survole ? fond.selection : fond.panneau;
     const barre = active ? theme.accent : couleur;
     return (
-        <box height={3} flexShrink={0} onMouseDown={(e: any) => (droit(e) ? menu() : choisir())} onMouseOver={() => survoler(true)} onMouseOut={() => survoler(false)}>
+        <box height={4} flexShrink={0} onMouseDown={(e: any) => (droit(e) ? menu() : choisir())} onMouseOver={() => survoler(true)} onMouseOut={() => survoler(false)}>
             <box height={1} backgroundColor={bg} flexDirection="row">
                 <text fg={barre}>▌ </text>
                 <text flexGrow={1} truncate><span fg={couleurProjet(s.nom)}>● </span><span fg={fond.texte} attributes={GRAS}>{s.nom}</span></text>
@@ -36,6 +38,10 @@ function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu }:
             <box height={1} backgroundColor={bg} flexDirection="row">
                 <text fg={barre}>▌ </text>
                 <text fg="#94a3b8" truncate>{'  ' + couper(action, largeur - 5)}</text>
+            </box>
+            <box height={1} backgroundColor={bg} flexDirection="row">
+                <text fg={barre}>▌ </text>
+                <text fg={a?.dernierUser ? theme.secondaire : fond.discret} truncate>{'  ' + couper(demande, largeur - 5)}</text>
             </box>
         </box>
     );
@@ -99,9 +105,17 @@ function Maitre({ etat, actif, tic, basculer, claude }: any) {
     );
 }
 
+// Une session active : ni terminée, ni en pause (plus de 12 h sans activité)
+const active = (d: any, x: any) => x.type !== 'session' || (x.s.statut !== 'terminee' && !enPause(x.s, d.activites.get(x.s.sessionId)));
+
 export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace, projets, lancer, ouvrirMenu, maitre, ouvrirDetail, detail, cote = 'gauche', bord }: any) {
     const [survol, setSurvol] = useState<string>();
     const [replie, setReplie] = useState<Record<string, boolean>>({ ssh: false, docker: false });
+    // Seulement les sessions actives ; les terminées et en pause se montrent sur demande
+    const [inactives, setInactives] = useState(false);
+    const cartes = cartesLaterales(d);
+    const visibles = inactives ? cartes : cartes.filter((x: any) => active(d, x));
+    const cachees = cartes.length - cartes.filter((x: any) => active(d, x)).length;
     const docker: string[] = lignesDocker(d);
     const serveurs = d.serveurs.slice(0, 6);
     const survoler = (cle: string) => ({ onMouseOver: () => setSurvol(cle), onMouseOut: () => setSurvol(undefined) });
@@ -131,12 +145,20 @@ export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace
                 <box flexGrow={1} flexDirection="column">
                     <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                         {/* Mêmes cartes que l'interface Ink : équipes, puis sessions (membres d'équipe exclus, en pause à la fin) */}
-                        {cartesLaterales(d).map((x: any) => (x.type === 'equipe'
+                        {visibles.map((x: any) => (x.type === 'equipe'
                             ? <CarteEquipe key={`equipe-${x.e.id}`} e={x.e} largeur={largeur - 1} tic={tic} ouvrir={() => lancer(`/equipe ${x.e.id}`)} />
                             : <Carte key={x.s.cle} s={x.s} a={d.activites.get(x.s.sessionId)} active={x.s.cle === selection} survole={survol === x.s.cle}
                                 largeur={largeur - 1} tic={tic} choisir={() => choisir(x.s.cle === selection ? undefined : x.s.cle)}
                                 survoler={(v: boolean) => setSurvol(v ? x.s.cle : undefined)}
                                 menu={() => ouvrirMenu(menuSession(x.s, () => choisir(x.s.cle)))} />))}
+                        {!visibles.length && <text fg={fond.discret}>  aucune session active</text>}
+                        {cachees > 0 && (
+                            <box height={1} onMouseDown={() => setInactives((v) => !v)} {...survoler('inactives')}>
+                                <text fg={survol === 'inactives' ? fond.texte : fond.discret}>
+                                    {inactives ? `  − cacher les ${cachees} inactive${cachees > 1 ? 's' : ''}` : `  + ${cachees} inactive${cachees > 1 ? 's' : ''} (terminées, en pause)`}
+                                </text>
+                            </box>
+                        )}
                     </scrollbox>
                     <box height={1} flexDirection="row">
                         <text> </text>

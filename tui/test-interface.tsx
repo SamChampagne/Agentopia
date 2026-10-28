@@ -175,14 +175,15 @@ image = await echap();
 verifier('Échap revient au cockpit', image.includes('SESSIONS CLAUDE'), image);
 
 // La session qui a le plus de messages : on vérifie aussi que le texte s'affiche
-// Dans l'ordre des cartes de la colonne (équipes d'abord, sessions en pause à la fin)
-const { cartesLaterales } = await import('../dist/ui/Laterale.js');
-const cartes = cartesLaterales(lireDonnees());
+// Dans l'ordre des cartes affichées : seulement les actives (ni terminées, ni en pause), 4 lignes par carte
+const { cartesLaterales, enPause } = await import('../dist/ui/Laterale.js');
+const donnees = lireDonnees();
+const cartes = cartesLaterales(donnees).filter((x: any) => x.type !== 'session' || (x.s.statut !== 'terminee' && !enPause(x.s, donnees.activites.get(x.s.sessionId))));
 const agents = cartes.map((x: any) => x.s ?? { fichier: '' });
 const tailles = agents.map((a: any) => (a.fichier ? lireTranscript(a.fichier).length : -1));
 const avecMessages = tailles.indexOf(Math.max(...tailles, 0));
 if (avecMessages >= 0) {
-    await mockMouse.click(4, 3 + 3 * avecMessages);
+    await mockMouse.click(4, 3 + 4 * avecMessages);
     image = await ecran();
     verifier('clic sur une carte : conversation et ses actions', image.includes('← Retour') && image.includes('Copier la réponse'), image);
     if (tailles[avecMessages]) {
@@ -211,6 +212,34 @@ if (avecMessages >= 0) {
     image = await ecran();
     image = await echap();
     verifier('Échap referme la conversation', image.includes('SESSIONS CLAUDE'), image);
+}
+
+// Passer d'une vue à l'autre sans fermer la première (clic dans la barre du haut)
+{
+    const haut = (await ecran()).split('\n')[0];
+    await mockMouse.click(haut.indexOf('◆ Équipes') + 2, 0);
+    image = await ecran();
+    await w(800);
+    await mockMouse.click(haut.indexOf('◈ Config') + 2, 0);
+    await w(800);
+    image = await ecran();
+    verifier('Équipes ouverte, clic sur Config : on passe directement à Config', image.includes('CONFIGURATION') && !image.includes("ÉQUIPES D'AGENTS"), image);
+    image = await echap();
+}
+
+// Sessions inactives (terminées, en pause) : cachées, une ligne pour les montrer
+{
+    image = await ecran();
+    const y = image.split('\n').findIndex((l) => l.includes('inactive'));
+    if (y >= 0) {
+        await mockMouse.click(5, y);
+        image = await ecran();
+        verifier('clic sur « + N inactives » : elles s’affichent', image.includes('cacher les'), image);
+        const y2 = image.split('\n').findIndex((l) => l.includes('cacher les'));
+        await mockMouse.click(5, y2);
+        image = await ecran();
+        verifier('puis on les recache', !image.includes('cacher les'), image);
+    }
 }
 
 // « Quelle touche ? » : Espace sur une ligne vide ; on ne descend que dans un groupe (g = Git), jamais sur une action

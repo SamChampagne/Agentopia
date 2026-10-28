@@ -13,6 +13,7 @@ import { Choix, Saisie, VueNonMigree } from './dialogues.tsx';
 import { VUES } from './vues/index.ts';
 import { Detail } from './detail.tsx';
 import { activerEntreeVT, restaurerConsole } from './console.ts';
+import { Garde } from './garde.tsx';
 import { disposition } from '../dist/ui/disposition.js';
 import { Barre } from './barre.tsx';
 import { Journal } from './journal.tsx';
@@ -190,6 +191,29 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
     }
     const lancerRef = useRef(lancer);
     lancerRef.current = lancer;
+    // État courant lu depuis les clics (une fermeture peut avoir changé l'état depuis le rendu)
+    const demandeRef = useRef<any>();
+    demandeRef.current = demande;
+    const occupeRef = useRef(false);
+    occupeRef.current = occupe;
+    // Ferme ce qui est ouvert (vue, ou choix et saisie annulés), puis attend que sa commande soit finie
+    async function fermerOuvert(): Promise<boolean> {
+        const dm = demandeRef.current;
+        if (dm?.type === 'vue') dm.resoudre();
+        else if (dm) dm.resoudre(undefined);
+        for (let i = 0; i < 100 && (occupeRef.current || demandeRef.current); i++) await new Promise((r) => setTimeout(r, 16));
+        return !occupeRef.current && !demandeRef.current;
+    }
+    // Un clic (barre du haut, colonne) passe d'une vue à l'autre ; si une commande tourne encore, on le dit
+    async function ouvrirDepuisClic(cmd: string) {
+        if (!(await fermerOuvert())) return void bus.emit('notice', `Une commande est encore en cours (${commandeCourante.current ?? '…'}) : attends qu'elle finisse`);
+        void lancerRef.current(cmd, true);
+    }
+    // Choisir une carte referme la vue ouverte : sinon la conversation resterait cachée derrière
+    const choisirCarte = (cle?: string) => {
+        if (cle && demandeRef.current?.type === 'vue') demandeRef.current.resoudre();
+        setSelection(cle);
+    };
     const ouvrirDetailRef = useRef(ouvrirDetail);
     ouvrirDetailRef.current = ouvrirDetail;
 
@@ -527,7 +551,7 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
         // La commande décrit sa vue Ink (composant + paramètres) : on affiche notre version si elle existe
         const el = demande.rendu(demande.resoudre);
         const Vue = VUES[el?.type?.name];
-        zone = Vue ? <Vue key={el.type.name} {...el.props} /> : <VueNonMigree d={demande} />;
+        zone = Vue ? <Garde key={el.type.name} nom={el.type.name}><Vue {...el.props} /></Garde> : <VueNonMigree d={demande} />;
     }
     else if (detail) zone = <Detail key={`${detail.type}:${detail.cle}`} detail={detail} d={d} projets={projets} fermer={() => ouvrirDetail(undefined)} lancer={(cmd) => libre && lancer(cmd, true)} />;
     else if (session) {
@@ -560,7 +584,7 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
                 <Ansi texte={degrade(' ✻ ' + (chargerConfig().banniere || 'CLAUDETOPIA').toUpperCase() + ' ')} />
                 {BOUTONS.map((b) => (
                     <text key={b.action} onMouseOver={() => setSurvolHaut(b.action)} onMouseOut={() => setSurvolHaut(undefined)}
-                        onMouseDown={() => libre && lancer(b.action, true)}
+                        onMouseDown={() => void ouvrirDepuisClic(b.action)}
                         fg={survolHaut === b.action ? fond.texte : fond.eteint} attributes={survolHaut === b.action ? GRAS : 0}>
                         {/* Icônes cachées (/ecran) : seulement les noms */}
                         {`  ${disp.icones || b.label === '⋯' ? b.label : b.label.split(' ').slice(1).join(' ')} `}
@@ -582,8 +606,12 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
                             glisse.current = false;
                             redimensionner(lateral, true);
                         },
-                    }} selection={selection} choisir={setSelection} tic={tic} espace={espace} setEspace={setEspace}
-                    projets={projets} lancer={(cmd: string) => libre && lancer(cmd, true)} ouvrirMenu={ouvrirMenu} ouvrirDetail={ouvrirDetail} detail={detail}
+                    }} selection={selection} choisir={choisirCarte} tic={tic} espace={espace} setEspace={setEspace}
+                    projets={projets} lancer={(cmd: string) => void ouvrirDepuisClic(cmd)} ouvrirMenu={ouvrirMenu} detail={detail}
+                    ouvrirDetail={(dt: any) => {
+                        if (demandeRef.current?.type === 'vue') demandeRef.current.resoudre();
+                        ouvrirDetail(dt);
+                    }}
                     maitre={{ etat: etatMaitre(), actif: modeMaitre, claude: lireEtatClaude().etat, basculer: () => setModeMaitre((v) => !v) }} />}
                 {disp.laterale !== 'droite' && zone}
             </box>
