@@ -67,7 +67,15 @@ image = await echap();
 verifier('Échap annule la saisie', !image.includes('Ton prénom'), image);
 
 image = await commande('/config');
-verifier('/config : vue pas encore migrée, annoncée', image.includes('pas encore passée à la nouvelle interface'), image);
+verifier('/config : vue Configuration (OpenTUI)', image.includes('CONFIGURATION') && image.includes('Raccourci bureau') && image.includes('Thème'), image);
+mockInput.pressArrow('down');
+image = await ecran();
+verifier('↓ dans Config déplace la sélection', /❯ Claude/.test(image), image);
+image = await echap();
+verifier('Échap referme Config', !image.includes('CONFIGURATION'), image);
+
+image = await commande('/recents');
+verifier('/recents : vue pas encore migrée, annoncée', image.includes('pas encore passée à la nouvelle interface'), image);
 image = await echap();
 verifier('Échap referme la vue', !image.includes('pas encore passée'), image);
 

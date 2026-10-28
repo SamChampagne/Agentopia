@@ -9,6 +9,7 @@ import { GRAS } from './style.ts';
 import { Colonne } from './colonne.tsx';
 import { Conversation } from './conversation.tsx';
 import { Choix, Saisie, VueNonMigree } from './dialogues.tsx';
+import { VUES } from './vues/index.ts';
 import { Barre } from './barre.tsx';
 import { Journal } from './journal.tsx';
 import { QuelleTouche } from './quelleTouche.tsx';
@@ -341,7 +342,12 @@ export function App({ quitter }: { quitter: () => void }) {
     let zone;
     if (demande?.type === 'choix') zone = <Choix d={demande} hauteur={corps} />;
     else if (demande?.type === 'saisie') zone = <box flexGrow={1} flexDirection="column"><Saisie d={demande} /></box>;
-    else if (demande?.type === 'vue') zone = <VueNonMigree d={demande} />;
+    else if (demande?.type === 'vue') {
+        // La commande décrit sa vue Ink (composant + paramètres) : on affiche notre version si elle existe
+        const el = demande.rendu(demande.resoudre);
+        const Vue = VUES[el?.type?.name];
+        zone = Vue ? <Vue key={el.type.name} {...el.props} /> : <VueNonMigree d={demande} />;
+    }
     else if (session) {
         zone = (
             <box flexGrow={1} onMouseDown={(e: any) => droit(e) && ouvrirMenu(menuSession(session, () => undefined))}>

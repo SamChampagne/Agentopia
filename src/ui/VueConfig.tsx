@@ -8,9 +8,16 @@ import { chargerConfig } from '../config.js';
 import { jetonsConfigures } from '../jetons.js';
 import { nomPalette, theme, fond } from '../theme.js';
 
-type Ligne =
+export type LigneConfig =
     | { type: 'section'; texte: string }
     | { type: 'reglage'; label: string; valeur: string; couleur?: string; commande: string; aide: string };
+type Ligne = LigneConfig;
+
+// Ce qui est lu à l'ouverture (git et le bureau lancent des processus : une fois, pas à chaque flèche)
+export const lireEtatConfig = () => ({
+    config: chargerConfig(), git: identiteGit(), jetons: jetonsConfigures(), raccourci: fs.existsSync(cheminRaccourci()),
+});
+export type EtatConfig = ReturnType<typeof lireEtatConfig>;
 
 const ajuste = (s: string, n: number) => (s.length > n - 1 ? s.slice(0, n - 2) + '… ' : s.padEnd(n));
 
@@ -22,53 +29,8 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
         compteClaude().then(setClaude);
     }, []);
 
-    // Lus une fois à l'ouverture : git et le bureau lancent des processus, trop lents à chaque flèche
-    const [{ config, git, jetons, raccourci }] = useState(() => ({
-        config: chargerConfig(), git: identiteGit(), jetons: jetonsConfigures(), raccourci: fs.existsSync(cheminRaccourci()),
-    }));
-
-    const lignes: Ligne[] = [
-        { type: 'section', texte: 'COMPTES' },
-        { type: 'reglage', label: '⚿ Connexions', valeur: 'tout voir et tout connecter au même endroit', couleur: theme.accent, commande: '/connexions', aide: 'ouvrir' },
-        {
-            type: 'reglage', label: 'Claude', commande: '/compte claude', aide: 'changer de compte',
-            valeur: !claude ? 'lecture…' : claude.connecte ? `${claude.email ?? ''} (${claude.methode ?? ''})` : 'non connecté',
-            couleur: claude && !claude.connecte ? '#f87171' : undefined,
-        },
-        {
-            type: 'reglage', label: 'Git (commits)', commande: '/compte git', aide: 'modifier',
-            valeur: git.nom || git.email ? `${git.nom} <${git.email}>` : 'non configuré', couleur: git.nom ? undefined : '#facc15',
-        },
-        ...(['GitHub', 'Azure DevOps', 'GitLab'] as const).map((h): Ligne => ({
-            type: 'reglage', label: h, commande: '/jetons', aide: jetons.includes(h) ? 'remplacer le jeton' : 'ajouter un jeton',
-            valeur: jetons.includes(h) ? 'jeton enregistré (pull requests visibles)' : 'aucun jeton', couleur: jetons.includes(h) ? '#4ade80' : 'gray',
-        })),
-        { type: 'section', texte: 'INTERFACE' },
-        { type: 'reglage', label: 'Disposition de l’écran', valeur: 'sessions, actions, icônes, panneaux du cockpit', commande: '/ecran', aide: 'régler (avec aperçu)' },
-        { type: 'reglage', label: 'Assistant de départ', valeur: 'prénom, disposition, thème, sessions, projets, connexions', commande: '/bienvenue', aide: 'relancer' },
-        { type: 'reglage', label: 'Thème', valeur: nomPalette(), couleur: theme.accent, commande: '/theme', aide: 'changer' },
-        { type: 'reglage', label: 'Apparence du terminal', valeur: 'couleurs, police, transparence (profil Windows Terminal)', commande: '/apparence', aide: 'choisir' },
-        { type: 'reglage', label: 'Cartes de session', valeur: config.cartesDetaillees ? 'détaillées (3 lignes)' : 'compactes (2 lignes)', commande: `/cartes ${config.cartesDetaillees ? 'compactes' : 'detaillees'}`, aide: 'basculer' },
-        { type: 'reglage', label: 'Nom en haut à gauche', valeur: (config.banniere || 'CLAUDETOPIA').toUpperCase(), commande: '/nom', aide: 'modifier' },
-        { type: 'reglage', label: 'Prénom', valeur: config.prenom || '(non défini)', commande: '/prenom', aide: 'modifier' },
-        { type: 'reglage', label: 'Colonne de gauche', valeur: config.largeurLaterale ? `${config.largeurLaterale} colonnes` : 'automatique', commande: '/largeur', aide: 'changer (ou glisse la ligne)' },
-        { type: 'section', texte: 'SESSIONS CLAUDE' },
-        {
-            type: 'reglage', label: 'Nouvelles sessions', valeur: config.lancement === 'fond' ? 'en arrière-plan (cartes, joignables)' : 'dans un onglet',
-            commande: `/lancement ${config.lancement === 'fond' ? 'onglet' : 'fond'}`, aide: 'basculer',
-        },
-        {
-            type: 'reglage', label: 'Notifications', valeur: config.notifications ? 'activées' : 'désactivées', couleur: config.notifications ? '#4ade80' : 'gray',
-            commande: `/notifs ${config.notifications ? 'off' : 'on'}`, aide: 'basculer',
-        },
-        { type: 'reglage', label: 'Prompts favoris', valeur: Object.keys(config.prompts).map((p) => `@${p}`).join(' '), commande: '/prompts', aide: 'voir' },
-        { type: 'section', texte: 'POSTE' },
-        { type: 'reglage', label: 'Projets suivis', valeur: `${config.racines.length} dossier(s) + ${config.extras.length} projet(s)`, commande: '/scan', aide: 'rescanner le poste' },
-        { type: 'reglage', label: 'Docker distant', valeur: config.dockerDistant.length ? config.dockerDistant.join(', ') : 'aucun serveur', commande: '/ssh', aide: 'choisir dans la vue SSH' },
-        { type: 'reglage', label: 'Raccourci bureau', valeur: raccourci ? 'présent' : 'absent', couleur: raccourci ? '#4ade80' : '#facc15', commande: '/raccourci', aide: raccourci ? 'recréer' : 'créer' },
-        { type: 'reglage', label: 'Diagnostic', valeur: 'vérifie que tout fonctionne', commande: '/diagnostic', aide: 'lancer' },
-        { type: 'reglage', label: 'Fichier de configuration', valeur: '~/.claudetopia.json', commande: '/fichier-config', aide: 'ouvrir dans VS Code' },
-    ];
+    const [etat] = useState(lireEtatConfig);
+    const lignes = lignesConfig(etat, claude);
     const reglages = lignes.map((l, i) => (l.type === 'reglage' ? i : -1)).filter((i) => i >= 0);
     const courant = reglages.includes(index) ? index : reglages[0];
 
@@ -121,4 +83,50 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
             })}
         </Box>
     );
+}
+
+// Les réglages affichés, pour l'interface Ink comme pour la nouvelle (tui/)
+export function lignesConfig({ config, git, jetons, raccourci }: EtatConfig, claude?: CompteClaude): LigneConfig[] {
+    return [
+        { type: 'section', texte: 'COMPTES' },
+        { type: 'reglage', label: '⚿ Connexions', valeur: 'tout voir et tout connecter au même endroit', couleur: theme.accent, commande: '/connexions', aide: 'ouvrir' },
+        {
+            type: 'reglage', label: 'Claude', commande: '/compte claude', aide: 'changer de compte',
+            valeur: !claude ? 'lecture…' : claude.connecte ? `${claude.email ?? ''} (${claude.methode ?? ''})` : 'non connecté',
+            couleur: claude && !claude.connecte ? '#f87171' : undefined,
+        },
+        {
+            type: 'reglage', label: 'Git (commits)', commande: '/compte git', aide: 'modifier',
+            valeur: git.nom || git.email ? `${git.nom} <${git.email}>` : 'non configuré', couleur: git.nom ? undefined : '#facc15',
+        },
+        ...(['GitHub', 'Azure DevOps', 'GitLab'] as const).map((h): Ligne => ({
+            type: 'reglage', label: h, commande: '/jetons', aide: jetons.includes(h) ? 'remplacer le jeton' : 'ajouter un jeton',
+            valeur: jetons.includes(h) ? 'jeton enregistré (pull requests visibles)' : 'aucun jeton', couleur: jetons.includes(h) ? '#4ade80' : 'gray',
+        })),
+        { type: 'section', texte: 'INTERFACE' },
+        { type: 'reglage', label: 'Disposition de l’écran', valeur: 'sessions, actions, icônes, panneaux du cockpit', commande: '/ecran', aide: 'régler (avec aperçu)' },
+        { type: 'reglage', label: 'Assistant de départ', valeur: 'prénom, disposition, thème, sessions, projets, connexions', commande: '/bienvenue', aide: 'relancer' },
+        { type: 'reglage', label: 'Thème', valeur: nomPalette(), couleur: theme.accent, commande: '/theme', aide: 'changer' },
+        { type: 'reglage', label: 'Apparence du terminal', valeur: 'couleurs, police, transparence (profil Windows Terminal)', commande: '/apparence', aide: 'choisir' },
+        { type: 'reglage', label: 'Cartes de session', valeur: config.cartesDetaillees ? 'détaillées (3 lignes)' : 'compactes (2 lignes)', commande: `/cartes ${config.cartesDetaillees ? 'compactes' : 'detaillees'}`, aide: 'basculer' },
+        { type: 'reglage', label: 'Nom en haut à gauche', valeur: (config.banniere || 'CLAUDETOPIA').toUpperCase(), commande: '/nom', aide: 'modifier' },
+        { type: 'reglage', label: 'Prénom', valeur: config.prenom || '(non défini)', commande: '/prenom', aide: 'modifier' },
+        { type: 'reglage', label: 'Colonne de gauche', valeur: config.largeurLaterale ? `${config.largeurLaterale} colonnes` : 'automatique', commande: '/largeur', aide: 'changer (ou glisse la ligne)' },
+        { type: 'section', texte: 'SESSIONS CLAUDE' },
+        {
+            type: 'reglage', label: 'Nouvelles sessions', valeur: config.lancement === 'fond' ? 'en arrière-plan (cartes, joignables)' : 'dans un onglet',
+            commande: `/lancement ${config.lancement === 'fond' ? 'onglet' : 'fond'}`, aide: 'basculer',
+        },
+        {
+            type: 'reglage', label: 'Notifications', valeur: config.notifications ? 'activées' : 'désactivées', couleur: config.notifications ? '#4ade80' : 'gray',
+            commande: `/notifs ${config.notifications ? 'off' : 'on'}`, aide: 'basculer',
+        },
+        { type: 'reglage', label: 'Prompts favoris', valeur: Object.keys(config.prompts).map((p) => `@${p}`).join(' '), commande: '/prompts', aide: 'voir' },
+        { type: 'section', texte: 'POSTE' },
+        { type: 'reglage', label: 'Projets suivis', valeur: `${config.racines.length} dossier(s) + ${config.extras.length} projet(s)`, commande: '/scan', aide: 'rescanner le poste' },
+        { type: 'reglage', label: 'Docker distant', valeur: config.dockerDistant.length ? config.dockerDistant.join(', ') : 'aucun serveur', commande: '/ssh', aide: 'choisir dans la vue SSH' },
+        { type: 'reglage', label: 'Raccourci bureau', valeur: raccourci ? 'présent' : 'absent', couleur: raccourci ? '#4ade80' : '#facc15', commande: '/raccourci', aide: raccourci ? 'recréer' : 'créer' },
+        { type: 'reglage', label: 'Diagnostic', valeur: 'vérifie que tout fonctionne', commande: '/diagnostic', aide: 'lancer' },
+        { type: 'reglage', label: 'Fichier de configuration', valeur: '~/.claudetopia.json', commande: '/fichier-config', aide: 'ouvrir dans VS Code' },
+    ];
 }
