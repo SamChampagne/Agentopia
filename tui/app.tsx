@@ -54,7 +54,6 @@ extend({ text: Texte } as any);
 
 const BOUTONS = [
     { label: '◉ Live', action: '/global' }, { label: '▦ Projets', action: '/projets' }, { label: '◆ Équipes', action: '/equipe' },
-    { label: '⊞ Grille', action: '/grille' }, { label: '♨ Chauds', action: '/chauds' },
     { label: '⎇ Git', action: '/git' }, { label: '◫ Docker', action: '/docker' }, { label: '⇄ SSH', action: '/ssh' },
     { label: '◈ Config', action: '/config' }, { label: '⋯', action: '/menu-principal' },
 ];
@@ -753,7 +752,8 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
                         if (demandeRef.current?.type === 'vue') demandeRef.current.resoudre();
                         ouvrirDetail(dt);
                     }}
-                    maitre={{ etat: etatMaitre(), actif: modeMaitre, claude: lireEtatClaude().etat, basculer: () => setModeMaitre((v) => !v) }} />}
+                    maitre={{ etat: etatMaitre(), actif: modeMaitre, claude: lireEtatClaude().etat, basculer: () => setModeMaitre((v) => !v) }}
+                    grille={{ actif: vueZone === 'grille', basculer: () => (vueZone === 'grille' ? setVueZone(undefined) : ouvrirZone('grille')) }} />}
                 {disp.laterale !== 'droite' && zone}
             </box>
             {quelleTouche !== undefined && <QuelleTouche chemin={quelleTouche} choisir={toucheQT} />}

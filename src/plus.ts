@@ -235,6 +235,8 @@ export function commandesPlus(config: Config): Commande[] {
                     { label: '▸ Un projet : ses actions', valeur: '', description: 'session, onglet, commit, revue, worktree…' },
                     { label: '⌘ Palette (Ctrl+K)', valeur: '/palette', description: 'chercher et lancer n\'importe quoi' },
                     { label: '? Ce que les sessions attendent', valeur: '/questions' },
+                    { label: '♨ Fichiers chauds (Alt+H)', valeur: '/chauds', description: 'ce que tes sessions modifient, et les conflits' },
+                    { label: '◍ Globe des serveurs (Alt+O)', valeur: '/globe' },
                     { label: '▤ Moniteur', valeur: '/top', description: 'CPU, mémoire, sessions, serveurs' },
                     { label: '≡ Journal', valeur: '/journal', description: 'ce qui a été fait, par jour' },
                     { label: '◷ Récents', valeur: '/recents' },

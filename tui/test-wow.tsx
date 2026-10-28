@@ -38,6 +38,23 @@ mockInput.pressKey('g', { meta: true });
 image = await ecran();
 verifier('Alt+G encore : retour au cockpit', !image.includes('en direct · clic pour l’ouvrir'), image);
 
+// L'icône ⊞ en haut de la colonne : ouvre la grille, puis la referme
+{
+    image = await ecran();
+    const y = image.split('\n').findIndex((l) => l.includes('Sessions  Projets'));
+    const x = image.split('\n')[y]?.indexOf('⊞') ?? -1;
+    verifier('icône ⊞ dans l\'en-tête de la colonne', x >= 0 && !image.split('\n')[0].includes('Grille'), image);
+    if (x >= 0) {
+        await mockMouse.click(x, y);
+        image = await ecran();
+        verifier('clic sur ⊞ : la grille', image.includes('en direct · clic pour l’ouvrir') || image.includes('aucune session active'), image);
+        const x2 = image.split('\n')[y].indexOf('⊞');
+        await mockMouse.click(x2, y);
+        image = await ecran();
+        verifier('encore ⊞ : la grille se referme', !image.includes('en direct · clic pour l’ouvrir'), image);
+    }
+}
+
 // Alt+H : les fichiers chauds
 mockInput.pressKey('h', { meta: true });
 image = await ecran();

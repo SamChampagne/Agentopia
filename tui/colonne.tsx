@@ -166,7 +166,7 @@ function Maitre({ etat, actif, tic, basculer, claude }: any) {
 // Une session active : ni terminée, ni en pause (plus de 12 h sans activité)
 const active = (d: any, x: any) => x.type !== 'session' || (x.s.statut !== 'terminee' && !enPause(x.s, d.activites.get(x.s.sessionId)));
 
-export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace, projets, lancer, ouvrirMenu, maitre, ouvrirDetail, detail, cote = 'gauche', bord }: any) {
+export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace, projets, lancer, ouvrirMenu, maitre, ouvrirDetail, detail, cote = 'gauche', bord, grille }: any) {
     const [survol, setSurvol] = useState<string>();
     const [replie, setReplie] = useState<Record<string, boolean>>({ ssh: false, docker: false });
     // Seulement les sessions actives ; les terminées et en pause se montrent sur demande
@@ -188,6 +188,14 @@ export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace
                         fg={espace === e ? theme.accent : survol === `onglet:${e}` ? fond.texte : fond.eteint}
                         attributes={espace === e ? GRAS | SOULIGNE : 0}>{e === 'sessions' ? 'Sessions' : 'Projets'}  </text>
                 ))}
+                <box flexGrow={1} />
+                {/* ⊞ : la grille de conversations (Alt+G) ; le libellé apparaît au survol */}
+                {grille && (
+                    <text onMouseDown={grille.basculer} {...survoler('grille')} attributes={grille.actif || survol === 'grille' ? GRAS : 0}
+                        fg={grille.actif ? theme.accent : survol === 'grille' ? fond.texte : fond.eteint}>
+                        {survol === 'grille' || grille.actif ? '⊞ grille ' : '⊞ '}
+                    </text>
+                )}
             </box>
             {espace === 'projets' ? (
                 <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
