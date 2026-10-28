@@ -320,7 +320,7 @@ export function commandesConfig(config: Config): Commande[] {
                     console.log(c.discret('\nSi le dépôt GitHub est public, aussi :'));
                     console.log(c.accent(`$env:CLAUDETOPIA_DEPOT='${depot}'; irm https://raw.githubusercontent.com/${brut[1]}/${brut[2]}/main/install.ps1 | iex`));
                 }
-                console.log(c.discret('\nL\'installateur vérifie Node et les outils, compile, et crée le raccourci « Claudetopia » sur le bureau.'));
+                console.log(c.discret('\nL\'installateur installe ce qui manque (Node, Git, Windows Terminal, Bun, Claude Code…), compile, crée le raccourci « Claudetopia » sur le bureau, puis ouvre Claudetopia qui scanne le poste.'));
             },
         },
         {

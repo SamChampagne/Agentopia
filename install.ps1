@@ -1,11 +1,13 @@
-﻿# Installation de Claudetopia sur un poste Windows.
+﻿# Installation de Claudetopia sur un poste Windows : installe ce qui manque, compile, crée le raccourci,
+# puis lance Claudetopia qui scanne le poste (projets, serveurs SSH, outils).
 # Trois façons de lancer :
 #   - double-clic sur Installer.bat dans le dossier ;
 #   - en une ligne (dépôt privé, avec ton accès git) :
 #       git clone <url du depot> "$HOME\Claudetopia"; & "$HOME\Claudetopia\Installer.bat"
 #   - en une ligne depuis le fichier brut (dépôt public) :
 #       irm <url brute de install.ps1> | iex
-#     Dans ce cas, le script récupère lui-même le code dans ~\Claudetopia (ou le met à jour).
+#     Dans ce cas, le script récupère lui-même le code dans ~\Claudetopia (ou le met à jour), et installe Git au besoin.
+# Les programmes manquants s'installent avec winget (présent sur Windows 10 et 11 à jour).
 # Compatible Windows PowerShell 5.1 (présent sur tous les postes).
 
 # Les erreurs sont gérées à la main (codes de retour) : un simple avertissement de npm ne doit pas tout arrêter
@@ -14,30 +16,6 @@ $ErrorActionPreference = 'Continue'
 # Adresse du dépôt, utilisée quand le script est lancé seul (irm | iex). /installation dans Claudetopia affiche la bonne ligne.
 $Depot = if ($env:CLAUDETOPIA_DEPOT) { $env:CLAUDETOPIA_DEPOT } else { 'https://github.com/SamChampagne/ClaudeTopia.git' }
 $Dossier = Join-Path $HOME 'Claudetopia'
-
-$racine = if ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { $null }
-if (-not $racine -or -not (Test-Path (Join-Path $racine 'package.json'))) {
-    Write-Host "Recuperation de Claudetopia dans $Dossier" -ForegroundColor Magenta
-    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-        Write-Host "  [X]  Git est introuvable -> winget install Git.Git   (puis ferme et rouvre la fenetre)" -ForegroundColor Red
-        return
-    }
-    if (Test-Path (Join-Path $Dossier '.git')) {
-        git -C $Dossier pull --ff-only
-    } elseif ($Depot) {
-        git clone $Depot $Dossier
-    } else {
-        Write-Host "  [X]  Adresse du depot inconnue : definis-la puis relance, par exemple" -ForegroundColor Red
-        Write-Host "       `$env:CLAUDETOPIA_DEPOT = 'https://github.com/<compte>/claudetopia.git'" -ForegroundColor Red
-        return
-    }
-    if (-not (Test-Path (Join-Path $Dossier 'package.json'))) {
-        Write-Host "  [X]  La recuperation du code a echoue (voir le message de git ci-dessus)" -ForegroundColor Red
-        return
-    }
-    $racine = $Dossier
-}
-Set-Location $racine
 $problemes = @()
 
 function Titre($texte) { Write-Host ""; Write-Host "== $texte ==" -ForegroundColor Cyan }
@@ -60,34 +38,87 @@ function Arreter($message) {
     # exit fermerait la fenetre PowerShell quand le script est lance par irm | iex
     if ($MyInvocation.ScriptName) { exit 1 } else { throw 'installation interrompue' }
 }
+# Un programme installé à l'instant n'est pas encore dans le PATH de cette fenêtre : on le relit
+function RelirePath {
+    $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+}
+# Installe un programme avec winget s'il manque ; rend vrai si la commande est là ensuite
+function Installer($cmd, $id, $nom) {
+    if (Present $cmd) { return $true }
+    if (-not (Present 'winget')) { return $false }
+    Write-Host "  ...  Installation de $nom" -ForegroundColor Gray
+    winget install --id $id -e --accept-source-agreements --accept-package-agreements --silent | Out-Host
+    RelirePath
+    return (Present $cmd)
+}
+
+$racine = if ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { $null }
+if (-not $racine -or -not (Test-Path (Join-Path $racine 'package.json'))) {
+    Write-Host "Recuperation de Claudetopia dans $Dossier" -ForegroundColor Magenta
+    if (-not (Installer 'git' 'Git.Git' 'Git')) {
+        Write-Host "  [X]  Git est introuvable -> winget install Git.Git   (puis ferme et rouvre la fenetre)" -ForegroundColor Red
+        return
+    }
+    if (Test-Path (Join-Path $Dossier '.git')) {
+        git -C $Dossier pull --ff-only
+    } elseif ($Depot) {
+        git clone $Depot $Dossier
+    } else {
+        Write-Host "  [X]  Adresse du depot inconnue : definis-la puis relance, par exemple" -ForegroundColor Red
+        Write-Host "       `$env:CLAUDETOPIA_DEPOT = 'https://github.com/<compte>/claudetopia.git'" -ForegroundColor Red
+        return
+    }
+    if (-not (Test-Path (Join-Path $Dossier 'package.json'))) {
+        Write-Host "  [X]  La recuperation du code a echoue (voir le message de git ci-dessus)" -ForegroundColor Red
+        return
+    }
+    $racine = $Dossier
+}
+Set-Location $racine
 
 Write-Host "Installation de Claudetopia" -ForegroundColor Magenta
 Write-Host "Dossier : $racine"
+if (-not (Present 'winget')) {
+    Avert "winget est introuvable : les programmes manquants ne pourront pas s'installer tout seuls" "installe « App Installer » depuis le Microsoft Store, puis relance"
+}
 
-# --- 1. Prérequis obligatoires ---
+# --- 1. Prérequis obligatoires (installés s'ils manquent) ---
 Titre "Prerequis"
-if (-not (Present 'node')) {
+if (-not (Installer 'node' 'OpenJS.NodeJS.LTS' 'Node.js')) {
     Erreur "Node.js est introuvable" "winget install OpenJS.NodeJS.LTS   (puis ferme et rouvre cette fenetre)"
     Arreter "Node.js manquant"
 }
 $versionNode = (node --version).TrimStart('v')
 $majeure = [int]($versionNode.Split('.')[0])
+if ($majeure -lt 18 -and (Present 'winget')) {
+    Write-Host "  ...  Mise a jour de Node.js $versionNode" -ForegroundColor Gray
+    winget upgrade --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements --silent | Out-Host
+    RelirePath
+    $versionNode = (node --version).TrimStart('v')
+    $majeure = [int]($versionNode.Split('.')[0])
+}
 if ($majeure -lt 18) {
-    Erreur "Node.js $versionNode est trop ancien (18 minimum)" "winget upgrade OpenJS.NodeJS.LTS"
+    Erreur "Node.js $versionNode est trop ancien (18 minimum)" "winget upgrade OpenJS.NodeJS.LTS   (puis ferme et rouvre cette fenetre)"
     Arreter "Node.js trop ancien"
 }
 Ok "Node.js $versionNode"
 if (-not (Present 'npm')) { Erreur "npm est introuvable (normalement installe avec Node.js)" "reinstalle Node.js : winget install OpenJS.NodeJS.LTS"; Arreter "npm manquant" }
 Ok "npm $(npm --version)"
 
-# --- 2. Outils utiles (Claudetopia marche sans, mais certaines fonctions seront grisées) ---
+# --- 2. Outils (installés s'ils manquent ; Claudetopia marche sans, mais certaines fonctions seront grisées) ---
 Titre "Outils"
-if (Present 'claude') { Ok "Claude Code $((claude --version) -split ' ' | Select-Object -First 1)" }
-else { Avert "Claude Code absent : les sessions Claude ne marcheront pas" "npm install -g @anthropic-ai/claude-code   puis : claude (pour te connecter)" }
-if (Present 'git') { Ok "Git" } else { Avert "Git absent : statut des projets, commits et journal indisponibles" "winget install Git.Git" }
-if (Present 'wt') { Ok "Windows Terminal" } else { Avert "Windows Terminal absent : la souris et les onglets ne marcheront pas" "winget install Microsoft.WindowsTerminal" }
-if (Present 'code') { Ok "VS Code" } else { Avert "VS Code absent : les boutons VS Code ne feront rien" "winget install Microsoft.VisualStudioCode" }
-if (Present 'rg') { Ok "ripgrep" } else { Avert "ripgrep absent : /cherche indisponible" "winget install BurntSushi.ripgrep.MSVC" }
+if (Installer 'git' 'Git.Git' 'Git') { Ok "Git" } else { Avert "Git absent : statut des projets, commits et journal indisponibles" "winget install Git.Git" }
+if (Installer 'wt' 'Microsoft.WindowsTerminal' 'Windows Terminal') { Ok "Windows Terminal" } else { Avert "Windows Terminal absent : la souris et les onglets ne marcheront pas" "winget install Microsoft.WindowsTerminal" }
+if (Installer 'rg' 'BurntSushi.ripgrep.MSVC' 'ripgrep') { Ok "ripgrep" } else { Avert "ripgrep absent : /cherche indisponible" "winget install BurntSushi.ripgrep.MSVC" }
+if (-not (Present 'claude')) {
+    Write-Host "  ...  Installation de Claude Code" -ForegroundColor Gray
+    npm install -g @anthropic-ai/claude-code --no-audit --no-fund | Out-Host
+    RelirePath
+}
+if (Present 'claude') { Ok "Claude Code $((claude --version) -split ' ' | Select-Object -First 1)   (connexion au premier lancement de : claude)" }
+else { Avert "Claude Code absent : les sessions Claude ne marcheront pas" "irm https://claude.ai/install.ps1 | iex" }
+# Lourds et pas indispensables : seulement signalés
+if (Present 'code') { Ok "VS Code" } else { Avert "VS Code absent : les boutons VS Code ne feront rien (optionnel)" "winget install Microsoft.VisualStudioCode" }
 if (Present 'docker') { Ok "Docker" } else { Avert "Docker absent : la section Docker restera vide (optionnel)" $null }
 
 # --- 3. Dépendances et compilation ---
@@ -114,11 +145,7 @@ try {
 # --- 3 bis. Nouvelle interface (OpenTUI, sous Bun) ; sans elle, l'ancienne interface est utilisée ---
 Titre "Nouvelle interface"
 try {
-    if (-not (Present 'bun')) {
-        winget install --id Oven-sh.Bun -e --accept-source-agreements --accept-package-agreements --silent | Out-Null
-        $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine')
-    }
-    if (-not (Present 'bun')) { throw "Bun introuvable apres installation" }
+    if (-not (Installer 'bun' 'Oven-sh.Bun' 'Bun')) { throw "Bun introuvable apres installation" }
     Push-Location (Join-Path $racine 'tui')
     try { bun install } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw "code $LASTEXITCODE" }
@@ -167,16 +194,16 @@ try {
     Avert "Impossible de creer le raccourci ($_)" "lance plutot Claudetopia.bat, ou /raccourci depuis Claudetopia"
 }
 
-# --- Résumé ---
+# --- Résumé, puis Claudetopia qui scanne le poste ---
 Titre "Termine"
 if ($problemes.Count -eq 0) {
-    Write-Host "  Tout est pret. Au premier lancement, Claudetopia scanne le poste pour trouver tes projets." -ForegroundColor Green
+    Write-Host "  Tout est pret." -ForegroundColor Green
 } else {
     Write-Host "  Installe, mais $($problemes.Count) point(s) a corriger (voir ci-dessus)." -ForegroundColor Yellow
 }
-Write-Host "  Dans Claudetopia : /diagnostic verifie tout, /config regle comptes et interface, /maj met a jour." -ForegroundColor Gray
-$reponse = Read-Host "Lancer Claudetopia maintenant ? (O/n)"
-if ($reponse -notmatch '^[nN]') {
-    if (Get-Command wt -ErrorAction SilentlyContinue) { Start-Process wt -ArgumentList "-d `"$racine`" --title `"Claudetopia`" cmd /k `"$(Join-Path $racine 'Claudetopia.bat')`"" }
-    else { Start-Process cmd -ArgumentList "/k `"$(Join-Path $racine 'Claudetopia.bat')`"" }
-}
+Write-Host "  Claudetopia s'ouvre et scanne le poste : projets, serveurs SSH et outils." -ForegroundColor Gray
+Write-Host "  Ensuite : /diagnostic verifie tout, /config regle comptes et interface, /maj met a jour." -ForegroundColor Gray
+# CLAUDETOPIA_SCAN : Claudetopia lance /scan au démarrage (le premier lancement passe par /bienvenue, qui le propose)
+$commande = "set CLAUDETOPIA_SCAN=1&& `"$(Join-Path $racine 'Claudetopia.bat')`""
+if (Present 'wt') { Start-Process wt -ArgumentList "-d `"$racine`" --title `"Claudetopia`" cmd /k `"$commande`"" }
+else { Start-Process cmd -ArgumentList "/k `"$commande`"" }

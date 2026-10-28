@@ -13,7 +13,8 @@ import { remplacerAncienRaccourci, prechargerBureau } from './configCommandes.js
 // "sp commit saniplan" : exécute la commande dans l'interface puis quitte
 const commandeInitiale = process.argv.slice(2).join(' ').trim() || undefined;
 // Première fois sur ce poste : l'assistant demande l'essentiel (prénom, disposition, thème, sessions, projets, connexions)
-let auDemarrage = premierLancement ? '/bienvenue' : undefined;
+// Juste après l'installation (CLAUDETOPIA_SCAN) : le scan du poste
+let auDemarrage = premierLancement ? '/bienvenue' : process.env.CLAUDETOPIA_SCAN ? '/scan' : undefined;
 
 capturerConsole();
 choisirLargeurLaterale(chargerConfig().largeurLaterale);

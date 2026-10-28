@@ -660,8 +660,8 @@ export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () =>
 if (import.meta.main) {
     // « sp commit saniplan » : exécute la commande dans l'interface puis quitte
     const commandeInitiale = process.argv.slice(2).join(' ').trim() || undefined;
-    // Première fois sur ce poste : l'assistant demande l'essentiel
-    const auDemarrage = premierLancement ? '/bienvenue' : undefined;
+    // Première fois sur ce poste : l'assistant demande l'essentiel ; juste après l'installation (CLAUDETOPIA_SCAN) : le scan du poste
+    const auDemarrage = premierLancement ? '/bienvenue' : process.env.CLAUDETOPIA_SCAN ? '/scan' : undefined;
     demarrerCollecte();
     if (!commandeInitiale) demarrerNotifications();
     const { remplacerAncienRaccourci, prechargerBureau } = await import('../dist/configCommandes.js');
