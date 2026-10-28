@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { GRAS } from './style.ts';
+import { grandsChiffres } from './chiffres.ts';
 import { theme, fond, couleurProjet, melange } from '../dist/theme.js';
 
 // Écran de veille : une pluie de caractères aux couleurs du thème, et par-dessus la constellation des sessions.
@@ -8,11 +9,6 @@ import { theme, fond, couleurProjet, melange } from '../dist/theme.js';
 
 const NOIR = '#0c0c0c';
 const SIGNES = '0123456789abcdef{}<>=+*/;:.✻';
-// Chiffres en blocs sur 2 lignes (l'heure de la veille, les grands nombres de la vue Live)
-export const CHIFFRES: Record<string, [string, string]> = {
-    0: ['█▀█', '█▄█'], 1: ['▄█ ', ' █ '], 2: ['▀▀█', '█▄▄'], 3: ['▀▀█', '▄▄█'], 4: ['█ █', '▀▀█'],
-    5: ['█▀▀', '▄▄█'], 6: ['█▀▀', '█▄█'], 7: ['▀▀█', '  █'], 8: ['█▀█', '█▀█'], 9: ['█▀█', '▀▀█'], ':': [' ▪ ', ' ▪ '],
-};
 
 interface Goutte { y: number; vitesse: number; longueur: number }
 type Cellule = { ch: string; fg: string };
@@ -97,22 +93,18 @@ export function Veille({ largeur, hauteur, d, reveiller }: { largeur: number; ha
 
     // L'heure en gros, et l'état des sessions
     const heure = new Date().toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit', hour12: false }).replace(/\s*h\s*/, ':');
-    const caracteres = [...heure].filter((ch) => CHIFFRES[ch]);
-    const largeurHeure = caracteres.length * 4;
-    const yHeure = Math.min(hauteur - 5, zoneHaut + 1);
+    const lignesHeure = grandsChiffres(heure);
+    const yHeure = Math.min(hauteur - 6, zoneHaut + 1);
     const couleurHeure = melange(theme.primaire, theme.accent, (Math.sin(frame / 15) + 1) / 2);
-    caracteres.forEach((ch, i) => {
-        ecrire(Math.floor((largeur - largeurHeure) / 2) + i * 4, yHeure, CHIFFRES[ch][0], couleurHeure);
-        ecrire(Math.floor((largeur - largeurHeure) / 2) + i * 4, yHeure + 1, CHIFFRES[ch][1], couleurHeure);
-    });
+    lignesHeure.forEach((l, i) => ecrire(Math.floor((largeur - l.length) / 2), yHeure + i, l, couleurHeure));
     const travaillent = sessions.filter((s: any) => s.statut === 'travaille').length;
     const attendent = sessions.filter((s: any) => s.statut === 'bloquee' || s.statut === 'attend').length;
     const resume = sessions.length
         ? `${travaillent} au travail · ${attendent} t'attend${attendent > 1 ? 'ent' : ''}`
         : 'aucune session active';
-    ecrire(Math.floor((largeur - resume.length) / 2), yHeure + 3, resume, fond.texte);
+    ecrire(Math.floor((largeur - resume.length) / 2), yHeure + 4, resume, fond.texte);
     const aide = 'une touche ou la souris pour revenir';
-    ecrire(Math.floor((largeur - aide.length) / 2), yHeure + 4, aide, fond.discret);
+    ecrire(Math.floor((largeur - aide.length) / 2), yHeure + 5, aide, fond.discret);
 
     // Chaque ligne : des morceaux de même couleur
     return (

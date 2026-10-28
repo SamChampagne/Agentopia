@@ -3,7 +3,7 @@ import { useKeyboard, useTerminalDimensions } from '@opentui/react';
 import { GRAS, ANIM, une, couper } from '../style.ts';
 import { useDonnees } from '../donnees.ts';
 import { Toile, RenduToile } from '../toile.tsx';
-import { CHIFFRES } from '../veille.tsx';
+import { grandsChiffres } from '../chiffres.ts';
 import { bus } from '../../dist/ui/bus.js';
 import { decrireConnexion, lireDonnees } from '../../dist/ui/donnees.js';
 import { serveursPertinents } from '../../dist/ui/Panneau.js';
@@ -24,12 +24,11 @@ const VERT = '#4ade80', JAUNE = '#facc15', ORANGE = '#fb923c', ROUGE = '#f87171'
 const STATUTS: Record<string, { t: string; c: string }> = { travaille: { t: 'travaille', c: VERT }, attend: { t: 't’attend', c: JAUNE }, bloquee: { t: 'bloquée', c: ORANGE }, terminee: { t: 'terminée', c: 'gray' } };
 const BLOCS = ' ▁▂▃▄▅▆▇█';
 
-// Un grand nombre en blocs (2 lignes)
+// Un grand nombre lisible (police 3 × 5 en demi-blocs, 3 lignes)
 function GrandNombre({ n, couleur }: { n: string; couleur: string }) {
-    const car = [...n].filter((ch) => CHIFFRES[ch]);
     return (
         <box flexDirection="column">
-            {[0, 1].map((l) => <text key={l} fg={couleur} attributes={GRAS}>{car.map((ch) => CHIFFRES[ch][l]).join(' ')}</text>)}
+            {grandsChiffres(n).map((l, i) => <text key={i} fg={couleur} wrapMode="none">{l}</text>)}
         </box>
     );
 }
@@ -40,14 +39,18 @@ function Tuile({ titre, n, suite = '', sous, couleur, vif, largeur, extra = [] }
     titre: string; n: string; suite?: string; sous: string; couleur: string; vif?: boolean; largeur: number; extra?: { t: string; c?: string }[][];
 }) {
     return (
-        <box width={largeur} height={6} border borderStyle="rounded" borderColor={vif ? couleur : melange(NOIR, couleur, 0.45)} flexDirection="column" paddingLeft={1}>
+        <box width={largeur} height={7} border borderStyle="rounded" borderColor={vif ? couleur : melange(NOIR, couleur, 0.45)} flexDirection="column" paddingLeft={1}>
             <text fg={fond.eteint} wrapMode="none" truncate>{titre}</text>
             <box flexDirection="row">
                 <box flexShrink={0}><GrandNombre n={n} couleur={couleur} /></box>
-                {suite && <text flexShrink={0} fg={couleur} attributes={GRAS}>{` ${suite}`}</text>}
-                <box flexDirection="column" flexGrow={1} paddingLeft={2} overflow="hidden">
-                    {extra.slice(0, 2).map((l, i) => <text key={i} truncate>{l.map((m, k) => <span key={k} fg={m.c}>{m.t}</span>)}</text>)}
-                </box>
+                {/* L'unité ($) en face de la ligne du bas des chiffres */}
+                {suite && <box flexShrink={0} flexDirection="column"><text> </text><text> </text><text fg={couleur} attributes={GRAS}>{` ${suite}`}</text></box>}
+                {/* Le détail seulement s'il reste au moins 12 colonnes à côté du nombre */}
+                {largeur - grandsChiffres(n)[0].length - (suite ? suite.length + 1 : 0) - 6 >= 12 && (
+                    <box flexDirection="column" flexGrow={1} paddingLeft={2} overflow="hidden">
+                        {extra.slice(0, 3).map((l, i) => <text key={i} wrapMode="none" truncate>{l.map((m, k) => <span key={k} fg={m.c}>{m.t}</span>)}</text>)}
+                    </box>
+                )}
             </box>
             <text fg={vif ? couleur : fond.discret} wrapMode="none">{couper(sous, largeur - 4)}</text>
         </box>
@@ -158,27 +161,27 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
     // Les serveurs pas encore testés ne comptent ni comme répondant ni comme muets
     const testes = serveurs.filter((s: any) => d.joignables.get(s) !== undefined).length;
     const muets = testes - repondent;
-    const noms = (liste: any[], couleur: (s: any) => string) => liste.slice(0, 2).map((s: any) => [{ t: '● ', c: couleurProjet(s.nom) }, { t: couper(s.titre || s.nom, 24), c: couleur(s) }]);
-    const coutsTries = Object.entries(d.cout.parSession as Record<string, number>).sort((a, b) => b[1] - a[1]).slice(0, 2);
+    const noms = (liste: any[], couleur: (s: any) => string) => liste.slice(0, 3).map((s: any) => [{ t: '● ', c: couleurProjet(s.nom) }, { t: couper(s.titre || s.nom, 24), c: couleur(s) }]);
+    const coutsTries = Object.entries(d.cout.parSession as Record<string, number>).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const tuiles = [
         <Tuile key="t" titre="AU TRAVAIL" n={String(travaillent)} sous={travaillent ? `${ANIM[tic % ANIM.length]} Claude écrit en ce moment` : 'tout est calme'} couleur={VERT} vif={travaillent > 0} largeur={lt}
             extra={noms(sessions.filter((s: any) => s.statut === 'travaille'), () => '#cbd5e1')} />,
         <Tuile key="a" titre="T’ATTENDENT" n={String(attendent)} sous={bloquees ? `! ${bloquees} bloquée${bloquees > 1 ? 's' : ''}, à toi de jouer` : attendent ? 'ont fini, à toi de répondre' : 'personne ne t’attend'}
             couleur={bloquees ? ORANGE : JAUNE} vif={!!bloquees && tic % 2 === 0} largeur={lt}
             extra={noms(sessions.filter((s: any) => s.statut === 'bloquee' || s.statut === 'attend'), (s) => (s.statut === 'bloquee' ? ORANGE : '#cbd5e1'))} />,
-        <Tuile key="c" titre="COÛT DU JOUR" n={entier} suite={`,${centimes} $`} sous={`${(d.cout.jetons / 1000).toFixed(0)} k jetons (équiv. API)`} couleur={theme.accent} largeur={lt}
+        <Tuile key="c" titre="COÛT DU JOUR" n={`${entier},${centimes}`} suite="$" sous={`${(d.cout.jetons / 1000).toFixed(0)} k jetons (équiv. API)`} couleur={theme.accent} largeur={lt}
             extra={coutsTries.map(([id, cout]) => {
                 const s = d.agents.find((a: any) => a.sessionId === id);
                 return [{ t: `${dollars(cout).padStart(8)} `, c: 'gray' }, { t: couper(s ? s.nom : 'session fermée', 18), c: s ? couleurProjet(s.nom) : fond.discret }];
             })} />,
-        <Tuile key="s" titre="SERVEURS" n={`${repondent}`} suite={`/ ${serveurs.length}`}
+        <Tuile key="s" titre="SERVEURS" n={`${repondent}/${serveurs.length}`}
             sous={testes < serveurs.length && !muets ? 'test en cours…' : muets ? `${muets} ne répond${muets > 1 ? 'ent' : ''} pas` : 'tous répondent'}
             couleur={muets ? ROUGE : theme.secondaire} vif={muets > 0 && tic % 2 === 0} largeur={lt}
             extra={[serveurs.slice(0, 8).map((s: any) => {
                 const ok = d.joignables.get(s);
                 return { t: ok === undefined ? '○ ' : '● ', c: ok === undefined ? 'gray' : ok ? VERT : ROUGE };
             })]} />,
-        <Tuile key="d" titre="CONTENEURS" n={String(enMarche)} suite={`/ ${conteneurs}`} sous={d.docker.some((h: any) => h.erreur) ? 'Docker indisponible quelque part' : 'en marche'} couleur={theme.primaire} largeur={lt}
+        <Tuile key="d" titre="CONTENEURS" n={`${enMarche}/${conteneurs}`} sous={d.docker.some((h: any) => h.erreur) ? 'Docker indisponible quelque part' : 'en marche'} couleur={theme.primaire} largeur={lt}
             extra={d.docker.slice(0, 2).map((h: any) => [{ t: `${h.serveur ? h.nom : 'ce poste'} `, c: '#cbd5e1' }, { t: h.erreur ? 'indisponible' : `${h.conteneurs.filter((c: any) => c.enMarche).length}/${h.conteneurs.length}`, c: h.erreur ? ROUGE : 'gray' }])} />,
     ].slice(0, nbTuiles);
 
