@@ -12,7 +12,8 @@ import { calculerMise } from './dist/ui/mise.js';
 capturerConsole();
 const COLS = Number(process.env.COLS ?? 220), ROWS = Number(process.env.ROWS ?? 55);
 const ecritures = [];
-const faux = Object.assign(new EventEmitter(), { columns: COLS, rows: ROWS, isTTY: true, write: (s) => { ecritures.push({ t: performance.now(), n: s.length }); return true; } });
+let recent = '';
+const faux = Object.assign(new EventEmitter(), { columns: COLS, rows: ROWS, isTTY: true, write: (s) => { ecritures.push({ t: performance.now(), n: s.length }); recent = (recent + s).slice(-20000); return true; } });
 const ecran = sortieVers ? sortieVers(faux) : faux;
 let tampon = [];
 const stdin = Object.assign(new EventEmitter(), { isTTY: true, setRawMode() {}, setEncoding() {}, ref() {}, unref() {}, read() { return tampon.shift() ?? null; }, resume() {}, pause() {} });
@@ -24,8 +25,14 @@ await w(Number(process.env.ATTENTE ?? 7000));
 for (let i = 0; i < 2000; i++) console.log(`ligne ${i} [36mavec couleur[0m et un texte assez long pour remplir la largeur de la zone principale ${'·'.repeat(i % 80)}`);
 await w(1500);
 // L'accueil est le cockpit : on ouvre le journal complet, sinon la molette n'a rien à faire défiler
+recent = '';
 taper('/sorties');
 await w(300);
+// Garde-fou : Entrée seulement si le champ contient exactement /sorties (sinon ce serait une demande envoyée à Claude)
+if (!/❯ \/sorties(\s|$)/m.test(recent.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''))) {
+    process.stderr.write('✕ le champ de saisie ne contient pas exactement /sorties : arrêt, rien n\'est envoyé\n');
+    process.exit(1);
+}
 taper('\r');
 await w(1500);
 const m = calculerMise(COLS, ROWS);

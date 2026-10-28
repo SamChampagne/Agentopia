@@ -11,6 +11,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "postinstall": "node outils/patch-ink.mjs",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "test": "node test-ui.mjs base,projets,equipe && node test-synchro.mjs",
@@ -23,7 +24,8 @@
     "test:ssh": "node test-ssh.mjs",
     "test:plus": "node test-plus.mjs",
     "test:espaces": "node test-espaces.mjs",
-    "test:barre": "node test-barre.mjs"
+    "test:barre": "node test-barre.mjs",
+    "test:image": "node bench-image.mjs"
   },
   "keywords": [],
   "author": "",

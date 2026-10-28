@@ -1,5 +1,5 @@
 import * as os from 'os';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Box, Text } from 'ink';
 import chalk from 'chalk';
 import stringWidth from 'string-width';
@@ -106,12 +106,8 @@ const coteACote = (blocs: string[][], ecart = 1) => blocs[0].map((_, i) => blocs
 
 interface AFaire { lignes: string[]; session?: string }
 
+// Redessiné par l'horloge de l'App (une seule image par battement pour tout l'écran)
 export function Cockpit({ d, largeur, hauteur }: { d: Donnees; largeur: number; hauteur: number }) {
-    const [, setV] = useState(0);
-    useEffect(() => {
-        const t = setInterval(() => setV((v) => v + 1), 1000);
-        return () => clearInterval(t);
-    }, []);
     const tic = Math.floor(Date.now() / 800);
     const L = largeur - 2;   // marge à gauche et à droite
 

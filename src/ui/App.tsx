@@ -359,12 +359,17 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             const s = await lireStatutAsync();
             setStatut(siChange(s));
         }, 3000);
-        // Animation (✻ qui tourne) : on ne redessine que si quelque chose bouge vraiment
-        const idTic = setInterval(() => {
-            if (etatRef.current.tache || etatRef.current.donnees.agents.some((a) => a.statut === 'travaille')
-                || etatRef.current.donnees.equipes.some((e) => ['planification', 'en cours', 'integration'].includes(e.etat))
-                || etatMaitre().enCours) setTic((t) => t + 1);
-        }, 800);
+        // Une seule horloge pour tout l'écran (une image par battement, pas une par composant) :
+        // toutes les 800 ms si quelque chose s'anime (✻ qui tourne), sinon chaque seconde pour le cockpit (CPU, compteurs)
+        let idTic: NodeJS.Timeout;
+        const battement = () => {
+            const { tache, donnees: d, demande: dm, session: s, contenuOuvert, journalOuvert: j } = etatRef.current;
+            const anime = !!tache || d.agents.some((a) => a.statut === 'travaille')
+                || d.equipes.some((e) => ['planification', 'en cours', 'integration'].includes(e.etat)) || etatMaitre().enCours;
+            if (anime || (!dm && !s && !contenuOuvert && !j)) setTic((t) => t + 1);
+            idTic = setTimeout(battement, anime ? 800 : 1000);
+        };
+        idTic = setTimeout(battement, 800);
         const idHeure = setInterval(() => setHeure(new Date()), 30_000);
         // Clic sur une notification Windows : claudetopia:session/<id>, claudetopia:equipe/<id>, claudetopia:questions
         const surLien = (lien: string) => {
@@ -409,7 +414,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             bus.off('selectionner', surSelection);
             bus.off('lancer', surLancer);
             clearInterval(idStatut);
-            clearInterval(idTic);
+            clearTimeout(idTic);
             clearInterval(idHeure);
             clearTimeout(idMaitre);
             clearTimeout(idConnexions);
