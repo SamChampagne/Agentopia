@@ -3,6 +3,8 @@ import { VueDocker } from './docker.tsx';
 import { VueServeurs } from './ssh.tsx';
 import { VueGit } from './git.tsx';
 import { VueProjets } from './projets.tsx';
+import { VueGlobale } from './live.tsx';
+import { VueEquipe } from './equipe.tsx';
 
 // Vues déjà passées à OpenTUI, par nom du composant Ink que la commande demande (afficherVue).
 // Une commande ouvre toujours sa vue de la même façon : l'interface choisit sa version de la vue.
@@ -12,4 +14,6 @@ export const VUES: Record<string, (props: any) => any> = {
     VueServeurs,
     VueGit,
     VueProjets,
+    VueGlobale,
+    VueEquipe,
 };

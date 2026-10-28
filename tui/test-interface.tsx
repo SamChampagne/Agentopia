@@ -9,8 +9,16 @@ import { capturerConsole, lignesJournal } from '../dist/ui/journal.js';
 import { lireTranscript } from '../dist/agents.js';
 
 const COLS = 200, ROWS = 50;
+// Une erreur (dont un garde-fou qui refuse d'appuyer sur Entrée) arrête le test au lieu de le laisser tourner
+const arret = (e: unknown) => {
+    process.stderr.write(`✗ arrêt du test : ${(e as Error)?.message ?? e}
+`);
+    process.exit(1);
+};
+process.on('unhandledRejection', arret);
+process.on('uncaughtException', arret);
 demarrerCollecte();
-const { renderer, mockInput, mockMouse, flush, captureCharFrame } = await createTestRenderer({ width: COLS, height: ROWS, useMouse: true });
+const { renderer, mockInput, mockMouse, flush, captureCharFrame } = await createTestRenderer({ width: COLS, height: ROWS, useMouse: true, autoFocus: false });
 capturerConsole();
 createRoot(renderer).render(<App quitter={() => undefined} />);
 const w = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -27,12 +35,17 @@ function verifier(nom: string, vrai: boolean, image?: string) {
     if ((!vrai || process.env.VOIR) && image) process.stderr.write(image.split('\n').slice(0, 30).map((l) => l.slice(0, 160)).join('\n') + '\n');
 }
 // Tape une commande « /… » et n'appuie sur Entrée que si la barre la contient exactement
+const trace = (m: string) => process.env.TRACE && process.stderr.write(`   · ${(performance.now() / 1000).toFixed(1)} s ${m}\n`);
 async function commande(texte: string) {
     if (!texte.startsWith('/')) throw new Error('garde-fou : seulement des commandes /…');
+    trace(`tape ${texte}`);
     await mockInput.typeText(texte);
+    trace('tapé');
     const image = await ecran();
+    trace('écran lu');
     if (!image.includes(`❯ ${texte}`)) throw new Error(`garde-fou : la barre ne contient pas « ${texte} », Entrée non pressée`);
     mockInput.pressEnter();
+    trace('Entrée');
     await w(600);
     return ecran();
 }
@@ -105,6 +118,29 @@ image = await echap();
 verifier('Échap efface le filtre', image.includes('tape pour filtrer'), image);
 image = await echap();
 verifier('Échap referme Projets', !image.includes('tape pour filtrer'), image);
+
+// Live : plein écran (la colonne disparaît), puis Échap la ramène
+image = await commande('/global');
+verifier('/global : vue globale en plein écran', image.includes('VUE GLOBALE') && image.includes('SERVEURS SSH (') && !image.includes('Sessions  Projets'), image);
+image = await echap();
+verifier('Échap referme Live et la colonne revient', !image.includes('VUE GLOBALE') && image.includes('Sessions  Projets'), image);
+
+// Équipes : la liste (pas d'Entrée : la première ligne crée une équipe)
+image = await commande('/equipe');
+verifier('/equipe : liste des équipes', image.includes("ÉQUIPES D'AGENTS") && image.includes('Nouvelle équipe'), image);
+image = await echap();
+verifier('Échap referme Équipes', !image.includes("ÉQUIPES D'AGENTS"), image);
+
+// Panneau de détail : un projet de l'onglet Projets (ses boutons ne sont pas cliqués)
+await mockMouse.click(12, 2);
+await ecran();
+await mockMouse.click(10, 3);
+image = await ecran();
+verifier('clic sur un projet : panneau de détail', image.includes('← Retour') && image.includes('SESSIONS CLAUDE (') && (image.includes('Branche') || image.includes('pas un dépôt git')), image);
+image = await echap();
+verifier('Échap referme le détail', !image.includes('SESSIONS CLAUDE ('), image);
+await mockMouse.click(3, 2);
+await ecran();
 
 image = await commande('/recents');
 verifier('/recents : vue pas encore migrée, annoncée', image.includes('pas encore passée à la nouvelle interface'), image);

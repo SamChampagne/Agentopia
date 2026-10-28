@@ -14,7 +14,7 @@ export function Boutons({ boutons, actifs, agir }: { boutons: { label: string; a
                 return (
                     <box key={b.action} marginRight={1} backgroundColor={sur ? fond.panneauActif : fond.selection}
                         onMouseOver={() => setSurvol(b.action)} onMouseOut={() => setSurvol(undefined)} onMouseDown={() => actif && agir(b.action)}>
-                        <text fg={!actif ? fond.eteint : b.action === 'fermer' ? fond.texte : theme.secondaire} attributes={sur ? GRAS : 0}>{` ${b.label} `}</text>
+                        <text fg={!actif || b.action === 'retour' ? fond.eteint : b.action === 'fermer' ? fond.texte : theme.secondaire} attributes={sur ? GRAS : 0}>{` ${b.label} `}</text>
                     </box>
                 );
             })}

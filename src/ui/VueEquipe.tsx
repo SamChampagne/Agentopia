@@ -16,7 +16,7 @@ import { theme, fond } from '../theme.js';
 const ajuste = (s: string, n: number) => (s.length > n - 1 ? s.slice(0, Math.max(0, n - 2)) + '… ' : s.padEnd(n));
 const ANIM = ['✻', '✼', '✽', '✾', '✿', '❀'];
 
-function etatTache(t: Tache, tic: number): { texte: string; couleur: string } {
+export function etatTache(t: Tache, tic: number): { texte: string; couleur: string } {
     const depuis = t.debut ? ` · ${ilYa(new Date(t.debut))}` : '';
     switch (t.etat) {
         case 'attente': return { texte: t.dependances.length ? `○ attend ${t.dependances.join(', ')}` : '○ en attente', couleur: 'gray' };
@@ -83,7 +83,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
 
 // ─── Une équipe ──────────────────────────────────────────────────────────────
 
-function boutonsEquipe(e: Equipe, t?: Tache) {
+export function boutonsEquipe(e: Equipe, t?: Tache) {
     const fermer = { label: '✕ Fermer', action: 'fermer' };
     // Une tâche finie avec sa branche : lire son diff avant de fusionner, et l'écarter si besoin
     const revue = t?.branche && t.etat === 'faite' && (e.etat === 'prete' || e.etat === 'erreur')

@@ -10,6 +10,7 @@ import { Colonne } from './colonne.tsx';
 import { Conversation } from './conversation.tsx';
 import { Choix, Saisie, VueNonMigree } from './dialogues.tsx';
 import { VUES } from './vues/index.ts';
+import { Detail } from './detail.tsx';
 import { Barre } from './barre.tsx';
 import { Journal } from './journal.tsx';
 import { QuelleTouche } from './quelleTouche.tsx';
@@ -59,7 +60,19 @@ export function App({ quitter }: { quitter: () => void }) {
     useVersion(surMaitre);
     const d = lireDonnees();
     const { width, height } = useTerminalDimensions();
-    const [selection, setSelection] = useState<string>();
+    const [selection, setSelectionEtat] = useState<string>();
+    // Panneau de détail (projet, serveur, conteneur) : il remplace la conversation dans la zone principale, et inversement
+    const [detail, setDetailEtat] = useState<any>();
+    const setSelection = (cle?: string) => {
+        if (cle) setDetailEtat(undefined);
+        setSelectionEtat(cle);
+    };
+    const ouvrirDetail = (dt?: any) => {
+        if (dt) setSelectionEtat(undefined);
+        setDetailEtat(dt);
+    };
+    // Plein écran (vue globale) : la colonne de gauche disparaît le temps de la vue
+    const [pleinEcran, setPleinEcran] = useState(false);
     const [aSelectionner, setASelectionner] = useState<string>();
     const [espace, setEspace] = useState('sessions');
     const [demande, setDemande] = useState<any>();
@@ -134,6 +147,8 @@ export function App({ quitter }: { quitter: () => void }) {
     }
     const lancerRef = useRef(lancer);
     lancerRef.current = lancer;
+    const ouvrirDetailRef = useRef(ouvrirDetail);
+    ouvrirDetailRef.current = ouvrirDetail;
 
     function soumettre(v: string) {
         const s = suggestions[sugg];
@@ -236,6 +251,10 @@ export function App({ quitter }: { quitter: () => void }) {
             minuterie = setTimeout(() => setNotice(undefined), 6000);
         };
         const surSelection = (id: string) => setASelectionner(id);
+        const surDetail = (dt: any) => setTimeout(() => ouvrirDetailRef.current(dt), 50);
+        const surPleinEcran = (v: boolean) => setPleinEcran(v);
+        bus.on('detail', surDetail);
+        bus.on('plein-ecran', surPleinEcran);
         const surLancer = async (commandes: string | string[]) => {
             for (const commande of ([] as string[]).concat(commandes)) await lancerRef.current(commande, true);
         };
@@ -249,6 +268,8 @@ export function App({ quitter }: { quitter: () => void }) {
             bus.off('tache', surTache);
             bus.off('notice', surNotice);
             bus.off('selectionner', surSelection);
+            bus.off('detail', surDetail);
+            bus.off('plein-ecran', surPleinEcran);
             bus.off('lancer', surLancer);
         };
     }, []);
@@ -277,12 +298,14 @@ export function App({ quitter }: { quitter: () => void }) {
             return;
         }
         const alt = k.meta || k.option;
+        // Le champ reçoit aussi la touche (Espace, ?) : on le vide une fois qu'il l'a traitée
+        const viderApres = () => setTimeout(() => remplacer(''), 0);
         if (k.name === 'space' && !valeur.trim() && !occupe && !modeMaitre) {
-            remplacer('');
+            viderApres();
             return setQuelleTouche('');
         }
         if (k.sequence === '?' && !valeur.trim()) {
-            remplacer('');
+            viderApres();
             return void lancer('/aide', true);
         }
         if (occupe) return;
@@ -298,6 +321,7 @@ export function App({ quitter }: { quitter: () => void }) {
             if (modeMaitre) return setModeMaitre(false);
             if (valeur) return remplacer('');
             if (session) return setSelection(undefined);
+            if (detail) return ouvrirDetail(undefined);
             if (journalOuvert) return setJournalOuvert(false);
             return;
         }
@@ -348,6 +372,7 @@ export function App({ quitter }: { quitter: () => void }) {
         const Vue = VUES[el?.type?.name];
         zone = Vue ? <Vue key={el.type.name} {...el.props} /> : <VueNonMigree d={demande} />;
     }
+    else if (detail) zone = <Detail key={`${detail.type}:${detail.cle}`} detail={detail} d={d} projets={projets} fermer={() => ouvrirDetail(undefined)} lancer={(cmd) => libre && lancer(cmd, true)} />;
     else if (session) {
         zone = (
             <box flexGrow={1} onMouseDown={(e: any) => droit(e) && ouvrirMenu(menuSession(session, () => undefined))}>
@@ -383,9 +408,9 @@ export function App({ quitter }: { quitter: () => void }) {
             </box>
             <Ansi texte={degrade('─'.repeat(width))} />
             <box flexGrow={1} flexDirection="row">
-                <Colonne d={d} largeur={lateral} selection={selection} choisir={setSelection} tic={tic} espace={espace} setEspace={setEspace}
-                    projets={projets} lancer={(cmd: string) => libre && lancer(cmd, true)} ouvrirMenu={ouvrirMenu}
-                    maitre={{ etat: etatMaitre(), actif: modeMaitre, claude: lireEtatClaude().etat, basculer: () => setModeMaitre((v) => !v) }} />
+                {!pleinEcran && <Colonne d={d} largeur={lateral} selection={selection} choisir={setSelection} tic={tic} espace={espace} setEspace={setEspace}
+                    projets={projets} lancer={(cmd: string) => libre && lancer(cmd, true)} ouvrirMenu={ouvrirMenu} ouvrirDetail={ouvrirDetail} detail={detail}
+                    maitre={{ etat: etatMaitre(), actif: modeMaitre, claude: lireEtatClaude().etat, basculer: () => setModeMaitre((v) => !v) }} />}
                 {zone}
             </box>
             {quelleTouche !== undefined && <QuelleTouche chemin={quelleTouche} choisir={toucheQT} />}
@@ -401,7 +426,7 @@ export function App({ quitter }: { quitter: () => void }) {
 
 if (import.meta.main) {
     demarrerCollecte();
-    const renderer = await createCliRenderer({ exitOnCtrlC: false, useMouse: true, enableMouseMovement: true, consoleMode: 'disabled' });
+    const renderer = await createCliRenderer({ exitOnCtrlC: false, useMouse: true, enableMouseMovement: true, consoleMode: 'disabled', autoFocus: false });
     // Tout ce que les commandes écrivent va au journal (affiché dans « Dernières sorties » et /sorties)
     capturerConsole();
     // claude attach, ssh, connexion : on rend le terminal au programme, puis on le reprend

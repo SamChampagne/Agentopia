@@ -8,7 +8,7 @@ import { capturerConsole } from '../dist/ui/journal.js';
 
 const COLS = Number(process.env.COLS ?? 220), ROWS = Number(process.env.ROWS ?? 55);
 demarrerCollecte();
-const { renderer, mockInput, mockMouse, flush, captureCharFrame } = await createTestRenderer({ width: COLS, height: ROWS, useMouse: true, enableMouseMovement: true });
+const { renderer, mockInput, mockMouse, flush, captureCharFrame } = await createTestRenderer({ width: COLS, height: ROWS, useMouse: true, enableMouseMovement: true, autoFocus: false });
 let images = 0;
 renderer.postProcessFns?.push?.(() => void images++);
 capturerConsole();

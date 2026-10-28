@@ -71,7 +71,7 @@ function Maitre({ etat, actif, tic, basculer, claude }: any) {
     );
 }
 
-export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace, projets, lancer, ouvrirMenu, maitre }: any) {
+export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace, projets, lancer, ouvrirMenu, maitre, ouvrirDetail, detail }: any) {
     const [survol, setSurvol] = useState<string>();
     const [replie, setReplie] = useState<Record<string, boolean>>({ ssh: false, docker: false });
     const docker: string[] = lignesDocker(d);
@@ -90,7 +90,8 @@ export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace
             {espace === 'projets' ? (
                 <scrollbox flexGrow={1} scrollY>
                     {lignesEspace('projets', d, projets).map((l: any) => (
-                        <box key={l.cle} height={1} flexDirection="row" backgroundColor={survol === l.cle ? fond.selection : undefined} {...survoler(l.cle)}>
+                        <box key={l.cle} height={1} flexDirection="row" backgroundColor={detail && l.detail?.cle === detail.cle ? fond.panneauActif : survol === l.cle ? fond.selection : undefined}
+                            {...survoler(l.cle)} onMouseDown={() => l.detail && ouvrirDetail(l.detail)}>
                             <text flexGrow={1} truncate>{'  '}{l.morceaux.map((m: any, i: number) => <span key={i} fg={m.c} attributes={m.gras ? GRAS : 0}>{m.t}</span>)}</text>
                             <text fg={l.couleurDroite}>{`${l.droite ?? ''} `}</text>
                         </box>
@@ -128,7 +129,7 @@ export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace
                 const acces = d.acces[s.nom];
                 return (
                     <box key={s.nom} height={1} paddingLeft={1} flexDirection="row" backgroundColor={survol === `ssh:${s.nom}` ? fond.selection : undefined}
-                        {...survoler(`ssh:${s.nom}`)} onMouseDown={(e: any) => (droit(e) ? ouvrirMenu(menuServeur(s)) : lancer(`/ssh vue ${s.nom}`, true))}>
+                        {...survoler(`ssh:${s.nom}`)} onMouseDown={(e: any) => (droit(e) ? ouvrirMenu(menuServeur(s)) : ouvrirDetail({ type: 'serveur', cle: s.nom }))}>
                         <text truncate>
                             <span fg={ok === undefined ? 'gray' : ok ? '#4ade80' : '#f87171'}>● </span>
                             <span>{couper(s.nom, 24).padEnd(24)}</span>
