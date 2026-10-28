@@ -1,5 +1,6 @@
 // Claudetopia sous OpenTUI : même style que l'interface Ink, avec les mêmes données et les mêmes commandes.
 // Lancer : bun tui/app.tsx   (Ctrl+C pour quitter)
+import * as fs from 'fs';
 import * as path from 'path';
 import { useEffect, useRef, useState } from 'react';
 import { createCliRenderer } from '@opentui/core';
@@ -25,8 +26,11 @@ import { etatClaude, lireEtatClaude, verifierClaude } from '../dist/etatClaude.j
 import { journal, lignesJournal, avecRetrait, vider, capturerConsole } from '../dist/ui/journal.js';
 import { definirPassage } from '../dist/ui/ecran.js';
 import { calculerSuggestions, commandeSession } from '../dist/ui/saisie.js';
-import { executerLigne, trouverCommande, rafraichirProjets, getProjets } from '../dist/commandes.js';
-import { chargerConfig, chargerHistorique, ajouterHistorique } from '../dist/config.js';
+import { executerLigne, trouverCommande, rafraichirProjets, getProjets, config, demarrerNotifications } from '../dist/commandes.js';
+import { CHEMINS } from '../dist/chemins.js';
+import { liens } from '../dist/notifications.js';
+import { imageDuPressePapiers, joindreImages, fichiersDeposes, EST_IMAGE } from '../dist/ui/pressePapiers.js';
+import { chargerConfig, chargerHistorique, ajouterHistorique, sauverConfig, premierLancement } from '../dist/config.js';
 import { theme, fond, couleurProjet, degrade, c } from '../dist/theme.js';
 
 const BOUTONS = [
@@ -60,7 +64,13 @@ const surDisposition = (f: () => void) => {
     return () => void bus.off('disposition', f);
 };
 
-export function App({ quitter }: { quitter: () => void }) {
+const debutApp = Date.now();
+// Tests : ni lecture ni écriture de l'état (lu à l'usage : les tests le règlent après les imports)
+const sansReprise = () => !!process.env.CLAUDETOPIA_SANS_REPRISE;
+const LATERAL_MIN = 28;
+
+// commandeInitiale : « sp commit saniplan » (lancée puis on quitte) · auDemarrage : l'assistant au premier lancement
+export function App({ quitter, commandeInitiale, auDemarrage }: { quitter: () => void; commandeInitiale?: string; auDemarrage?: string }) {
     useVersion(surMajDonnees);
     useVersion(surJournal);
     useVersion(surMaitre);
@@ -103,6 +113,18 @@ export function App({ quitter }: { quitter: () => void }) {
     const [quelleTouche, setQuelleTouche] = useState<string>();
     const [modeMaitre, setModeMaitre] = useState(false);
     const ctrlC = useRef(0);
+    // La vue affichée (la commande qui l'a ouverte) : gardée pour la rouvrir au prochain lancement
+    const [vueActive, setVueActive] = useState<string>();
+    const commandeCourante = useRef<string>();
+    // Ctrl+F : chercher dans la conversation ouverte (Entrée = occurrence suivante, en remontant le temps)
+    const [recherche, setRecherche] = useState(false);
+    const [occurrence, setOccurrence] = useState(0);
+    const [trouvees, setTrouvees] = useState(0);
+    // Images et fichiers joints (Alt+V, ou glissés dans la fenêtre) : envoyés avec le texte
+    const [images, setImages] = useState<string[]>([]);
+    // Largeur de la colonne (0 = automatique) : Alt+←/→ ou glisser sa bordure, gardée dans la config
+    const [largeurCol, setLargeurCol] = useState<number>(() => chargerConfig().largeurLaterale || 0);
+    const glisse = useRef(false);
 
     // Une seule horloge : 800 ms si quelque chose s'anime, sinon 1 s (comme l'interface Ink)
     const anime = !!tache || d.agents.some((a: any) => a.statut === 'travaille');
@@ -124,8 +146,8 @@ export function App({ quitter }: { quitter: () => void }) {
     };
 
     // silencieux : lancé par un clic, une action ou une vue ; la commande n'est ni affichée ni gardée dans l'historique
-    async function lancer(ligne: string, silencieux = false) {
-        const texte = ligne.trim();
+    async function lancer(ligne: string, silencieux = false, puisQuitter = false) {
+        let texte = ligne.trim();
         const cmd = trouverCommande(texte.split(' ')[0]);
         if (cmd?.nom === 'exit') return quitter();
         if (cmd?.nom === 'clear') {
@@ -143,7 +165,12 @@ export function App({ quitter }: { quitter: () => void }) {
         }
         // Une commande ordinaire affiche son résultat dans le journal : on referme la conversation ouverte
         if (!cmd?.cache) setSelection(undefined);
-        if (!silencieux) console.log(`\n${c.accent('❯')} ${texte || c.discret('(menu)')}`);
+        if (images.length) {
+            texte = joindreImages(texte, images);
+            setImages([]);
+        }
+        if (!silencieux) console.log(`\n${c.accent('❯')} ${ligne.trim() || c.discret('(menu)')}`);
+        commandeCourante.current = texte.split(' ')[0] === '/ssh' && texte.split(' ')[1] === 'vue' ? texte : texte.split(' ').slice(0, 2).join(' ');
         setOccupe(true);
         try {
             await (silencieux ? executerLigne(texte) : avecRetrait(() => executerLigne(texte)));
@@ -157,6 +184,7 @@ export function App({ quitter }: { quitter: () => void }) {
             setOccupe(false);
             // Un résultat trop long pour « Dernières sorties » s'ouvre en entier (Échap ramène au cockpit)
             if (lignesJournal().length - avant > 8) setJournalOuvert(true);
+            if (puisQuitter) setTimeout(quitter, 300);
         }
     }
     const lancerRef = useRef(lancer);
@@ -165,6 +193,7 @@ export function App({ quitter }: { quitter: () => void }) {
     ouvrirDetailRef.current = ouvrirDetail;
 
     function soumettre(v: string) {
+        if (recherche) return setOccurrence((o) => o + 1);
         const s = suggestions[sugg];
         if (s) {
             if (s.executer) {
@@ -186,6 +215,31 @@ export function App({ quitter }: { quitter: () => void }) {
         }
         void lancer(v);
     }
+
+    // Un fichier glissé dans la fenêtre : son chemin est collé dans la barre, il devient une pièce jointe
+    function surSaisie(v: string) {
+        const avant = valeurRef.current;
+        const ajout = v.length > avant.length + 3 && v.startsWith(avant) ? v.slice(avant.length) : '';
+        const fichiers = ajout && !recherche ? fichiersDeposes(ajout) : undefined;
+        if (fichiers) {
+            const debut = images.length;
+            setImages([...images, ...fichiers]);
+            const etiquettes = fichiers.map((f: string, i: number) => (EST_IMAGE.test(f) ? `[image ${debut + i + 1}]` : `[fichier ${debut + i + 1}: ${path.basename(f)}]`));
+            return remplacer(`${avant}${avant && !avant.endsWith(' ') ? ' ' : ''}${etiquettes.join(' ')} `);
+        }
+        setValeur(v);
+        setIndexSugg(0);
+    }
+
+    // Largeur de la colonne : bornée, appliquée tout de suite, gardée dans la config si demandé
+    const redimensionner = (n: number, sauver: boolean) => {
+        const l = Math.max(LATERAL_MIN, Math.min(width - 50, Math.round(n)));
+        setLargeurCol(l);
+        if (sauver) {
+            config.largeurLaterale = l;
+            sauverConfig(config);
+        }
+    };
 
     function agir(action: string) {
         if (action === 'fermer') return setSelection(undefined);
@@ -243,6 +297,47 @@ export function App({ quitter }: { quitter: () => void }) {
         };
     }, []);
 
+    // ─── Reprendre là où on en était : la conversation ouverte ou la vue affichée ───
+    useEffect(() => {
+        if (sansReprise()) return;
+        const t = setTimeout(() => {
+            try {
+                fs.writeFileSync(CHEMINS.etat, JSON.stringify({ session: selection, vue: demande?.type === 'vue' ? vueActive : undefined }), 'utf-8');
+            } catch {
+                // pas grave
+            }
+        }, 400);
+        return () => clearTimeout(t);
+    }, [selection, demande, vueActive]);
+    const repris = useRef(false);
+    useEffect(() => {
+        if (repris.current || commandeInitiale || auDemarrage || sansReprise()) return;
+        // On attend que les sessions soient lues (ou 4 s), puis on rouvre une seule fois
+        if (!d.agents.length && Date.now() - debutApp < 4000) return;
+        repris.current = true;
+        let etat: { session?: string; vue?: string } = {};
+        try {
+            etat = JSON.parse(fs.readFileSync(CHEMINS.etat, 'utf-8'));
+        } catch {
+            return;
+        }
+        if (etat.session && d.agents.some((a: any) => a.cle === etat.session)) setSelection(etat.session);
+        else if (etat.vue) void lancer(etat.vue, true);
+    });
+
+    // Au lancement : la commande demandée (puis on quitte), ou l'assistant la première fois ;
+    // une fois par lancement, on signale les connexions à régler (sans insister)
+    useEffect(() => {
+        if (commandeInitiale) void lancerRef.current(commandeInitiale, false, true);
+        else if (auDemarrage) void lancerRef.current(auDemarrage);
+        const t = setTimeout(async () => {
+            const { etatConnexions } = await import('../dist/connexions.js');
+            const aRegler = (await etatConnexions()).filter((x: any) => x.etat === 'manque' || x.etat === 'avert');
+            if (aRegler.length) bus.emit('notice', `⚿ ${aRegler.length} connexion${aRegler.length > 1 ? 's' : ''} à régler (${aRegler.slice(0, 3).map((x: any) => x.nom).join(', ')}) · /connexions`);
+        }, 20_000);
+        return () => clearTimeout(t);
+    }, []);
+
     // « Quelle touche ? » : une lettre descend dans un groupe ou lance l'action
     function toucheQT(t: string) {
         const enfant = noeudA(quelleTouche ?? '').enfants[t];
@@ -257,7 +352,20 @@ export function App({ quitter }: { quitter: () => void }) {
     // Ce que les commandes demandent à l'interface (bus.ts)
     useEffect(() => {
         let minuterie: ReturnType<typeof setTimeout> | undefined;
-        const surDemande = (x?: any) => setDemande(x);
+        const surDemande = (x?: any) => {
+            if (x?.type === 'vue') setVueActive(commandeCourante.current);
+            else if (!x) setVueActive(undefined);
+            setDemande(x);
+        };
+        // Clic sur une notification Windows : claudetopia:session/<id>, claudetopia:equipe/<id>, claudetopia:questions
+        const surLien = (lien: string) => {
+            const [quoi, id] = lien.replace(/^claudetopia:\/*/i, '').replace(/\/$/, '').split('/');
+            if (quoi === 'session' && id) bus.emit('selectionner', id);
+            else if (quoi === 'equipe' && id) void lancerRef.current(`/equipe ${id}`, true);
+            else if (quoi === 'questions') void lancerRef.current('/questions', true);
+            else if (quoi === 'surveillances') void lancerRef.current('/surveillances', true);
+        };
+        liens.on('demande', surLien);
         const surTache = (t?: string) => setTache(t);
         const surNotice = (t: string) => {
             setNotice(t);
@@ -282,6 +390,7 @@ export function App({ quitter }: { quitter: () => void }) {
             bus.off('tache', surTache);
             bus.off('notice', surNotice);
             bus.off('selectionner', surSelection);
+            liens.off('demande', surLien);
             bus.off('detail', surDetail);
             bus.off('plein-ecran', surPleinEcran);
             bus.off('lancer', surLancer);
@@ -322,7 +431,25 @@ export function App({ quitter }: { quitter: () => void }) {
             viderApres();
             return void lancer('/aide', true);
         }
+        if (recherche && k.name === 'escape') {
+            setRecherche(false);
+            return remplacer('');
+        }
         if (occupe) return;
+        if (k.ctrl && k.name === 'f' && session) {
+            setRecherche(true);
+            setOccurrence(0);
+            return remplacer('');
+        }
+        // Alt+V : l'image du presse-papiers devient une pièce jointe
+        if (alt && k.name === 'v') {
+            const chemin = imageDuPressePapiers();
+            if (!chemin) return void bus.emit('notice', 'Pas d\'image dans le presse-papiers');
+            setImages([...images, chemin]);
+            const v = valeurRef.current;
+            return remplacer(`${v}${v && !v.endsWith(' ') ? ' ' : ''}[image ${images.length + 1}] `);
+        }
+        if (alt && (k.name === 'left' || k.name === 'right')) return redimensionner(lateral + (k.name === 'right' ? 2 : -2), true);
         if (k.ctrl && k.name === 'k') return void lancer('/palette', true);
         if (alt && k.name === 'm') return setModeMaitre((v) => !v);
         if (alt && k.name === 't') return void lancer('/terminal', true);
@@ -356,6 +483,10 @@ export function App({ quitter }: { quitter: () => void }) {
         if (notice) return { texte: notice, couleur: theme.secondaire };
         if (occupe) return { texte: 'commande en cours…', couleur: 'gray' };
         const t = valeur.trim();
+        if (recherche) {
+            return { texte: `⌕ chercher dans la conversation : ${t.length < 2 ? 'tape au moins 2 lettres' : trouvees ? `${(occurrence % trouvees) + 1}/${trouvees} · Entrée = suivante` : 'aucun résultat'} · Échap fermer`, couleur: theme.secondaire };
+        }
+        if (images.length && !t.startsWith('/')) return { texte: `📎 ${images.length} pièce(s) jointe(s) envoyée(s) avec le texte`, couleur: theme.accent };
         if (t.startsWith('/')) return { texte: 'commande du CLI', couleur: 'gray' };
         if (modeMaitre) {
             return etatMaitre().enCours
@@ -373,7 +504,8 @@ export function App({ quitter }: { quitter: () => void }) {
     }
 
     const colonneVisible = !pleinEcran && disp.laterale !== 'cachee';
-    const lateral = colonneVisible ? Math.max(32, Math.min(56, Math.floor(width / 3))) : 0;
+    const lateral = !colonneVisible ? 0
+        : largeurCol ? Math.max(LATERAL_MIN, Math.min(width - 50, largeurCol)) : Math.max(32, Math.min(56, Math.floor(width / 3)));
     const principal = width - lateral;
     // Début de la zone principale (pour le clic dans le cockpit) : après la colonne si elle est à gauche
     const debutZone = disp.laterale === 'gauche' ? lateral : 0;
@@ -393,7 +525,8 @@ export function App({ quitter }: { quitter: () => void }) {
     else if (session) {
         zone = (
             <box flexGrow={1} onMouseDown={(e: any) => droit(e) && ouvrirMenu(menuSession(session, () => undefined))}>
-                <Conversation s={session} largeur={principal} cout={d.cout.parSession[session.sessionId]} agir={agir} position={disp.actions} />
+                <Conversation s={session} largeur={principal} cout={d.cout.parSession[session.sessionId]} agir={agir} position={disp.actions}
+                    recherche={recherche ? valeur.trim() : ''} occurrence={occurrence} surTrouvees={setTrouvees} />
             </box>
         );
     } else if (journalOuvert) zone = <box flexGrow={1} onMouseDown={(e: any) => droit(e) && ouvrirMenu(menuJournal(parler))}><Journal /></box>;
@@ -429,16 +562,25 @@ export function App({ quitter }: { quitter: () => void }) {
             <Ansi texte={degrade('─'.repeat(width))} />
             <box flexGrow={1} flexDirection="row">
                 {disp.laterale === 'droite' && zone}
-                {colonneVisible && <Colonne d={d} largeur={lateral} cote={disp.laterale} selection={selection} choisir={setSelection} tic={tic} espace={espace} setEspace={setEspace}
+                {colonneVisible && <Colonne d={d} largeur={lateral} cote={disp.laterale}
+                    bord={{
+                        debut: (e: any) => {
+                            const x = disp.laterale === 'droite' ? width - lateral : lateral - 1;
+                            if (e.button === 0 && Math.abs(e.x - x) <= 1) glisse.current = true;
+                        },
+                        glisser: (e: any) => glisse.current && redimensionner(disp.laterale === 'droite' ? width - e.x : e.x + 1, false),
+                        fin: () => {
+                            if (!glisse.current) return;
+                            glisse.current = false;
+                            redimensionner(lateral, true);
+                        },
+                    }} selection={selection} choisir={setSelection} tic={tic} espace={espace} setEspace={setEspace}
                     projets={projets} lancer={(cmd: string) => libre && lancer(cmd, true)} ouvrirMenu={ouvrirMenu} ouvrirDetail={ouvrirDetail} detail={detail}
                     maitre={{ etat: etatMaitre(), actif: modeMaitre, claude: lireEtatClaude().etat, basculer: () => setModeMaitre((v) => !v) }} />}
                 {disp.laterale !== 'droite' && zone}
             </box>
             {quelleTouche !== undefined && <QuelleTouche chemin={quelleTouche} choisir={toucheQT} />}
-            <Barre valeur={valeur} cle={cle} setValeur={(v) => {
-                setValeur(v);
-                setIndexSugg(0);
-            }} soumettre={soumettre} suggestions={suggestions} indexSugg={sugg}
+            <Barre valeur={valeur} cle={cle} setValeur={surSaisie} soumettre={soumettre} suggestions={recherche ? [] : suggestions} indexSugg={sugg}
                 choisirSugg={(i) => (suggestions[i]?.executer ? (remplacer(''), void lancer(suggestions[i].texte)) : remplacer(suggestions[i].texte))}
                 indication={indication()} actif={!demande && quelleTouche === undefined} maitre={modeMaitre} />
         </box>
@@ -446,7 +588,20 @@ export function App({ quitter }: { quitter: () => void }) {
 }
 
 if (import.meta.main) {
+    // « sp commit saniplan » : exécute la commande dans l'interface puis quitte
+    const commandeInitiale = process.argv.slice(2).join(' ').trim() || undefined;
+    // Première fois sur ce poste : l'assistant demande l'essentiel
+    const auDemarrage = premierLancement ? '/bienvenue' : undefined;
     demarrerCollecte();
+    if (!commandeInitiale) demarrerNotifications();
+    const { remplacerAncienRaccourci, prechargerBureau } = await import('../dist/configCommandes.js');
+    setTimeout(remplacerAncienRaccourci, 3000);
+    setTimeout(prechargerBureau, 3500);
+    // Notifications cliquables : le lien claudetopia: ouvre la session concernée
+    setTimeout(() => void import('../dist/notifications.js').then((n: any) => n.surveillerLiens()), 2000);
+    // Terminaux installés détectés en avance : le premier clic droit s'ouvre sans attendre
+    setTimeout(() => void import('../dist/terminaux.js').then((t: any) => t.terminaux()), 2500);
+    process.on('exit', () => void import('../dist/maitre.js').then((m: any) => m.arreterMaitre()));
     const renderer = await createCliRenderer({ exitOnCtrlC: false, useMouse: true, enableMouseMovement: true, consoleMode: 'disabled', autoFocus: false });
     // Tout ce que les commandes écrivent va au journal (affiché dans « Dernières sorties » et /sorties)
     capturerConsole();
@@ -461,5 +616,5 @@ if (import.meta.main) {
         renderer.destroy();
         process.exit(0);
     };
-    createRoot(renderer).render(<App quitter={quitter} />);
+    createRoot(renderer).render(<App quitter={quitter} commandeInitiale={commandeInitiale} auDemarrage={auDemarrage} />);
 }

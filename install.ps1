@@ -111,6 +111,22 @@ try {
     Arreter "compilation"
 }
 
+# --- 3 bis. Nouvelle interface (OpenTUI, sous Bun) ; sans elle, l'ancienne interface est utilisée ---
+Titre "Nouvelle interface"
+try {
+    if (-not (Present 'bun')) {
+        winget install --id Oven-sh.Bun -e --accept-source-agreements --accept-package-agreements --silent | Out-Null
+        $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    }
+    if (-not (Present 'bun')) { throw "Bun introuvable apres installation" }
+    Push-Location (Join-Path $racine 'tui')
+    try { bun install } finally { Pop-Location }
+    if ($LASTEXITCODE -ne 0) { throw "code $LASTEXITCODE" }
+    Ok "Bun $(bun --version) et la nouvelle interface"
+} catch {
+    Avert "Nouvelle interface indisponible ($_) : Claudetopia utilisera l'ancienne" "winget install Oven-sh.Bun   puis relance l'installation"
+}
+
 # --- 4. Node 24 pour la souris (sans toucher au Node du système) ---
 Titre "Souris"
 if ($majeure -ge 24) {

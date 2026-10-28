@@ -1,3 +1,4 @@
+process.env.CLAUDETOPIA_SANS_REPRISE = '1';   // ne lit ni n'écrit l'état de reprise de l'utilisateur
 // Banc du prototype OpenTUI, comparable à bench-image.mjs (Ink) : CPU par action (frappe, molette, clic), au repos,
 // et une capture de l'écran pour vérifier le rendu. Lancer : bun tui/bench.tsx
 import { createTestRenderer } from '@opentui/core/testing';

@@ -1,3 +1,4 @@
+process.env.CLAUDETOPIA_SANS_REPRISE = '1';   // ne lit ni n'écrit l'état de reprise de l'utilisateur
 // Test de la nouvelle interface, sans terminal : rien n'est envoyé à Claude ni modifié.
 // Entrée n'est pressée que sur des commandes « /… » vérifiées à l'écran juste avant ; les dialogues sont annulés par Échap.
 // Lancer : bun tui/test-interface.tsx   (VOIR=1 pour afficher les écrans)
@@ -182,11 +183,26 @@ if (avecMessages >= 0) {
     image = await ecran();
     verifier('clic sur une carte : conversation et ses actions', image.includes('← Retour') && image.includes('Copier la réponse'), image);
     if (tailles[avecMessages]) {
-        verifier('le texte de la conversation s’affiche', /❯ |▸ |⎿ /.test(image.split('\n').map((l) => l.slice(80)).join('\n')), image);
+        // Les résultats d'outils (⎿) n'apparaissent que dans la conversation, quelle que soit la largeur de la colonne
+        verifier('le texte de la conversation s’affiche', image.includes('⎿ '), image);
         // Ouverte en bas : la dernière ligne de la conversation est visible
         const { lignesTranscript } = await import('../dist/ui/Zones.js');
         const derniere = lignesTranscript(lireTranscript(agents[avecMessages].fichier), 100).map((l: string) => l.replace(/\x1b\[[0-9;]*m/g, '').trim()).filter(Boolean).at(-1) ?? '';
         verifier(`ouverte sur la fin (« ${derniere.slice(0, 30)}… »)`, image.replace(/\s+/g, ' ').includes(derniere.slice(0, 25)), image);
+
+        // Ctrl+F : on ne tape le terme que si le mode recherche est bien actif (sinon ce serait un message à la session),
+        // et on n'appuie jamais sur Entrée
+        mockInput.pressKey('f', { ctrl: true });
+        image = await ecran();
+        const enRecherche = image.includes('chercher dans la conversation');
+        verifier('Ctrl+F : mode recherche', enRecherche, image);
+        if (enRecherche) {
+            await mockInput.typeText('re');
+            image = await ecran();
+            verifier('Ctrl+F : occurrences comptées', /\d+\/\d+ · Entrée = suivante|aucun résultat/.test(image), image);
+            image = await echap();
+            verifier('Échap ferme la recherche, la barre est vide', !image.includes('chercher dans la conversation') && image.includes('← Retour'), image);
+        }
     }
     await mockMouse.moveTo(60 + 6, 6);
     image = await ecran();

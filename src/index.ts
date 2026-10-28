@@ -4,7 +4,18 @@ import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
-import { CHEMINS } from './chemins.js';
+import { CHEMINS, surPath } from './chemins.js';
+
+// Nouvelle interface (OpenTUI, sous Bun) : utilisée dès que Bun et ses dépendances sont là.
+// CLAUDETOPIA_INK=1 garde l'ancienne interface (Ink) ; si Bun ne démarre pas, on y revient aussi.
+const RACINE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const TUI = path.join(RACINE, 'tui', 'app.tsx');
+const bun = !process.env.CLAUDETOPIA_INK && fs.existsSync(path.join(RACINE, 'tui', 'node_modules', '@opentui', 'core')) ? surPath('bun') : undefined;
+if (bun && fs.existsSync(TUI)) {
+    const res = spawnSync(bun, [TUI, ...process.argv.slice(2)], { stdio: 'inherit', env: { ...process.env, NODE_ENV: process.env.NODE_ENV ?? 'production' } });
+    if (!res.error) process.exit(res.status ?? 0);
+    console.error(`Nouvelle interface indisponible (${res.error.message}) : démarrage de l'ancienne.`);
+}
 
 // La souris n'arrive dans Node sur Windows qu'à partir de Node 24 (mode console "VT").
 // Sur une version plus ancienne, on se relance sous Node 24 (sans toucher au Node du système) :
