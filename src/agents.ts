@@ -269,6 +269,41 @@ export function activite(messages: Message[]): Activite {
     return a;
 }
 
+// Heures de tous les événements d'une session (messages, outils, résultats) sur les 2 dernières heures.
+// Cherche seulement « "timestamp":" » dans les octets, sans décoder le JSON : 30 Mo se parcourent en quelques ms,
+// assez pour couvrir une heure même quand les sorties d'outils gonflent le transcript. Ensuite, seulement la fin ajoutée.
+const MARQUE_DATE = Buffer.from('"timestamp":"');
+const horairesConnus = new Map<string, { jusqua: number; horaires: number[] }>();
+export function horairesSession(fichier: string, fenetre = 2 * 3600_000): number[] {
+    let e = horairesConnus.get(fichier);
+    try {
+        const taille = fs.statSync(fichier).size;
+        if (!e || taille < e.jusqua) e = { jusqua: Math.max(0, taille - 30_000_000), horaires: [] };
+        if (taille > e.jusqua) {
+            const fd = fs.openSync(fichier, 'r');
+            try {
+                const octets = Buffer.alloc(taille - e.jusqua);
+                const lus = fs.readSync(fd, octets, 0, octets.length, e.jusqua);
+                const fin = octets.lastIndexOf(0x0a, lus - 1) + 1;   // une ligne en cours d'écriture attend
+                for (let i = octets.indexOf(MARQUE_DATE); i >= 0 && i < fin; i = octets.indexOf(MARQUE_DATE, i + 1)) {
+                    const t = Date.parse(octets.toString('latin1', i + MARQUE_DATE.length, i + MARQUE_DATE.length + 24));
+                    if (t) e.horaires.push(t);
+                }
+                e.jusqua += fin;
+            } finally {
+                fs.closeSync(fd);
+            }
+        }
+        const limite = Date.now() - fenetre;
+        if (e.horaires.length && e.horaires[0] < limite) e.horaires = e.horaires.filter((t) => t >= limite);
+        if (horairesConnus.size > 80) horairesConnus.clear();
+        horairesConnus.set(fichier, e);
+    } catch {
+        // transcript pas encore créé
+    }
+    return e?.horaires ?? [];
+}
+
 // Activité par minute sur les `minutes` dernières minutes (la plus ancienne d'abord)
 export function rythme(horaires: number[] = [], minutes = 10, maintenant = Date.now()): number[] {
     const seaux = new Array(minutes).fill(0);

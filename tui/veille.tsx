@@ -8,7 +8,8 @@ import { theme, fond, couleurProjet, melange } from '../dist/theme.js';
 
 const NOIR = '#0c0c0c';
 const SIGNES = '0123456789abcdef{}<>=+*/;:.✻';
-const CHIFFRES: Record<string, [string, string]> = {
+// Chiffres en blocs sur 2 lignes (l'heure de la veille, les grands nombres de la vue Live)
+export const CHIFFRES: Record<string, [string, string]> = {
     0: ['█▀█', '█▄█'], 1: ['▄█ ', ' █ '], 2: ['▀▀█', '█▄▄'], 3: ['▀▀█', '▄▄█'], 4: ['█ █', '▀▀█'],
     5: ['█▀▀', '▄▄█'], 6: ['█▀▀', '█▄█'], 7: ['▀▀█', '  █'], 8: ['█▀█', '█▀█'], 9: ['█▀█', '▀▀█'], ':': [' ▪ ', ' ▪ '],
 };

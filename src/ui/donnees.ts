@@ -5,7 +5,7 @@ const DOSSIER_MAITRE = path.resolve(CHEMINS.maitre).toLowerCase();
 import { EventEmitter } from 'events';
 import { useEffect, useState } from 'react';
 import { SessionActive, sessionsActives } from '../systeme.js';
-import { SessionVue, Activite, listerAgents, lireTranscript, activite, contexteSession, limiteContexte, DOSSIERS_AGENTS } from '../agents.js';
+import { SessionVue, Activite, listerAgents, lireTranscript, activite, contexteSession, limiteContexte, horairesSession, DOSSIERS_AGENTS } from '../agents.js';
 import { Hote, listerConteneurs } from '../docker.js';
 import { chargerConfig } from '../config.js';
 import { toast, jouerSon } from '../notifications.js';
@@ -92,7 +92,8 @@ function activiteDe(fichier: string): ReturnType<typeof activite> {
     }
     const connu = activitesConnues.get(fichier);
     if (connu && connu.cle === cle) return connu.valeur;
-    const valeur = { ...activite(lireTranscript(fichier, 600_000)), contexte: contexteSession(fichier) };
+    // Les horaires viennent d'un lecteur à part, qui couvre la dernière heure (le pouls de la vue Live)
+    const valeur = { ...activite(lireTranscript(fichier, 600_000)), contexte: contexteSession(fichier), horaires: horairesSession(fichier) };
     activitesConnues.set(fichier, { cle, valeur });
     return valeur;
 }
