@@ -2,13 +2,15 @@
 
 Poste de pilotage pour travailler avec Claude, Codex, Perplexity et des **équipes d’agents** : conversations, projets, Git, Docker et serveurs SSH.
 
-**[Télécharger Agentopia pour Windows](https://github.com/SamChampagne/Agentopia/releases/download/agentopia-1.4.0-beta.3/Agentopia-Setup.exe)** · [Notes de version et ZIP portable](https://github.com/SamChampagne/Agentopia/releases/tag/agentopia-1.4.0-beta.3)
+**[Télécharger Agentopia pour Windows](https://github.com/SamChampagne/Agentopia/releases/download/agentopia-1.4.0-beta.5/Agentopia-Setup.exe)** · [Notes de version et ZIP portable](https://github.com/SamChampagne/Agentopia/releases/tag/agentopia-1.4.0-beta.5)
 
-Version disponible : **1.4.0-beta.3 · Windows x64**. Cette page décrit la bêta publiée ; ses sources se trouvent actuellement sur la branche [codex/sessions-multi-agents](https://github.com/SamChampagne/Agentopia/tree/codex/sessions-multi-agents), avec la [revue du code dans la PR #1](https://github.com/SamChampagne/Agentopia/pull/1).
+Version disponible : **1.4.0-beta.5 · Windows x64**. Cette page décrit la bêta publiée ; ses sources se trouvent actuellement sur la branche [codex/sessions-multi-agents](https://github.com/SamChampagne/Agentopia/tree/codex/sessions-multi-agents), avec la [revue du code dans la PR #1](https://github.com/SamChampagne/Agentopia/pull/1).
 
-**Sessions intégrées Claude, Codex et Perplexity** : `+ Session` ou `/session`, configuration via `/fournisseurs`, collaboration via **Équipes → Nouvelle équipe**. [Connexion, utilisation et limites](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.3/docs/sessions-multi-agents.md).
+**Sessions intégrées Claude, Codex et Perplexity** : `+ Session` ou `/session`, configuration via `/fournisseurs`, collaboration via **Équipes → Nouvelle équipe**. [Connexion, utilisation et limites](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.5/docs/sessions-multi-agents.md).
 
-**Bêta 1.4** : attente utilisateur exclue de la limite de travail, permissions lisibles avec commande exacte, bilan **Relire (b) → Intégrer → Ranger**, et mises à jour adaptées au canal stable ou bêta. [Notes de version](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.3/docs/beta-1.4.md).
+**Conversations Codex** : réponses et sorties de commandes progressives, outils lisibles avec détails (Alt+L), tableaux adaptés à la largeur et séparation entre les actions et le chat. **Ouvrir Codex** et **Codex à côté** (Alt+J) reprennent la même conversation dans le terminal ; Agentopia conserve le brouillon et reste en lecture seule jusqu’à la fermeture de Codex. Les mini-graphes turquoise des cartes ont été retirés.
+
+**Bêta 1.4** : attente utilisateur exclue de la limite de travail, permissions lisibles avec commande exacte, bilan **Relire (b) → Intégrer → Ranger**, et mises à jour adaptées au canal stable ou bêta. [Notes de version](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.5/docs/beta-1.4.md).
 
 **Version 1.3.1** : récupération des verrous de session après plantage, protection contre deux workers exécutant le même tour et sauvegarde des équipes avant chaque écriture. Un fichier d’équipes illisible est signalé dans **Équipes → Récupérer les équipes** : la restauration conserve une copie du fichier abîmé et met le moteur en pause, sans relancer les tâches. Les conversations et branches restent en place.
 
@@ -22,11 +24,13 @@ Lancer **Agentopia.bat** depuis les sources, ou le raccourci **Agentopia** aprè
 
 ## Installation Windows
 
-Télécharger **[Agentopia-Setup.exe depuis la bêta 1.4](https://github.com/SamChampagne/Agentopia/releases/tag/agentopia-1.4.0-beta.3)**. Le paquet contient Node 24, Bun et les dépendances de l’interface. Un double-clic installe dans le profil utilisateur, vérifie l’interface et ouvre la préparation guidée. Aucun terminal de compilation n’est nécessaire.
+Télécharger **[Agentopia-Setup.exe depuis la bêta 1.4](https://github.com/SamChampagne/Agentopia/releases/tag/agentopia-1.4.0-beta.5)**. Le paquet contient Node 24, Bun et les dépendances de l’interface. Le petit installateur ouvre une fenêtre de téléchargement avec les Mo reçus et le pourcentage, puis affiche la vérification et l’installation. Agentopia s’ouvre automatiquement quand tout est prêt. Une connexion Internet est nécessaire ; aucun terminal de compilation n’est requis. En cas d’échec, la fenêtre propose de réessayer et d’ouvrir le journal.
+
+**Windows affiche « éditeur inconnu » ?** La bêta n’est pas encore signée avec un certificat d’éditeur reconnu. La nouvelle fenêtre d’installation ne supprime pas l’avertissement SmartScreen, qui intervient avant le lancement. Une signature reconnue et la réputation de l’application sont des étapes distinctes de la distribution. [Explications Microsoft](https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation).
 
 Au premier lancement, choisis les projets et les agents à utiliser. Agentopia détecte les outils présents, propose les installations nécessaires et guide la connexion. Une interruption conserve les choix déjà faits. Le même parcours reste accessible avec **Config → Préparer le poste** ou `/scan`.
 
-`/maj`, `/reparer` et `/retour-version` gèrent les installations Windows : téléchargement vérifié, réparation avec le paquet conservé et retour à la version précédente. Les données personnelles sont séparées du logiciel. [Détails de construction et de validation](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.3/docs/distribution-windows.md).
+`/maj`, `/reparer` et `/retour-version` gèrent les installations Windows : téléchargement vérifié, réparation avec le paquet conservé et retour à la version précédente. Les données personnelles sont séparées du logiciel. [Détails de construction et de validation](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.5/docs/distribution-windows.md).
 
 ## Installation depuis les sources
 
