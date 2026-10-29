@@ -94,7 +94,7 @@ test('fin de mission : intégrer seulement les branches prêtes, recherche sans 
     assert.equal(reprise.peutIntegrer, false); assert.equal(reprise.reprise, true);
 });
 const release = (v, prerelease = v.includes('-')) => ({ tag_name: `agentopia-${v}`, prerelease,
-    assets: ['agentopia-release.json', 'Agentopia-Windows-x64.zip'].map((name) => ({ name, browser_download_url: `https://github.com/SamChampagne/ClaudeTopia/releases/download/agentopia-${v}/${name}` })) });
+    assets: ['agentopia-release.json', 'Agentopia-Windows-x64.zip'].map((name) => ({ name, browser_download_url: `https://github.com/SamChampagne/Agentopia/releases/download/agentopia-${v}/${name}` })) });
 test('mises à jour : canaux stable/bêta, ordre numérique et absence de retour arrière', () => {
     assert.ok(comparerVersions('1.4.0-beta.10', '1.4.0-beta.2') > 0);
     assert.ok(comparerVersions('1.4.0', '1.4.0-beta.10') > 0);

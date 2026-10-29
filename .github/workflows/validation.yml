@@ -37,6 +37,9 @@ jobs:
       - name: Installer, mettre à jour, réparer et revenir en arrière sur Windows
         if: steps.paquet.outcome == 'success'
         run: node test-installation-windows.mjs "${{ steps.paquet.outputs.dossier }}"
+      - name: Vérifier le téléchargement et les erreurs du nouvel installateur
+        if: steps.paquet.outcome == 'success'
+        run: node test-telechargement-windows.mjs "${{ steps.paquet.outputs.dossier }}"
       - uses: actions/upload-artifact@v4
         if: steps.paquet.outcome == 'success'
         with:

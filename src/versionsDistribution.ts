@@ -1,4 +1,4 @@
-export const DEPOT_DISTRIBUTION = 'SamChampagne/ClaudeTopia';
+export const DEPOT_DISTRIBUTION = 'SamChampagne/Agentopia';
 type Release = { tag_name: string; draft?: boolean; prerelease?: boolean; assets?: { name: string; browser_download_url: string }[] };
 function version(s: string) {
     const m = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(s);

@@ -22,7 +22,10 @@ function lancer(programme, args, options = {}) {
 }
 try {
     console.log('Installation du vrai Setup dans un dossier isolé…');
-    lancer(path.join(release, 'Agentopia-Setup.exe'), ['--destination', destination, '--sans-raccourci', '--sans-lancer']);
+    const journal = path.join(temporaire, 'installation.log');
+    lancer(path.join(release, 'Agentopia-Setup.exe'), ['--archive', path.join(release, 'Agentopia-Windows-x64.zip'), '--destination', destination, '--sans-raccourci', '--sans-lancer', '--silencieux', '--journal', journal]);
+    const etapes = fs.readFileSync(journal, 'utf8');
+    for (const titre of ['telechargement', 'verification', 'Installation des fichiers', 'Vérification du démarrage', 'termine']) assert.ok(etapes.includes(titre), `Progression absente : ${titre}`);
     const activation = () => JSON.parse(fs.readFileSync(path.join(destination, 'activation.json'), 'utf8'));
     const initiale = activation().active;
     const version = path.join(destination, 'versions', initiale);
@@ -81,7 +84,7 @@ try {
     const { bus } = await import('./dist/ui/bus.js');
     const fetchAvant = globalThis.fetch, rootAvant = process.env.AGENTOPIA_DISTRIBUTION_ROOT;
     const repondre = (d) => { if (d?.type === 'choix') d.resoudre(true); };
-    const tag = `agentopia-${nouvelleVersion}`, base = `https://github.com/SamChampagne/ClaudeTopia/releases/download/${tag}/`;
+    const tag = `agentopia-${nouvelleVersion}`, base = `https://github.com/SamChampagne/Agentopia/releases/download/${tag}/`;
     const publication = { tag_name: tag, prerelease: false, assets: ['agentopia-release.json', 'Agentopia-Windows-x64.zip'].map((name) => ({ name, browser_download_url: base + name })) };
     globalThis.fetch = async (url) => url.includes('/releases?') ? Response.json([publication])
         : url.endsWith('agentopia-release.json') ? Response.json({ format: 'agentopia-release-v1', plateforme: 'win32-x64', id: nouveauId, version: nouvelleVersion, asset: 'Agentopia-Windows-x64.zip', sha256: sha256(zipMaj) })

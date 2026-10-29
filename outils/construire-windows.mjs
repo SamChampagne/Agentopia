@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { sha256 } from './installation-windows.mjs';
+import { construireInstallateur } from './construire-installateur.mjs';
 
 const racine = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ps = (s) => `'${s.replaceAll("'", "''")}'`;
@@ -79,20 +80,8 @@ const zip = path.join(sortie, 'Agentopia-Windows-x64.zip');
 const script = `Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::CreateFromDirectory(${ps(paquet)}, ${ps(zip)}, [IO.Compression.CompressionLevel]::Optimal, $false)`;
 executer('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')]);
 const hash = sha256(zip);
-const entree = path.join(sortie, 'installer.ts');
-fs.writeFileSync(entree, `import payload from './Agentopia-Windows-x64.zip' with { type: 'file' };
-import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import { spawn } from 'node:child_process';
-import { installerArchive } from ${JSON.stringify(path.join(racine, 'outils', 'installation-windows.mjs'))};
-const args=process.argv.slice(2); const cible=args.indexOf('--destination');
-const temporaire=fs.mkdtempSync(path.join(os.tmpdir(),'agentopia-install-')); const archive=path.join(temporaire,'agentopia.zip');
-try {
- await Bun.write(archive,Bun.file(payload));
- const r=await installerArchive(archive,${JSON.stringify(hash)},{destination:cible>=0?args[cible+1]:undefined,raccourci:!args.includes('--sans-raccourci')});
- if(!args.includes('--sans-lancer')) spawn(process.env.ComSpec||'cmd.exe',['/d','/s','/c','""'+path.join(r.destination,'Agentopia.cmd')+'""'],{stdio:'inherit',windowsVerbatimArguments:true,env:{...process.env,CLAUDETOPIA_SCAN:'1'}});
-} catch(e) { console.error('Installation interrompue :',e.message); process.exitCode=1; }
-finally { const rel=path.relative(os.tmpdir(),temporaire); if(rel && !rel.startsWith('..') && !path.isAbsolute(rel) && path.basename(temporaire).startsWith('agentopia-install-')) fs.rmSync(temporaire,{recursive:true,force:true}); }
-`);
-executer(bun, ['build', '--compile', entree, '--outfile', path.join(sortie, 'Agentopia-Setup.exe')]);
+construireInstallateur(sortie, { version, id, sha256: hash, taille: fs.statSync(zip).size,
+    url: `https://github.com/SamChampagne/Agentopia/releases/download/agentopia-${version}/Agentopia-Windows-x64.zip` });
 fs.writeFileSync(path.join(sortie, 'agentopia-release.json'), JSON.stringify({ format: 'agentopia-release-v1', id, version, plateforme: 'win32-x64', asset: 'Agentopia-Windows-x64.zip', sha256: hash }, null, 2));
 fs.writeFileSync(path.join(sortie, 'SHA256SUMS.txt'), `${hash}  Agentopia-Windows-x64.zip\n${sha256(path.join(sortie, 'Agentopia-Setup.exe'))}  Agentopia-Setup.exe\n`);
 console.log(`Paquets prêts : ${sortie}`);
