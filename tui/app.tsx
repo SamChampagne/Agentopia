@@ -695,7 +695,17 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     // Début de la zone principale (pour le clic dans le cockpit) : après la colonne si elle est à gauche
     const debutZone = disp.laterale === 'gauche' ? lateral : 0;
     const nbSugg = Math.min(8, suggestions.length);
-    const corps = height - haut - 4 - nbSugg - (quelleTouche !== undefined ? 2 + Math.ceil(Object.keys(noeudA(quelleTouche).enfants).length / 3) : 0);
+    const barreDansChat = !!session && !demande && !detail && !modeMaitre;
+    const hauteurRaccourcis = quelleTouche !== undefined ? 2 + Math.ceil(Object.keys(noeudA(quelleTouche).enfants).length / 3) : 0;
+    const corps = height - haut - hauteurRaccourcis - (barreDansChat ? 0 : 4 + nbSugg);
+    // Une seule saisie montée : mêmes brouillons, commandes et recherche dans les deux emplacements.
+    const saisie = <>
+        <Barre key={destination} valeur={valeur} cle={cle} setValeur={surSaisie} soumettre={soumettre} suggestions={recherche ? [] : suggestions} indexSugg={sugg}
+            choisirSugg={(i) => (suggestions[i]?.executer ? (remplacer(''), void lancer(suggestions[i].texte)) : remplacer(suggestions[i].texte))}
+            indication={indication()} actif={!demande && quelleTouche === undefined && (!session?.terminalExterne || recherche || modeMaitre)}
+            raisonPause={!demande && session?.terminalExterne && !recherche && !modeMaitre ? 'Lecture seule : cette conversation est ouverte dans le terminal Codex.' : undefined}
+            placeholder={barreDansChat ? `Écrire à ${session.fournisseur ?? 'Claude'} · Entrée pour envoyer` : undefined} maitre={modeMaitre} />
+    </>;
 
     let zone;
     if (demande?.type === 'choix') zone = <Choix d={demande} hauteur={corps} />;
@@ -711,7 +721,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         zone = (
             <box flexGrow={1} onMouseDown={(e: any) => droit(e) && ouvrirMenu(menuSession(session, () => undefined))}>
                 <Conversation s={session} largeur={principal} cout={d.cout.parSession[session.sessionId]} agir={agir} position={disp.actions}
-                    recherche={recherche ? valeur.trim() : ''} occurrence={occurrence} surTrouvees={setTrouvees} diff={diffDirect} />
+                    recherche={recherche ? valeur.trim() : ''} occurrence={occurrence} surTrouvees={setTrouvees} diff={diffDirect} saisie={barreDansChat ? saisie : undefined} />
             </box>
         );
     } else if (vueZone === 'grille') zone = <Grille d={d} largeur={principal} hauteur={corps} tic={tic} ouvrir={setSelection} />;
@@ -738,7 +748,8 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     // La clé de ce qui est affiché : quand elle change, la nouvelle vue arrive en transition
     let cleZone = demande?.type === 'vue' ? `vue:${vueActive}` : demande ? `${demande.type}:${demande.message ?? ''}`
         : detail ? `detail:${detail.type}:${detail.cle}` : session ? `session:${session.cle}` : vueZone ? `zone:${vueZone}` : journalOuvert ? 'journal' : 'cockpit';
-    if (fige && !demande && zoneAvant.current) {
+    // Une conversation contient maintenant un champ actif : ne jamais figer son ancien brouillon ni ses callbacks.
+    if (fige && !demande && zoneAvant.current && !barreDansChat && !cleAvant.current.startsWith('session:')) {
         zone = zoneAvant.current;
         cleZone = cleAvant.current;
     } else {
@@ -793,10 +804,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
                 {disp.laterale !== 'droite' && zone}
             </box>
             {quelleTouche !== undefined && <QuelleTouche chemin={quelleTouche} choisir={toucheQT} />}
-            <Barre key={destination} valeur={valeur} cle={cle} setValeur={surSaisie} soumettre={soumettre} suggestions={recherche ? [] : suggestions} indexSugg={sugg}
-                choisirSugg={(i) => (suggestions[i]?.executer ? (remplacer(''), void lancer(suggestions[i].texte)) : remplacer(suggestions[i].texte))}
-                indication={indication()} actif={!demande && quelleTouche === undefined && (!session?.terminalExterne || recherche || modeMaitre)}
-                raisonPause={!demande && session?.terminalExterne && !recherche && !modeMaitre ? 'Lecture seule : cette conversation est ouverte dans le terminal Codex.' : undefined} maitre={modeMaitre} />
+            {!barreDansChat && saisie}
         </box>
     );
 }

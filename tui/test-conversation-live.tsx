@@ -14,6 +14,8 @@ const { App } = await import('./app.tsx');
 const { Conversation } = await import('./conversation.tsx');
 const { lireDonnees } = await import('../dist/ui/donnees.js');
 const { bus } = await import('../dist/ui/bus.js');
+const { changerDisposition } = await import('../dist/ui/disposition.js');
+const { config, COMMANDES } = await import('../dist/commandes.js');
 const { creerIntegree, ajouterEvenement, ajouterMessage, dossierIntegre } = await import('../dist/sessionsIntegrees.js');
 const s = creerIntegree('codex', dossier, 'Conversation fixture');
 ajouterMessage(s.id, 'user', 'Vérifie le projet');
@@ -36,6 +38,7 @@ try {
     ajouterEvenement(s.id, 'tour', { id: 'cmd', role: 'outil', texte: 'Commande', commande: 'npm test', etat: 'termine', sortie: 'tests réussis', codeSortie: 0 });
     await new Promise((r) => setTimeout(r, 250)); await dessiner();
     assert.match(ui.captureCharFrame(), /tests réussis/); assert.doesNotMatch(ui.captureCharFrame(), /en cours/);
+    ajouterMessage(s.id, 'assistant', Array.from({ length: 70 }, (_, i) => `Longue conversation · ligne ${i + 1}`).join('\n'));
     root.render(<App quitter={() => {}} />); await dessiner();
     bus.emit('selectionner', s.id); await dessiner(); await dessiner();
     await ui.mockInput.typeText('brouillon conservé'); await dessiner();
@@ -46,5 +49,33 @@ try {
     await ui.mockInput.typeText('NE PAS INSERER'); ui.mockInput.pressEnter(); await dessiner();
     session.terminalExterne = undefined; session.statut = 'attend'; bus.emit('notice', 'Terminal fermé'); await dessiner();
     assert.match(ui.captureCharFrame(), /brouillon conservé/); assert.doesNotMatch(ui.captureCharFrame(), /NE PAS INSERER/);
-    process.stdout.write('✓ TUI : séparateur, commandes en direct, Alt+L, terminal exclusif et brouillon restauré\n');
+    // La saisie reste dans les limites du chat, même si les deux colonnes changent de côté.
+    for (const largeur of [100, 130, 192]) {
+        ui.resize(largeur, 34); await dessiner();
+        for (const [laterale, actions] of [['gauche', 'gauche'], ['droite', 'gauche'], ['gauche', 'droite'], ['cachee', 'haut'], ['cachee', 'cachees']] as const) {
+            changerDisposition({ laterale, actions }, config); await dessiner(); await dessiner();
+            const lignes = ui.captureCharFrame().split('\n');
+            const cadres = lignes.filter((l) => l.includes('╭'));
+            assert.equal(cadres.length, 1, 'une seule barre de saisie');
+            const lateral = Math.max(32, Math.min(56, Math.floor(largeur / 3)));
+            const gauche = (laterale === 'gauche' ? lateral : 0) + (actions === 'gauche' ? 24 : 0) + 1;
+            const droite = largeur - (laterale === 'droite' ? lateral : 0) - (actions === 'droite' ? 24 : 0) - 2;
+            assert.equal(cadres[0].indexOf('╭'), gauche, `${largeur}/${laterale}/${actions} : bord gauche du chat`);
+            assert.equal(cadres[0].indexOf('╮'), droite, `${largeur}/${laterale}/${actions} : bord droit du chat`);
+            assert.match(lignes[33], /╰.*╯/, 'champ fixé au bas du chat malgré un long historique');
+            assert.match(lignes[32], /brouillon conservé/);
+        }
+    }
+    changerDisposition({ laterale: 'gauche', actions: 'gauche' }, config); await dessiner();
+    const commande = COMMANDES.find((c: any) => c.nom === 'envoyer')!;
+    const avant = commande.executer; const envois: string[][] = [];
+    try {
+        commande.executer = async (ctx: any) => { envois.push(ctx.args); };
+        ui.mockInput.pressEnter(); await dessiner(); await dessiner();
+        assert.equal(envois.length, 1); assert.equal(envois[0][0], s.id);
+        assert.match(envois[0].slice(1).join(' '), /brouillon conservé/);
+    } finally { commande.executer = avant; }
+    ui.mockInput.pressEscape(); await dessiner(); await dessiner();
+    assert.equal(ui.captureCharFrame().split('\n')[31].indexOf('╭'), 0, 'saisie générale retrouvée au cockpit');
+    process.stdout.write('✓ TUI : suivi Codex, terminal exclusif, saisie dans le chat (100/130/192 colonnes), brouillon et envoi unique\n');
 } finally { await ui.dispose(); fs.rmSync(dossier, { recursive: true, force: true }); }
