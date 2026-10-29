@@ -15,6 +15,7 @@ fs.writeFileSync(path.join(racine, 'claudetopia.json'), JSON.stringify({ racines
 const moteur = await import('./dist/moteurClient.js');
 const equipes = await import('./dist/equipe.js');
 const sessions = await import('./dist/sessionsIntegrees.js');
+const { processusVivant } = await import('./dist/verrou.js');
 const { CHEMINS } = await import('./dist/chemins.js');
 const enfants = [];
 const detaches = [];
@@ -26,7 +27,12 @@ async function ouvrir(mode) {
     enfants.push(p); let erreurs = ''; p.stderr.on('data', (d) => erreurs += d); p.stdout.resume();
     p.erreurs = () => erreurs; await once(p, 'spawn'); return p;
 }
-async function tuer(p) { if (p.exitCode === null && p.signalCode === null) { const fin = once(p, 'close'); p.kill('SIGKILL'); await fin; } }
+async function tuer(p) {
+    if (p.exitCode === null && p.signalCode === null) { const fin = once(p, 'close'); p.kill('SIGKILL'); await fin; }
+    // Sous Windows, la fermeture des flux peut précéder la disparition du PID.
+    // La reprise doit être testée après la mort confirmée, pas pendant sa terminaison.
+    if (p.pid) await attendre(() => !processusVivant(p.pid));
+}
 after(async () => {
     for (const p of enfants) await tuer(p);
     for (const pid of detaches) { try { process.kill(pid, 'SIGKILL'); } catch {} }
@@ -96,7 +102,13 @@ test('fichier abîmé : moteur disponible pour arrêter et récupérer, aucun re
     const abime = '{"interruption'; fs.writeFileSync(CHEMINS.equipes, abime);
     const p = await ouvrir();
     try {
-        await attendre(() => moteur.etatMoteur().pid === p.pid && moteur.etatMoteur().erreur);
+        await attendre(() => {
+            if (p.exitCode !== null) {
+                const verrou = path.join(moteur.DOSSIER_MOTEUR, 'instance', 'proprietaire.json');
+                assert.fail(`Moteur fermé avant récupération : ${p.erreurs()} · verrou : ${fs.existsSync(verrou) ? fs.readFileSync(verrou, 'utf8') : 'absent'}`);
+            }
+            return moteur.etatMoteur().pid === p.pid && moteur.etatMoteur().erreur;
+        });
         await assert.rejects(moteur.commanderMoteur('lancer', sauvegarde.equipes[0].id), /illisible ou invalide/);
         await moteur.pauseGlobale();
         const copie = await equipes.recupererEquipes(sauvegarde.empreinte);
