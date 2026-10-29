@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { surPath } from './chemins.js';
 import { disponibilite } from './providers/config.js';
 import { commencerUsage, sauverUsage } from './utilisation.js';
-import type { Fournisseur, SessionIntegree, ReponsePermission } from './providers/types.js';
+import type { Fournisseur, SessionIntegree, ReponsePermission, EvenementAgent } from './providers/types.js';
 import { prendreVerrou, sousVerrou, processusVivant, demarragePoste } from './verrou.js';
 import { ecrireAtomique } from './stockageAtomique.js';
 export { ecrireAtomique } from './stockageAtomique.js';
@@ -48,6 +48,7 @@ function recupererOrpheline(s: SessionIntegree): SessionIntegree {
     if (proprietaire.pid && processusVivant(proprietaire.pid, proprietaire.demarragePoste) && !active(s)) return s;
     if (active(s)) {
         s.etat = 'erreur'; s.issue = 'error'; s.erreur = 'Le processus a été interrompu. Tu peux reprendre la conversation.';
+        s.terminalExterne = undefined;
         s.permission = undefined; s.pid = undefined; s.demarragePoste = undefined; sauverIntegree(s);
         try { if (s.recuUsage) sauverUsage(s.recuUsage, s.utilisation ?? {}, 'error'); } catch { /* Reçu conservé pour diagnostic. */ }
     }
@@ -111,6 +112,16 @@ export function ajouterMessage(id: string, role: 'user' | 'assistant' | 'outil',
         : [{ type: 'text', text: texte }];
     fs.appendFileSync(path.join(dossierIntegre(id), 'conversation.jsonl'), JSON.stringify({
         type: role === 'user' ? 'user' : 'assistant', timestamp: new Date().toISOString(), message: { content },
+    }) + '\n', { mode: 0o600 });
+}
+export function ajouterEvenement(id: string, tour: string, evenement: EvenementAgent): void {
+    if (!evenement.id) return ajouterMessage(id, evenement.role, evenement.texte, evenement.fichier);
+    const e = { ...evenement, id: `${tour}/${evenement.id}` };
+    fs.appendFileSync(path.join(dossierIntegre(id), 'conversation.jsonl'), JSON.stringify({ type: 'assistant',
+        timestamp: new Date().toISOString(), agentopia: e,
+        message: { content: e.role === 'assistant' ? [{ type: 'text', text: e.texte }] : e.fichiers?.length
+            ? e.fichiers.map((f) => ({ type: 'tool_use', name: 'Edit', input: { file_path: f } }))
+            : [{ type: 'tool_use', name: e.texte, input: { command: e.commande, file_path: e.fichier } }] },
     }) + '\n', { mode: 0o600 });
 }
 export async function envoyerIntegree(id: string, prompt: string): Promise<void> {

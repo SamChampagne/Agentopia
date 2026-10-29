@@ -14,6 +14,8 @@ Après `npm run build`, relancer Agentopia (le lanceur habituel utilise les sour
 
 Les agents de code peuvent demander une autorisation ou une précision : cliquer **Répondre à l’agent**. Le détail de l’action est affiché avant le choix. **Interrompre** arrête le tour et conserve la conversation. **Passer à un agent** ouvre une conversation chez un autre fournisseur avec la réponse précédente, ses sources et la consigne choisie.
 
+Les conversations Codex proposent **Ouvrir Codex** et **Codex à côté** (Alt+J) dès que le tour en cours est terminé. Après un premier message dans Agentopia, ces actions reprennent **la même conversation** dans le CLI. Agentopia devient temporairement en lecture seule et conserve le brouillon. Quitter Codex rend la saisie à Agentopia ; les nouveaux messages sont relus depuis l’historique local. Un second terminal ou un envoi concurrent est refusé. Sans Windows Terminal, une fenêtre PowerShell séparée est utilisée. Une session importée doit d’abord recevoir un message ici pour créer sa copie indépendante.
+
 ## Agentopia et l’application Codex
 
 Une conversation Codex créée ici utilise un vrai thread persistant du CLI local. Agentopia conserve son identifiant et reprend ce thread aux messages suivants. Il hérite de `CODEX_HOME` (par défaut `~/.codex`) ; l’application Codex Windows utilise aussi ce dossier par défaut. Cela permet un stockage local commun, sans assurer à lui seul le même affichage dans les deux interfaces.
@@ -80,6 +82,10 @@ Archiver conserve les transcripts et les worktrees ; leur nettoyage automatique 
 ## Interface
 
 Les bordures et indicateurs lumineux du Live et des cartes latérales restent stables ; les données continuent à se mettre à jour. Dans Projets, les caractères filtrent la liste. La barre indique ce contexte, explique qu’elle est en pause et garde le brouillon. Échap efface le filtre, puis revient à la barre. Pendant un tour d’agent, on peut préparer le prochain message sans l’envoyer prématurément.
+
+La conversation sépare les actions du chat par une bordure. Les commandes ont un libellé lisible, un état, une durée lorsqu’elle est disponible et un aperçu de sortie. **Détails des outils** (Alt+L) affiche la commande exacte et la sortie conservée. Les tableaux Markdown s’adaptent à la largeur du terminal. Les mini-graphes des cartes et le soulignement des onglets latéraux ont été retirés.
+
+Dans une session Codex intégrée, les fragments de réponse et les sorties de commandes sont affichés dès leur réception, avec un rafraîchissement de l’interface toutes les 200 ms. Seuls les événements exposés par Codex sont visibles, pas son raisonnement privé. Les sorties très volumineuses conservent leurs 128 000 derniers caractères et signalent cette limite. Pendant une reprise dans le terminal externe, l’historique est relevé toutes les 1,5 s ; sa disponibilité dépend des écritures du CLI. Un échec de relecture est signalé sans supprimer la conversation native.
 
 Chaque conversation conserve son brouillon et ses pièces jointes, y compris après fermeture normale. La recherche Ctrl+F possède sa propre saisie ; Échap retrouve le message. Si un envoi échoue, son texte revient dans la conversation d’origine, même si une autre est ouverte. Les brouillons sont sauvegardés localement dans `~/.claudetopia-brouillons/` ; les recherches restent en mémoire. Les fichiers joints sont référencés par leur chemin, pas copiés.
 

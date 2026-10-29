@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useKeyboard } from '@opentui/react';
 import { Ansi } from './ansi.tsx';
 import { GRAS } from './style.ts';
 import { lireTranscript } from '../dist/agents.js';
@@ -26,11 +27,13 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
     useEffect(() => {
         const lire = () => setMessages(lireTranscript(s.fichier));
         lire();
-        const t = setInterval(lire, 1000);
+        const t = setInterval(lire, 200);
         return () => clearInterval(t);
     }, [s.fichier]);
     const enColonne = position === 'gauche' || position === 'droite';
-    const lignes = useMemo(() => lignesTranscript(messages, largeur - (enColonne ? COL : 0) - 3), [messages, largeur, enColonne]);
+    const [details, setDetails] = useState(false);
+    useKeyboard((k) => { if ((k.meta || k.option) && k.name === 'l') setDetails((v) => !v); });
+    const lignes = useMemo(() => lignesTranscript(messages, largeur - (enColonne ? COL : 0) - 4, details), [messages, largeur, enColonne, details]);
     const [survol, setSurvol] = useState<string>();
     const defilement = useRef<any>();
     const terme = recherche.length >= 2 ? recherche.toLowerCase() : '';
@@ -45,7 +48,9 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
     useEffect(() => {
         if (courante >= 0) defilement.current?.scrollChildIntoView?.(`ligne-${courante}`);
     }, [courante]);
-    const actions = actionsSession(s);
+    const actions = [...actionsSession(s)];
+    actions.splice(1, 0, { label: details ? '≡ Résumer les outils' : '≡ Détails des outils', action: 'details-outils', aide: 'Alt+L : commandes exactes et sortie conservée, ou retour au résumé.' });
+    const executerAction = (action: string) => action === 'details-outils' ? setDetails(!details) : agir(action);
     const aide = actions.find((a: any) => a.action === survol)?.aide;
     return (
         <box flexGrow={1} flexDirection="column">
@@ -59,16 +64,18 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
             </box>
             {s.permission && <box paddingLeft={1} onMouseDown={() => agir('autorisation')}><text fg="#fb923c" wrapMode="word">{`! ${presenterPermission(s.permission).titre} · ${s.permission.commande || s.permission.titre} · clique ici pour répondre`}</text></box>}
             {s.erreur && <text fg="#facc15" wrapMode="word">{s.erreur}</text>}
+            {s.integree && <text fg={fond.eteint} paddingLeft={1}>{s.terminalExterne ? 'Terminal Codex ouvert · lecture seule ici jusqu’à sa fermeture' : s.statut === 'travaille' ? '● En direct · messages et sorties des outils' : s.statut === 'bloquee' ? '● En attente de ta réponse' : 'Conversation à jour'}</text>}
             {s.integree && !messages.length && <text fg={fond.discret} paddingLeft={1}>Écris ton premier message dans la barre ci-dessous.</text>}
-            {position === 'haut' && <box paddingLeft={1}><Boutons boutons={actions} agir={agir} /></box>}
+            {position === 'haut' && <box paddingLeft={1} border={['bottom']} borderColor={fond.bordure}><Boutons boutons={actions} agir={executerAction} /></box>}
             <box flexGrow={1} flexDirection={position === 'droite' ? 'row-reverse' : 'row'}>
-                {enColonne && <box width={COL} flexShrink={0} flexDirection="column" paddingLeft={1} paddingRight={2} paddingTop={1}>
+                {enColonne && <box width={COL} flexShrink={0} flexDirection="column" paddingLeft={1} paddingRight={1} paddingTop={1}
+                    border={position === 'droite' ? ['left'] : ['right']} borderColor={fond.bordure}>
                     {actions.map((a: any) => {
                         const sur = survol === a.action;
                         const fg = a.action === 'fermer-session' ? '#f87171' : sur ? theme.accent : a.action === 'fermer' ? fond.eteint : fond.texte;
                         return (
                             <box key={a.action} height={1} backgroundColor={sur ? fond.selection : undefined}
-                                onMouseOver={() => setSurvol(a.action)} onMouseOut={() => setSurvol(undefined)} onMouseDown={() => agir(a.action)}>
+                                onMouseOver={() => setSurvol(a.action)} onMouseOut={() => setSurvol(undefined)} onMouseDown={() => executerAction(a.action)}>
                                 <text fg={fg} attributes={sur ? GRAS : 0} truncate>{` ${a.label}`}</text>
                             </box>
                         );
@@ -77,7 +84,7 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
                     {aide && <text fg={fond.discret} wrapMode="word">{aide}</text>}
                 </box>}
                 <box flexGrow={1} flexDirection="column">
-                    <scrollbox verticalScrollbarOptions={{ visible: false }} ref={defilement} flexGrow={1} scrollY stickyScroll stickyStart="bottom" paddingLeft={enColonne ? 0 : 1} paddingRight={1}>
+                    <scrollbox verticalScrollbarOptions={{ visible: false }} ref={defilement} flexGrow={1} scrollY stickyScroll stickyStart="bottom" paddingLeft={1} paddingRight={1}>
                         {lignes.map((l, i) => (
                             <box key={i} id={`ligne-${i}`} flexShrink={0}
                                 backgroundColor={i === courante ? fond.panneauActif : terme && trouvees.includes(i) ? fond.selection : undefined}>

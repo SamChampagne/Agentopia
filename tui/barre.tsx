@@ -3,10 +3,10 @@ import { theme, fond } from '../dist/theme.js';
 
 // Barre du bas : suggestions au-dessus (commandes, projets, @prompts), la ligne qui dit où part le texte, puis la saisie.
 
-export function Barre({ valeur, cle, setValeur, soumettre, suggestions, indexSugg, choisirSugg, indication, actif, maitre = false }: {
+export function Barre({ valeur, cle, setValeur, soumettre, suggestions, indexSugg, choisirSugg, indication, actif, raisonPause, maitre = false }: {
     valeur: string; cle: number; setValeur: (v: string) => void; soumettre: (v: string) => void;
     suggestions: any[]; indexSugg: number; choisirSugg: (i: number) => void;
-    indication: { texte: string; couleur: string }; actif: boolean; maitre?: boolean;
+    indication: { texte: string; couleur: string }; actif: boolean; raisonPause?: string; maitre?: boolean;
 }) {
     return (
         <box flexShrink={0} flexDirection="column">
@@ -23,7 +23,7 @@ export function Barre({ valeur, cle, setValeur, soumettre, suggestions, indexSug
                 {/* key : changer la valeur depuis le code (historique, suggestion) recrée le champ avec ce texte */}
                 {actif ? <input key={cle} flexGrow={1} focused value={valeur} onInput={setValeur} onSubmit={(v: unknown) => { if (typeof v === 'string') soumettre(v); }}
                     placeholder="Message à la session ouverte · /session pour en créer une · / pour les commandes" />
-                    : <text fg={fond.discret} flexGrow={1} truncate>{valeur ? `Brouillon conservé : ${valeur}` : 'Barre en pause : le clavier est utilisé dans la vue au-dessus.'}</text>}
+                    : <text fg={fond.discret} flexGrow={1} truncate>{raisonPause || (valeur ? `Brouillon conservé : ${valeur}` : 'Barre en pause : le clavier est utilisé dans la vue au-dessus.')}</text>}
             </box>
         </box>
     );

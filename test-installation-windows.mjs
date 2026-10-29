@@ -23,7 +23,13 @@ function lancer(programme, args, options = {}) {
 try {
     console.log('Installation du vrai Setup dans un dossier isolé…');
     const journal = path.join(temporaire, 'installation.log');
-    lancer(path.join(release, 'Agentopia-Setup.exe'), ['--archive', path.join(release, 'Agentopia-Windows-x64.zip'), '--destination', destination, '--sans-raccourci', '--sans-lancer', '--silencieux', '--journal', journal]);
+    try {
+        lancer(path.join(release, 'Agentopia-Setup.exe'), ['--archive', path.join(release, 'Agentopia-Windows-x64.zip'), '--destination', destination, '--sans-raccourci', '--sans-lancer', '--silencieux', '--journal', journal]);
+    } catch (e) {
+        // Le bootstrap GUI n'écrit pas dans stderr : conserver son vrai diagnostic en CI.
+        if (fs.existsSync(journal)) console.error(fs.readFileSync(journal, 'utf8').split('\n').slice(-20).join('\n'));
+        throw e;
+    }
     const etapes = fs.readFileSync(journal, 'utf8');
     for (const titre of ['telechargement', 'verification', 'Installation des fichiers', 'Vérification du démarrage', 'termine']) assert.ok(etapes.includes(titre), `Progression absente : ${titre}`);
     const activation = () => JSON.parse(fs.readFileSync(path.join(destination, 'activation.json'), 'utf8'));

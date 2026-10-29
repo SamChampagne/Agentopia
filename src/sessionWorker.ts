@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { ajouterMessage, dossierIntegre, sauverIntegree, prendreExecution, terminerExecution } from './sessionsIntegrees.js';
+import { ajouterMessage, ajouterEvenement, dossierIntegre, sauverIntegree, prendreExecution, terminerExecution } from './sessionsIntegrees.js';
 import type { ContexteAgent, SessionIntegree } from './providers/types.js';
 import { executerClaude } from './providers/claude.js';
 import { executerCodex } from './providers/codex.js';
@@ -60,8 +60,8 @@ async function executerTour(s: SessionIntegree, executer?: (c: ContexteAgent) =>
         const contexte: ContexteAgent = { session: s, prompt: r.prompt, historique: historique.slice(-20), signal: controller.signal,
             evenement: (e) => {
                 if (termine) return;
-                ajouterMessage(id, e.role, e.texte, e.fichier);
-                if (e.commande) s.bilan!.commandes.push({ commande: e.commande.slice(0, 1000), codeSortie: e.codeSortie });
+                ajouterEvenement(id, tour, e);
+                if (e.commande && e.etat !== 'en_cours') s.bilan!.commandes.push({ commande: e.commande.slice(0, 1000), codeSortie: e.codeSortie });
                 if (s.bilan!.commandes.length > 50) s.bilan!.commandes.shift();
             }, permission: demander,
             utilisation: (usage) => { if (termine) return; s.utilisation = normaliserUsage(usage); if (s.recuUsage) sauverUsage(s.recuUsage, s.utilisation); },

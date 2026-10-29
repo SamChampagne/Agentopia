@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createTestRenderer } from '@opentui/core/testing';
+import { createRoot } from '@opentui/react';
+
+const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'agentopia-live-tui-'));
+process.env.CLAUDETOPIA_DATA_DIR = dossier;
+process.env.CLAUDETOPIA_SANS_REPRISE = '1';
+process.env.CLAUDETOPIA_TEST_UI = '1';
+fs.writeFileSync(path.join(dossier, 'claudetopia.json'), JSON.stringify({ racines: [], extras: [], notifications: false, fetchAuto: false, maitre: { actif: false } }));
+const { App } = await import('./app.tsx');
+const { Conversation } = await import('./conversation.tsx');
+const { lireDonnees } = await import('../dist/ui/donnees.js');
+const { bus } = await import('../dist/ui/bus.js');
+const { creerIntegree, ajouterEvenement, ajouterMessage, dossierIntegre } = await import('../dist/sessionsIntegrees.js');
+const s = creerIntegree('codex', dossier, 'Conversation fixture');
+ajouterMessage(s.id, 'user', 'Vérifie le projet');
+ajouterEvenement(s.id, 'tour', { id: 'cmd', role: 'outil', texte: 'Commande', commande: 'npm test', etat: 'en_cours', sortie: 'ligne cachée\n1\n2\n3' });
+const fichier = path.join(dossierIntegre(s.id), 'conversation.jsonl');
+const session: any = { cle: s.id, id: s.id, sessionId: s.id, integree: true, arrierePlan: true, fournisseur: 'codex', cwd: dossier,
+    nom: 'Projet fixture', titre: 'Session', debut: new Date(), statut: 'attend', fichier };
+const d = lireDonnees(); d.agents.push(session);
+const ui = await createTestRenderer({ width: 130, height: 34, autoFocus: false });
+const root = createRoot(ui.renderer);
+const dessiner = async () => { await new Promise((r) => setTimeout(r, 110)); await ui.flush(); await ui.renderOnce(); };
+try {
+    root.render(<box height={34}><Conversation s={session} largeur={130} agir={() => {}} diff={false} /></box>); await dessiner();
+    let frame = ui.captureCharFrame();
+    assert.match(frame, /Ouvrir Codex/); assert.match(frame, /Codex à côté/); assert.match(frame, /Détails des outils/);
+    assert.match(frame, /npm test/); assert.match(frame, /en cours/); assert.doesNotMatch(frame, /ligne cachée/);
+    assert.ok(frame.split('\n').filter((l) => l[23] === '│').length > 15, 'séparation verticale continue');
+    ui.mockInput.pressKey('l', { meta: true }); await dessiner();
+    assert.match(ui.captureCharFrame(), /ligne cachée/);
+    ajouterEvenement(s.id, 'tour', { id: 'cmd', role: 'outil', texte: 'Commande', commande: 'npm test', etat: 'termine', sortie: 'tests réussis', codeSortie: 0 });
+    await new Promise((r) => setTimeout(r, 250)); await dessiner();
+    assert.match(ui.captureCharFrame(), /tests réussis/); assert.doesNotMatch(ui.captureCharFrame(), /en cours/);
+    root.render(<App quitter={() => {}} />); await dessiner();
+    bus.emit('selectionner', s.id); await dessiner(); await dessiner();
+    await ui.mockInput.typeText('brouillon conservé'); await dessiner();
+    assert.match(ui.captureCharFrame(), /brouillon conservé/);
+    session.terminalExterne = true; session.statut = 'travaille'; bus.emit('notice', 'Terminal ouvert'); await dessiner();
+    frame = ui.captureCharFrame(); assert.match(frame, /Lecture seule : cette conversation/);
+    assert.doesNotMatch(frame, /[▁▂▃▄▅▆▇█]/);
+    await ui.mockInput.typeText('NE PAS INSERER'); ui.mockInput.pressEnter(); await dessiner();
+    session.terminalExterne = undefined; session.statut = 'attend'; bus.emit('notice', 'Terminal fermé'); await dessiner();
+    assert.match(ui.captureCharFrame(), /brouillon conservé/); assert.doesNotMatch(ui.captureCharFrame(), /NE PAS INSERER/);
+    process.stdout.write('✓ TUI : séparateur, commandes en direct, Alt+L, terminal exclusif et brouillon restauré\n');
+} finally { await ui.dispose(); fs.rmSync(dossier, { recursive: true, force: true }); }

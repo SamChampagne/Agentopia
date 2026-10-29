@@ -22,6 +22,7 @@ export interface SessionIntegree {
     permission?: PermissionAgent; archivee?: boolean;
     dernierPrompt?: string; recuUsage?: string; utilisation?: Utilisation;
     lectureSeule?: boolean;
+    terminalExterne?: boolean;
     compteursClaude?: Utilisation;
     compteursCodex?: Utilisation;
     bilan?: { commandes: { commande: string; codeSortie?: number }[]; fichiers?: string; resume?: string;
@@ -29,8 +30,10 @@ export interface SessionIntegree {
     origine?: { fournisseur: 'codex'; threadId: string; copieAuProchainMessage: boolean };
 }
 export interface EvenementAgent {
-    role: 'assistant' | 'outil'; texte: string; fichier?: string;
+    role: 'assistant' | 'outil'; texte: string; fichier?: string; fichiers?: string[];
     commande?: string; codeSortie?: number;
+    id?: string; etat?: 'en_cours' | 'termine' | 'erreur' | 'interrompu';
+    sortie?: string; sortieTronquee?: boolean; dureeMs?: number;
 }
 export interface ContexteAgent {
     session: SessionIntegree; prompt: string; historique: { role: 'user' | 'assistant'; content: string }[];

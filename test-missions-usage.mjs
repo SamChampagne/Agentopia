@@ -59,7 +59,7 @@ test('Codex : comptage cumulatif du tour, notification répétée sans double co
       if(m.method==='thread/resume') {send({method:'thread/tokenUsage/updated',params:{tokenUsage:{total:u(100,10),last:u(100,10)}}});send({id:m.id,result:{thread:{id:'ancien'}}});}
       if(m.method==='turn/start') {send({id:m.id,result:{turn:{id:'t'}}});
         for(const [i,o] of [[150,20],[230,35],[230,35]])send({method:'thread/tokenUsage/updated',params:{tokenUsage:{total:u(i,o),last:u(80,15)}}});
-        send({method:'item/completed',params:{item:{type:'commandExecution',command:'npm test',exitCode:1}}});
+        send({method:'item/completed',params:{item:{id:'cmd',type:'commandExecution',command:'npm test',exitCode:1}}});
         send({method:'turn/completed',params:{turn:{status:'completed'}}});}});`;
     const proc = spawn(process.execPath, ['-e', script], { stdio: 'pipe', windowsHide: true });
     const c = contexte({ threadId: 'ancien' }), valeurs = [], evenements = [];

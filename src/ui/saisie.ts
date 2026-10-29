@@ -15,6 +15,10 @@ import { correspond } from '../projets.js';
 export function actionsSession(s: SessionVue): ActionSession[] {
     if (s.integree) return [
         { label: '← Retour', action: 'fermer', aide: 'Revenir au cockpit. Le tour continue en arrière-plan.' },
+        ...(s.fournisseur === 'codex' && !s.terminalExterne && !['travaille', 'bloquee'].includes(s.statut) ? [
+            { label: '↗ Ouvrir Codex', action: 'rejoindre', aide: 'Reprendre cette conversation dans un terminal Codex. Agentopia reste en lecture seule jusqu’à sa fermeture.' },
+            { label: '⫿ Codex à côté', action: 'a-cote', aide: 'Reprendre la même conversation à côté dans Windows Terminal (Alt+J). Lecture seule ici tant que Codex est ouvert.' },
+        ] : []),
         ...(s.permission ? [{ label: '! Répondre à l’agent', action: 'autorisation', aide: presenterPermission(s.permission).titre }] : []),
         ...(['travaille', 'bloquee'].includes(s.statut) ? [{ label: '■ Interrompre', action: 'interrompre', aide: 'Arrêter le tour. La conversation et les fichiers sont conservés.' }] : []),
         ...(!['travaille', 'bloquee'].includes(s.statut) && ['error', 'cancelled'].includes(s.issue ?? '') ? [
@@ -26,6 +30,8 @@ export function actionsSession(s: SessionVue): ActionSession[] {
         { label: '⎘ Copier la réponse', action: 'copier-reponse', aide: 'Copier la dernière réponse.' },
         ...(s.fournisseur !== 'perplexity' ? [{ label: '± Changements', action: 'changements', aide: 'Voir les fichiers modifiés dans cette session.' }] : []),
         { label: '◧ VS Code', action: 'code', aide: 'Ouvrir ce dossier dans VS Code.' },
+        { label: '▤ Dossier', action: 'dossier', aide: 'Ouvrir le dossier de cette session.' },
+        { label: '❯ Terminal projet', action: 'terminal', aide: 'Ouvrir un terminal dans le dossier de cette session.' },
         { label: '✕ Archiver', action: 'fermer-session', aide: 'Interrompre et masquer la session. Son historique et ses fichiers restent sur disque.' },
     ];
     return [

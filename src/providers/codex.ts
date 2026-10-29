@@ -4,6 +4,7 @@ import { binaireCodex } from './config.js';
 import type { ContexteAgent } from './types.js';
 import { normaliserUsage } from '../utilisation.js';
 import { VERSION_AGENTOPIA } from '../version.js';
+import { creerFluxCodex } from './fluxCodex.js';
 
 // Une connexion app-server par tour. Le thread persistant de Codex porte l'historique.
 // Le transport injectable permet de vérifier le protocole sans appel à un modèle.
@@ -18,8 +19,7 @@ export async function executerCodex(c: ContexteAgent, transport?: ChildProcessWi
     const fin = new Promise<void>((ok, ko) => { finir = ok; echouer = ko; });
     // Une fermeture précoce peut précéder l'attente du résultat du tour.
     void fin.catch(() => {});
-    const textes = new Map<string, string>();
-    let resultat = '';
+    const flux = creerFluxCodex(c.evenement);
     let tourLance = false;
     let avant = c.session.threadId ? c.session.compteursCodex : { entree: 0, sortie: 0, cache: 0 };
     const envoyer = (objet: unknown) => { if (!proc.stdin.destroyed) proc.stdin.write(JSON.stringify(objet) + '\n'); };
@@ -65,7 +65,7 @@ export async function executerCodex(c: ContexteAgent, transport?: ChildProcessWi
             return;
         }
         const p = m.params || {};
-        if (m.method === 'item/agentMessage/delta') textes.set(p.itemId, (textes.get(p.itemId) || '') + p.delta);
+        if (tourLance) flux.recevoir(m.method, p);
         if (m.method === 'thread/tokenUsage/updated' && p.tokenUsage?.total) {
             const u = p.tokenUsage.total;
             const total = normaliserUsage({ entree: u.inputTokens, sortie: u.outputTokens, cache: u.cachedInputTokens });
@@ -78,16 +78,6 @@ export async function executerCodex(c: ContexteAgent, transport?: ChildProcessWi
                 c.utilisation?.(delta);
             }
             c.session.compteursCodex = total;
-        }
-        if (m.method === 'item/completed') {
-            const item = p.item || {};
-            if (item.type === 'agentMessage') {
-                const texte = item.text || textes.get(item.id) || '';
-                if (texte) { c.evenement({ role: 'assistant', texte }); resultat = texte; }
-                textes.delete(item.id);
-            }
-            if (item.type === 'commandExecution') c.evenement({ role: 'outil', texte: item.command || 'Commande Codex', commande: item.command, codeSortie: typeof item.exitCode === 'number' ? item.exitCode : undefined });
-            if (item.type === 'fileChange') for (const f of item.changes || []) c.evenement({ role: 'outil', texte: 'Edit', fichier: f.path });
         }
         if (m.method === 'turn/completed') {
             if (p.turn?.status === 'completed') { termine = true; finir(); }
@@ -113,8 +103,9 @@ export async function executerCodex(c: ContexteAgent, transport?: ChildProcessWi
         tourLance = true;
         await requete('turn/start', { threadId, input: [{ type: 'text', text: c.prompt }] });
         await fin;
-        return resultat;
+        return flux.resultat();
     } finally {
+        flux.fermer(termine);
         c.signal.removeEventListener('abort', arreter);
         for (const a of attentes.values()) clearTimeout(a.timer);
         attentes.clear(); lignes.close(); proc.stdin.end(); proc.kill();

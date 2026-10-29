@@ -27,6 +27,7 @@ export interface SessionVue {
     suggestion?: string;           // et la réponse qu'il propose
     fournisseur?: Fournisseur;
     integree?: boolean;
+    terminalExterne?: boolean;
     permission?: PermissionAgent;
     issue?: 'success' | 'error' | 'cancelled';
     erreur?: string;
@@ -119,7 +120,7 @@ export async function listerAgents(): Promise<SessionVue[]> {
         cle: s.id, id: s.id, sessionId: s.id, arrierePlan: true, cwd: s.cwd, nom: path.basename(s.cwd),
         titre: s.titre, statut: s.etat === 'erreur' || s.etat === 'arretee' ? 'attend' : s.etat,
         debut: new Date(s.creee), fichier: path.join(dossierIntegre(s.id), 'conversation.jsonl'),
-        fournisseur: s.fournisseur, integree: true, permission: s.permission, question: s.permission?.titre,
+        fournisseur: s.fournisseur, integree: true, terminalExterne: s.terminalExterne, permission: s.permission, question: s.permission?.titre,
         issue: s.issue, erreur: s.erreur, resultat: s.resultat,
     }));
     try {
@@ -172,6 +173,18 @@ export interface Message {
     role: 'user' | 'assistant' | 'outil' | 'resultat';
     texte: string;
     date?: Date;
+    id?: string; etat?: 'en_cours' | 'termine' | 'erreur' | 'interrompu';
+    commande?: string; fichier?: string; sortie?: string; sortieTronquee?: boolean; dureeMs?: number; codeSortie?: number;
+}
+function fusionnerMessages(anciens: Message[], ajouts: Message[]): Message[] {
+    const resultat = [...anciens];
+    const index = new Map(resultat.flatMap((m, i) => m.id ? [[m.id, i] as const] : []));
+    for (const m of ajouts) {
+        const i = m.id ? index.get(m.id) : undefined;
+        if (i !== undefined) resultat[i] = m;
+        else { if (m.id) index.set(m.id, resultat.length); resultat.push(m); }
+    }
+    return resultat.slice(-MESSAGES_MAX);
 }
 
 // Résumé d'un appel d'outil : "Bash  npm test", "Edit  App.tsx"…
@@ -208,7 +221,7 @@ export function lireTranscript(fichier: string, octets = 2_000_000): Message[] {
         if (connu && taille >= connu.jusqua) {
             if (taille === connu.jusqua) return connu.messages;
             const { texte, jusqua } = lireLignes(fichier, connu.jusqua, taille);
-            if (texte) connu.messages = [...connu.messages, ...decoderTranscript(texte)].slice(-MESSAGES_MAX);
+            if (texte) connu.messages = fusionnerMessages(connu.messages, decoderTranscript(texte));
             connu.jusqua = jusqua;
             return connu.messages;
         }
@@ -217,7 +230,7 @@ export function lireTranscript(fichier: string, octets = 2_000_000): Message[] {
         let { texte, jusqua } = lireLignes(fichier, debut, taille);
         if (debut > 0) texte = texte.slice(texte.indexOf('\n') + 1);
         if (transcripts.size > 60) transcripts.clear();
-        const messages = decoderTranscript(texte);
+        const messages = fusionnerMessages([], decoderTranscript(texte));
         transcripts.set(cle, { jusqua, messages });
         return messages;
     } catch {
@@ -237,6 +250,9 @@ function decoderTranscript(texte: string): Message[] {
         }
         if (o.isMeta || o.isSidechain) continue;
         const date = o.timestamp ? new Date(o.timestamp) : undefined;
+        if (o.agentopia?.id && typeof o.agentopia.texte === 'string') {
+            messages.push({ ...o.agentopia, date }); continue;
+        }
         const contenu = o.message?.content;
         if (o.type === 'user') {
             if (typeof contenu === 'string') {
@@ -255,7 +271,8 @@ function decoderTranscript(texte: string): Message[] {
         } else {
             for (const bloc of contenu ?? []) {
                 if (bloc.type === 'text' && bloc.text.trim()) messages.push({ role: 'assistant', texte: bloc.text.trim(), date });
-                if (bloc.type === 'tool_use') messages.push({ role: 'outil', texte: resumerOutil(bloc.name, bloc.input), date });
+                if (bloc.type === 'tool_use') messages.push({ role: 'outil', texte: resumerOutil(bloc.name, bloc.input),
+                    commande: bloc.input?.command || (/^(?:"[^"\n]*(?:powershell|pwsh)\.exe"|(?:powershell|pwsh)(?:\.exe)?)\s/i.test(bloc.name) ? bloc.name : undefined), date });
             }
         }
     }

@@ -304,6 +304,10 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
 
     function soumettre(v: string) {
         if (recherche) return setOccurrence((o) => o + 1);
+        if (session?.terminalExterne && !modeMaitre) {
+            bus.emit('notice', 'Écris dans le terminal Codex. Ferme Codex pour reprendre ici · brouillon conservé.');
+            return;
+        }
         if (session?.fournisseur === 'perplexity' && images.length && !/^[/!]/.test(v.trim())) {
             bus.emit('notice', 'Perplexity reçoit du texte et des liens web. Retire les pièces jointes locales avant l’envoi.');
             return;
@@ -666,6 +670,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         if (t.startsWith('!')) return { texte: `commande PowerShell dans ${path.basename(process.cwd())}`, couleur: theme.accent };
         if (session) {
             if (session.integree) {
+                if (session.terminalExterne) return { texte: 'Même conversation contrôlée dans le terminal Codex · ferme Codex pour reprendre ici · brouillon conservé', couleur: theme.secondaire };
                 if (session.permission) return { texte: `${session.fournisseur} attend ta décision · Entrée vide ou « Répondre à l’agent » · brouillon conservé`, couleur: '#fb923c' };
                 if (session.statut === 'travaille') return { texte: `${session.fournisseur} travaille · prépare ton prochain message, il restera en brouillon · Interrompre pour arrêter`, couleur: theme.secondaire };
                 return { texte: `↳ ${session.fournisseur} · ${session.nom} · ${session.titre || session.id} · Entrée pour envoyer${session.erreur ? ' · dernier tour interrompu ou en erreur' : ''}`, couleur: couleurProjet(session.nom) };
@@ -790,7 +795,8 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             {quelleTouche !== undefined && <QuelleTouche chemin={quelleTouche} choisir={toucheQT} />}
             <Barre key={destination} valeur={valeur} cle={cle} setValeur={surSaisie} soumettre={soumettre} suggestions={recherche ? [] : suggestions} indexSugg={sugg}
                 choisirSugg={(i) => (suggestions[i]?.executer ? (remplacer(''), void lancer(suggestions[i].texte)) : remplacer(suggestions[i].texte))}
-                indication={indication()} actif={!demande && quelleTouche === undefined} maitre={modeMaitre} />
+                indication={indication()} actif={!demande && quelleTouche === undefined && (!session?.terminalExterne || recherche || modeMaitre)}
+                raisonPause={!demande && session?.terminalExterne && !recherche && !modeMaitre ? 'Lecture seule : cette conversation est ouverte dans le terminal Codex.' : undefined} maitre={modeMaitre} />
         </box>
     );
 }

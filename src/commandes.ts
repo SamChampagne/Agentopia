@@ -3,6 +3,7 @@ import { commandesSessions } from './sessionsCommandes.js';
 import { commandesMissions } from './missions.js';
 import { commandesEquipes } from './equipeCommandes.js';
 import { estIntegree } from './sessionsIntegrees.js';
+import { ouvrirCodexTerminal } from './terminalCodex.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -48,7 +49,11 @@ import { CLAUDE } from './claude.js';
 
 // Ouvre "claude attach" dans une fenêtre à part (ou à côté, dans la même fenêtre) : l'interface reste affichée ici
 export async function rejoindre(id: string, aCote = false): Promise<void> {
-    if (estIntegree(id)) { bus.emit('selectionner', id); return; }
+    if (estIntegree(id)) {
+        const s = lireDonnees().agents.find((x) => x.id === id);
+        if (s?.fournisseur === 'codex') return ouvrirCodexTerminal(id, aCote);
+        bus.emit('selectionner', id); return;
+    }
     const s = lireDonnees().agents.find((x) => x.id === id);
     const dossier = s?.cwd ?? process.cwd();
     const titre = `🤖 ${s?.nom ?? path.basename(dossier)}`;
@@ -257,6 +262,7 @@ function afficherAide(): void {
         [c.accent('Alt+H'), 'fichiers chauds : ce que tes sessions modifient, et les conflits'],
         [c.accent('Alt+D'), 'cacher / montrer le diff en direct sous la conversation'],
         [c.accent('Alt+O'), 'globe 3D des serveurs SSH (glisser pour le tourner)'],
+        [c.accent('Alt+L'), 'afficher ou résumer les détails des outils dans la conversation'],
         [c.accent('Alt+V'), 'joindre l\'image du presse-papiers'],
         [c.accent('Alt+↑ / Alt+↓'), 'session précédente / suivante · Alt+1…9 : carte n°'],
         [c.accent('Échap'), 'vider la saisie · retirer les images · fermer la conversation'],

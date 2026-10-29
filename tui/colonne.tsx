@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Ansi } from './ansi.tsx';
-import { GRAS, SOULIGNE, ANIM, une, couper } from './style.ts';
+import { GRAS, ANIM, une, couper } from './style.ts';
 import { lignesEspace } from '../dist/ui/espaces.js';
 import { lignesDocker, cartesLaterales, enPause, etatEquipe } from '../dist/ui/Laterale.js';
 import { avancement } from '../dist/equipe.js';
-import { rythme, limiteContexte } from '../dist/agents.js';
+import { limiteContexte } from '../dist/agents.js';
 import { ilYa } from '../dist/ui/Panneau.js';
 import { theme, fond, couleurProjet } from '../dist/theme.js';
 import { menuSession, menuServeur, menuDocker } from './menus.ts';
@@ -18,12 +18,6 @@ const droit = (e: any) => e?.button === 2;
 const COULEURS: Record<string, string> = { travaille: '#4ade80', attend: '#facc15', bloquee: '#fb923c', terminee: '#94a3b8' };
 const LIBELLES: Record<string, string> = { travaille: 'travaille', attend: 't’attend', bloquee: 'bloquée', terminee: 'terminée' };
 
-const BLOCS = ' ▁▂▃▄▅▆▇█';
-// Rythme des 10 dernières minutes, une colonne par minute
-const etincelle = (valeurs: number[]) => {
-    const max = Math.max(1, ...valeurs);
-    return valeurs.map((v) => BLOCS[v ? Math.max(1, Math.round((v / max) * 8)) : 0]).join('');
-};
 // Jauge du contexte : verte, jaune passé la moitié, rouge passé 80 %
 function jaugeContexte(jetons: number, largeur: number) {
     const part = Math.min(1, jetons / limiteContexte(jetons));
@@ -58,9 +52,10 @@ function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu, l
     // En pause : plus de 12 h sans activité (grisée, rangée en bas de la liste)
     const pause = enPause(s, a);
     const couleur = pause ? fond.discret : COULEURS[s.statut] ?? fond.discret;
-    const icone = pause ? '◌' : s.statut === 'travaille' ? ANIM[tic % ANIM.length] : s.statut === 'bloquee' ? '!' : s.statut === 'terminee' ? '✓' : '○';
-    const etat = pause ? `en pause · ${ilYa(a?.date ?? s.debut)}` : LIBELLES[s.statut] ?? s.statut;
-    const action = s.question ? `? ${une(s.question)}` : a?.outil ? `▸ ${une(a.outil)}` : a?.dernierTexte ? une(a.dernierTexte) : s.titre || 'pas encore d’activité';
+    const icone = s.terminalExterne ? '↗' : pause ? '◌' : s.statut === 'travaille' ? ANIM[tic % ANIM.length] : s.statut === 'bloquee' ? '!' : s.statut === 'terminee' ? '✓' : '○';
+    const etat = s.terminalExterne ? 'terminal ouvert' : pause ? `en pause · ${ilYa(a?.date ?? s.debut)}` : LIBELLES[s.statut] ?? s.statut;
+    const apercu = (t: string) => une(t).replace(/\*\*|__|`/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+    const action = s.question ? `? ${une(s.question)}` : a?.outil ? `▸ ${une(a.outil)}` : a?.dernierTexte ? apercu(a.dernierTexte) : s.titre || 'pas encore d’activité';
     // 3e ligne : ta dernière demande à cette session, sinon depuis quand elle est là
     const demande = a?.dernierUser ? `❯ ${une(a.dernierUser)}` : `depuis ${ilYa(a?.date ?? s.debut)}${s.arrierePlan ? ' · arrière-plan' : ' · onglet'}`;
     const bg = active ? fond.panneauActif : survole ? fond.selection : fond.panneau;
@@ -93,7 +88,7 @@ function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu, l
                         }}>↻ Continuer (avec son historique)</text>
                     ) : (
                         <>
-                            <text fg={couleurProjet(s.nom)} flexGrow={1}>{etincelle(rythme(a?.horaires))}</text>
+                            <text flexGrow={1}>{s.terminalExterne ? 'Lecture seule ici' : s.statut === 'travaille' ? 'En cours' : ''}</text>
                             {ctx && <text><span fg={fond.discret}>ctx </span><span fg={ctx.couleur}>{ctx.plein}</span><span fg={fond.discret}>{ctx.vide}</span><span fg="gray">{` ${ctx.texte} `}</span></text>}
                         </>
                     )}
@@ -182,7 +177,7 @@ export function Colonne({ d, largeur, selection, choisir, tic, espace, setEspace
                 {['sessions', 'projets'].map((e) => (
                     <text key={e} onMouseDown={() => setEspace(e)} {...survoler(`onglet:${e}`)}
                         fg={espace === e ? theme.accent : survol === `onglet:${e}` ? fond.texte : fond.eteint}
-                        attributes={espace === e ? GRAS | SOULIGNE : 0}>{e === 'sessions' ? 'Sessions' : 'Projets'}  </text>
+                        attributes={espace === e ? GRAS : 0}>{e === 'sessions' ? 'Sessions' : 'Projets'}  </text>
                 ))}
                 <box flexGrow={1} />
                 {/* ⊞ : la grille de conversations (Alt+G) ; le libellé apparaît au survol */}
