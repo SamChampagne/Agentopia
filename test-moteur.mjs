@@ -48,7 +48,12 @@ test('moteur indépendant : propriétaire unique, reprise après crash, dépenda
     const premier = await ouvrir(); await attendre(() => moteur.etatMoteur().pid === premier.pid && moteur.etatMoteur().actif);
     const concurrent = await ouvrir(); await attendre(() => concurrent.exitCode !== null);
     assert.equal(concurrent.exitCode, 0, concurrent.erreurs()); assert.equal(moteur.etatMoteur().pid, premier.pid);
+    const modification = { attendu: equipes.empreintePlan(equipe), objectif: 'Plan ajusté avant lancement', taches: equipe.taches };
+    assert.equal(await equipes.modifierPlan(equipe.id, modification), undefined);
+    assert.equal(liste().find((e) => e.id === equipe.id).objectif, modification.objectif);
+    assert.match(await equipes.modifierPlan(equipe.id, modification), /autre fenêtre/);
     assert.equal(await moteur.commanderMoteur('lancer', equipe.id), undefined);
+    assert.match(await equipes.modifierPlan(equipe.id, modification), /premier lancement/);
     await attendre(() => lancements().length === 1);
     const idPremier = lancements()[0].id; await attendre(() => sessions.lireIntegree(idPremier).pid);
     await tuer(premier);

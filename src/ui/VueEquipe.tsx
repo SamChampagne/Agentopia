@@ -101,7 +101,13 @@ function boutonsEquipeBase(e: Equipe, t?: Tache) {
 }
 
 export function boutonsEquipe(e: Equipe, t?: Tache) {
-    const boutons = boutonsEquipeBase(e, t);
+    let boutons = boutonsEquipeBase(e, t);
+    if (e.mixte && e.etat === 'prete' && e.integrateur?.agentId && ['erreur', 'arretee'].includes(e.integrateur.etat)) {
+        boutons = boutons.map((b) => b.action === 'integrer' ? { label: '↻ Reprendre l’intégration (a)', action: 'actions-equipe' } : b);
+    }
+    if (e.mixte && e.etat === 'prete' && !e.integrateur && !e.taches.some((t) => t.branche && !t.ecartee)) {
+        boutons = boutons.filter((b) => b.action !== 'integrer');
+    }
     if (e.mixte && ['plan', 'erreur'].includes(e.etat) && e.taches.some((t) => ['erreur', 'arretee'].includes(t.etat))) {
         const i = boutons.findIndex((b) => b.action === 'lancer');
         if (i >= 0) boutons[i] = { label: '↻ Débloquer (a)', action: 'actions-equipe' };
@@ -180,7 +186,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
             fermer();
             return void bus.emit('lancer', `/onglet ${e.projet}`);
         }
-        if (action === 'retirer' && courante) return retirerTache(e.id, courante.id);
+        if (action === 'retirer' && courante) return setMessage(await retirerTache(e.id, courante.id) ?? 'Tâche retirée');
         if (action === 'arreter') {
             setMessage('Arrêt des agents…');
             await arreterEquipe(e.id);

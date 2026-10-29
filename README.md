@@ -4,7 +4,9 @@ Poste de pilotage pour travailler avec Claude, Codex, Perplexity et des **équip
 
 **Sessions intégrées Claude, Codex et Perplexity** : `+ Session` ou `/session`, configuration via `/fournisseurs`, collaboration via **Équipes → Nouvelle équipe**. [Connexion, utilisation et limites](docs/sessions-multi-agents.md).
 
-**Version 1.2** : les nouvelles équipes proposent un parcours guidé (développement + revue, correction + vérification, recherche + code + revue), les agents disponibles et un aperçu avant lancement. **Actions (a)** permet d’enregistrer un modèle réutilisable, de consulter le bilan commun et de reprendre une tâche interrompue dans sa conversation et sa branche existantes. Les écrans existants sont conservés.
+**Version 1.3** : **Actions (a) → Modifier le plan** permet d’ajuster objectif, consignes, agents et dépendances avant le premier lancement. Une intégration interrompue peut reprendre dans sa conversation et sa branche, en conservant les fichiers et conflits en cours. Le moteur empêche deux équipes d’intégrer simultanément dans le même dossier. Les menus gèrent les frappes rapides et chaque dialogue retrouve ses propres valeurs. Les écrans existants sont conservés.
+
+Les nouvelles équipes proposent un parcours guidé (développement + revue, correction + vérification, recherche + code + revue), les agents disponibles et un aperçu avant lancement. **Actions (a)** permet aussi d’enregistrer un modèle réutilisable, de consulter le bilan commun et de reprendre une tâche interrompue dans sa conversation et sa branche existantes.
 
 Dans un projet, **Mission** guide aussi le travail avec un seul agent. Les équipes lancées et les tâches planifiées sont pilotées par un moteur indépendant de la fenêtre. **Config → Moteur des équipes** permet la pause globale ; **Utilisation des agents** et **Limites des agents** affichent les données disponibles et les limites réglables.
 

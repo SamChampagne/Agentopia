@@ -1,5 +1,6 @@
 import type { Commande } from './commandes.js';
-import { equipeDe, lancerEquipe, lireEquipes, reprendreTache, rechargerEquipes } from './equipe.js';
+import { equipeDe, lancerEquipe, lireEquipes, reprendreTache, rechargerEquipes, peutModifierPlan } from './equipe.js';
+import { editerPlan } from './editionEquipe.js';
 import { choisir, saisir, bus, confirmer } from './ui/bus.js';
 import { guiderConnexion } from './providers/assistantConnexion.js';
 import { bilanEquipe } from './equipeBilan.js';
@@ -29,19 +30,22 @@ export function commandesEquipes(): Commande[] {
         } },
         { nom: 'equipe-actions', args: '<équipe>', groupe: 'Agents', cache: true, description: 'Reprendre le travail, voir le bilan et réutiliser le plan', executer: async ({ args }) => {
             const e = retrouver(args[0]);
+            const taches = [...e.taches, ...(e.integrateur ? [e.integrateur] : [])];
             const action = await choisir(`Actions · ${e.nomProjet}`, [
                 { label: '≡ Voir le bilan de l’équipe', valeur: 'bilan' },
-                ...e.taches.filter((t) => t.fournisseur && t.agentId && ['erreur', 'arretee'].includes(t.etat)).map((t) => ({
+                ...(peutModifierPlan(e) ? [{ label: '✎ Modifier le plan', valeur: 'modifier', description: 'Objectif, missions, agents et dépendances avant le premier lancement.' }] : []),
+                ...taches.filter((t) => t.fournisseur && t.agentId && ['erreur', 'arretee'].includes(t.etat)).map((t) => ({
                     label: `↻ Reprendre ${t.id} · ${t.titre}`, valeur: `reprendre:${t.id}`, description: 'Conserve les fichiers, la branche et la conversation existants.' })),
-                ...e.taches.filter((t) => t.agentId && t.etat === 'bloquee').map((t) => ({ label: `! Répondre à ${t.id} · ${t.titre}`, valeur: `permission:${t.agentId}` })),
+                ...taches.filter((t) => t.agentId && t.etat === 'bloquee').map((t) => ({ label: `! Répondre à ${t.id} · ${t.titre}`, valeur: `permission:${t.agentId}` })),
                 ...(e.mixte ? [{ label: '★ Enregistrer ce plan comme modèle', valeur: 'modele', description: 'Réutiliser les missions, fournisseurs et dépendances dans un autre projet.' }] : []),
                 ...(['plan', 'erreur'].includes(e.etat) ? [{ label: 'Recommencer les tâches inachevées dans de nouvelles branches', valeur: 'recommencer', description: 'Les anciens fichiers restent disponibles, mais ne seront pas repris dans les nouvelles tentatives.' }] : []),
                 { label: 'Retour à l’équipe', valeur: 'retour' },
             ], false, e.message || 'Choisis la suite ; aucune reprise n’efface les fichiers déjà produits.');
             if (action === 'bilan') { ensuite(`/equipe-bilan ${e.id}`); return; }
+            if (action === 'modifier') { if (await editerPlan(e)) bus.emit('notice', 'Plan enregistré · aucun agent lancé'); ouvrir(e.id); return; }
             if (action.startsWith('permission:')) { ensuite(`/autorisation ${action.slice(11)}`); return; }
             if (action.startsWith('reprendre:')) {
-                const id = action.slice(10), t = e.taches.find((t) => t.id === id)!;
+                const id = action.slice(10), t = taches.find((t) => t.id === id)!;
                 await guiderConnexion(t.fournisseur!, true);
                 const erreur = await reprendreTache(e.id, id); if (erreur) throw new Error(erreur);
                 bus.emit('notice', 'Tâche reprise dans sa conversation et son dossier existants');

@@ -36,6 +36,8 @@ Le tag local `agentopia-1.0.0-baseline` conserve le point de départ avant le mo
 
 La version 1.2 ajoute les équipes guidées, les modèles réutilisables, le bilan commun et la reprise dans la même branche. Fermer les anciennes fenêtres puis relancer Agentopia après installation. Le moteur précédent est remplacé au repos ; s’il travaille encore, laisser finir ou utiliser la pause globale avant de reprendre le moteur depuis Config. Les modèles restent dans le profil utilisateur lors d’une réparation ou d’un retour de version.
 
+La version 1.3 ajoute l’édition des plans avant lancement, la reprise des intégrations et les protections contre les intégrations concurrentes. Les tests de régression créent un conflit Git réel dans un dépôt temporaire et utilisent des fournisseurs simulés. Les dialogues sont aussi vérifiés avec des frappes rapprochées. La procédure de mise à jour et les données utilisateur restent identiques.
+
 ## Vérifier sans toucher au profil réel
 
 ```powershell

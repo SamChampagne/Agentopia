@@ -10,7 +10,7 @@ export function prochaineAction(e: Equipe, t: Tache): string {
         const deps = t.dependances.map((id) => e.taches.find((d) => d.id === id)).filter((d) => d?.etat !== 'faite');
         return deps.length ? `Attend : ${deps.map((d) => `${d?.id} (${d?.etat})`).join(', ')}` : 'Prête à démarrer quand l’équipe est lancée';
     }
-    return t.etat === 'faite' ? 'Vérifier le résultat et le diff avant intégration' : 'Travail en cours';
+    return t.etat === 'faite' ? e.etat === 'finie' ? 'Intégration terminée · consulter le bilan et ranger l’équipe' : 'Vérifier le résultat et le diff avant intégration' : 'Travail en cours';
 }
 export function bilanEquipe(e: Equipe): string {
     const taches = [...e.taches, ...(e.integrateur ? [e.integrateur] : [])];

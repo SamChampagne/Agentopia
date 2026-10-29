@@ -22,8 +22,10 @@ export async function executerMoteur(options: { envoyer?: typeof envoyerIntegree
     const finir = () => { arrete = true; };
     process.once('SIGTERM', finir); process.once('SIGINT', finir);
     const pouls = setInterval(etat, 2000); etat();
-    const actions: Record<ActionMoteur, (id: string, tache: string) => unknown> = {
-        lancer: equipes.lancerEquipe, arreter: equipes.arreterEquipe, integrer: equipes.integrer, relancer: equipes.relancerTache,
+    const actions: Record<ActionMoteur, (id: string, tache: string, donnees?: any) => unknown> = {
+        lancer: equipes.lancerEquipe, arreter: equipes.arreterEquipe,
+        integrer: (id) => equipes.integrer(id, options.envoyer ?? envoyerIntegree), relancer: equipes.relancerTache,
+        'modifier-plan': (id, _tache, donnees) => equipes.modifierPlan(id, donnees),
         reprendre: (id, tache) => equipes.reprendreTache(id, tache, options.envoyer ?? envoyerIntegree),
         ecarter: equipes.basculerEcart, retirer: equipes.retirerTache, ranger: equipes.terminerEquipe,
         planification: (id) => {
@@ -55,7 +57,7 @@ export async function executerMoteur(options: { envoyer?: typeof envoyerIntegree
                         if (!Object.hasOwn(actions, c.action)) throw new Error('Commande moteur inconnue');
                         if (Date.now() - c.creee > 120_000) throw new Error('Demande expirée ; relance-la depuis l’équipe');
                         if (moteurEnPause() && ['lancer', 'integrer', 'relancer', 'reprendre', 'planification'].includes(c.action)) throw new Error('Tout est en pause · Reprendre le moteur avant de lancer une tâche');
-                        resultat = await actions[c.action as ActionMoteur](c.id, c.tache);
+                        resultat = await actions[c.action as ActionMoteur](c.id, c.tache, c.donnees);
                     } catch (e) { echec = (e as Error).message; }
                     ecrireAtomique(fichier.replace(/\.json$/, '.reponse'), { resultat, erreur: echec });
                     fs.rmSync(enCours, { force: true });

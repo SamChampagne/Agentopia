@@ -24,7 +24,10 @@ export const bus = new EventEmitter();
 
 function demander<T>(construire: (resoudre: (v: T | undefined) => void) => Demande): Promise<T> {
     return new Promise((ok, ko) => {
+        let terminee = false;
         bus.emit('demande', construire((v) => {
+            if (terminee) return;
+            terminee = true;
             bus.emit('demande', undefined);
             if (v === undefined) ko(new Annule());
             else ok(v);
@@ -62,8 +65,11 @@ export async function confirmer(message: string): Promise<boolean> {
 // Vue plein écran (moniteur) : la promesse se résout quand la vue appelle fermer()
 export function afficherVue(rendu: (fermer: () => void) => ReactNode): Promise<void> {
     return new Promise((ok) => {
+        let fermee = false;
         bus.emit('demande', {
             type: 'vue', rendu, resoudre: () => {
+                if (fermee) return;
+                fermee = true;
                 bus.emit('demande', undefined);
                 ok();
             },

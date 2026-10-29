@@ -115,7 +115,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: any; fermer: () => void; retour
             fermer();
             return void bus.emit('lancer', `/onglet ${e.projet}`);
         }
-        if (action === 'retirer' && courante) return retirerTache(e.id, courante.id);
+        if (action === 'retirer' && courante) return setMessage(await retirerTache(e.id, courante.id) ?? 'Tâche retirée');
         if (action === 'arreter') {
             setMessage('Arrêt des agents…');
             await arreterEquipe(e.id);

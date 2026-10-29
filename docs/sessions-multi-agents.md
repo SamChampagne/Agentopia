@@ -53,6 +53,10 @@ L’agent de code par défaut est proposé, sinon le seul agent disponible est c
 
 Le plan est enregistré avant tout appel. Ouvrir l’équipe, vérifier les missions, puis cliquer **Lancer**. Un dépôt Git avec un commit et un checkout propre est requis. Chaque tâche de code reçoit son propre worktree, basé sur les commits du dépôt. Les fichiers non suivis, variables d’environnement stockées dans des fichiers et modifications non commitées ne sont pas copiés.
 
+**Actions (a) → Modifier le plan** ajuste l’objectif, le titre, la mission, le fournisseur et les dépendances de chaque tâche avant le premier lancement. **Enregistrer** conserve le plan sans démarrer d’agent ; **Annuler** abandonne le brouillon. Une dépendance circulaire est refusée et le brouillon précédent est conservé. Si une autre fenêtre modifie ou lance le plan pendant l’édition, l’enregistrement est refusé avec une explication. Une tâche requise par une autre ne peut pas être retirée tant que cette dépendance existe, et l’équipe doit garder au moins une tâche.
+
+Au premier lancement, la base est actualisée vers le dernier commit du projet. Les reprises et nouvelles tentatives d’une équipe déjà lancée gardent leur base pour rester cohérentes avec le travail précédent.
+
 **Actions (a) → Enregistrer ce plan comme modèle** conserve les missions, fournisseurs et dépendances. Le modèle est proposé à la création d’une autre équipe, qui demande un nouvel objectif. Il ne contient pas les anciens résultats, sessions, branches ou dossiers de travail. Le texte des missions est repris tel quel : vérifier les références propres au projet avant de créer le plan. **Config → Modèles d’équipe** (`/modeles-equipes`) permet de consulter ou retirer un modèle sans toucher aux équipes existantes.
 
 Après une erreur ou un arrêt, **Débloquer (a) → Reprendre** poursuit la tâche dans la même conversation, branche et dossier, avec les fichiers partiels conservés. Il faut attendre l’arrêt effectif de l’agent et terminer les dépendances. La reprise est refusée si une tâche dépendante a déjà démarré, pour ne pas invalider son travail. **Recommencer dans de nouvelles branches** est une action distincte avec confirmation ; les anciennes tentatives sont conservées. Une tâche sans session récupérable utilise ce second parcours.
@@ -62,6 +66,8 @@ Après une erreur ou un arrêt, **Débloquer (a) → Reprendre** poursuit la tâ
 Les résultats et sources des dépendances sont transmis au prochain agent ; leurs branches sont fusionnées dans son worktree avant son lancement. Un conflit Git bloque la tâche. Une tâche n’est marquée terminée qu’après un succès explicite du fournisseur, un résumé non vide et, pour le code, un worktree propre. Cela ne constitue pas une preuve que les tests métier sont suffisants : lire les résultats et les diffs avant intégration.
 
 Un moteur détaché unique par dossier de données lance les tâches suivantes, même après fermeture des fenêtres. Il retrouve les workers en cours après son redémarrage. Les réservations empêchent de rejouer une même tentative ; un lancement interrompu ou ambigu demande une vérification/reprise explicite. La création d’un plan Claude CLI reste liée à la fenêtre jusqu’à l’enregistrement du plan. **Intégrer** lance un agent dans le checkout principal après vérification qu’il est propre. Il fusionne les branches retenues et exécute les vérifications demandées. Aucun push automatique.
+
+Le moteur refuse une seconde intégration d’équipe dans le même dossier tant que la première est active, même si son arrêt vient d’être demandé. Après un échec, **Reprendre l’intégration (a)** conserve la conversation, les fichiers partiels et une fusion Git en cours. La branche doit être celle enregistrée au début ; une branche détachée est refusée avant une nouvelle intégration. Une ancienne intégration sans branche enregistrée demande de vérifier et terminer le travail dans sa conversation. Une équipe de recherche sans branche à fusionner propose le bilan et le rangement. Les équipes déjà intégrées ne peuvent pas être relancées.
 
 **Config → Moteur des équipes** (`/moteur`) affiche son état et sa version. `/tout-arreter` enregistre une pause persistante et demande l’interruption des équipes, des agents intégrés et des sessions natives en arrière-plan ; les onglets CLI interactifs restent indépendants. La pause bloque également les nouveaux tours intégrés et conseils. Reprendre le moteur ne relance pas les équipes arrêtées : utiliser **Débloquer → Reprendre** sur leur carte. Les permissions attendent toujours une réponse explicite. Les changements déjà effectués sont conservés.
 
@@ -78,6 +84,8 @@ Les bordures et indicateurs lumineux du Live et des cartes latérales restent st
 Chaque conversation conserve son brouillon et ses pièces jointes, y compris après fermeture normale. La recherche Ctrl+F possède sa propre saisie ; Échap retrouve le message. Si un envoi échoue, son texte revient dans la conversation d’origine, même si une autre est ouverte. Les brouillons sont sauvegardés localement dans `~/.claudetopia-brouillons/` ; les recherches restent en mémoire. Les fichiers joints sont référencés par leur chemin, pas copiés.
 
 Une commande `/...` inconnue affiche des suggestions sans démarrer d’agent. Les chemins avec espaces s’écrivent entre guillemets, par exemple `/codex "C:\Mes projets\Application"`. Les actions des cartes et la palette ajoutent ces guillemets automatiquement.
+
+Les choix, filtres, cases et champs sont propres à chaque dialogue. Les flèches, la frappe et Entrée peuvent s’enchaîner rapidement : la dernière sélection et le dernier texte sont ceux qui sont validés.
 
 ## Vérifier et réparer l’installation
 

@@ -11,36 +11,52 @@ const imprimable = (k: any) => !k.ctrl && !k.meta && k.sequence?.length === 1 &&
 
 const sansCouleur = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
 
-export function Choix({ d, hauteur }: { d: any; hauteur: number }) {
+const demandes = new WeakMap<object, number>();
+let prochainDialogue = 0;
+function cleDemande(d: object): number {
+    if (!demandes.has(d)) demandes.set(d, ++prochainDialogue);
+    return demandes.get(d)!;
+}
+// Deux demandes successives peuvent être rendues dans la même trame React.
+// Leur sélection, filtre et saisie doivent pourtant repartir de leurs propres valeurs.
+export function Choix(props: { d: any; hauteur: number }) {
+    return <ContenuChoix key={cleDemande(props.d)} {...props} />;
+}
+function ContenuChoix({ d, hauteur }: { d: any; hauteur: number }) {
     const detail = useRef<any>();
     const [filtre, setFiltre] = useState('');
     const [index, setIndex] = useState(0);
     const [coches, setCoches] = useState<Set<number>>(() => new Set(d.choix.flatMap((c: any, i: number) => (c.coche ? [i] : []))));
+    const indexClavier = useRef(0), filtreClavier = useRef(''), cochesClavier = useRef(coches);
     const [survol, setSurvol] = useState<number>();
     const visibles: { c: any; i: number }[] = d.choix.map((c: any, i: number) => ({ c, i }))
         .filter(({ c }: any) => !filtre || sansCouleur(`${c.label} ${c.description ?? ''}`).toLowerCase().includes(filtre.toLowerCase()));
     const courant = Math.min(index, Math.max(0, visibles.length - 1));
-    const basculer = (i: number) => setCoches((s) => {
-        const n = new Set(s);
+    const basculer = (i: number) => {
+        const n = new Set(cochesClavier.current);
         if (n.has(i)) n.delete(i); else n.add(i);
-        return n;
-    });
-    const valider = (pos = courant) => {
-        if (d.multiple) return d.resoudre(d.choix.filter((_: any, i: number) => coches.has(i)).map((c: any) => c.valeur));
-        if (visibles[pos]) d.resoudre(visibles[pos].c.valeur);
+        cochesClavier.current = n; setCoches(n);
+    };
+    const visiblesClavier = () => d.choix.map((c: any, i: number) => ({ c, i }))
+        .filter(({ c }: any) => !filtreClavier.current || sansCouleur(`${c.label} ${c.description ?? ''}`).toLowerCase().includes(filtreClavier.current.toLowerCase()));
+    const deplacer = (i: number) => { indexClavier.current = i; setIndex(i); };
+    const filtrer = (f: string) => { filtreClavier.current = f; setFiltre(f); deplacer(0); };
+    const valider = (pos = indexClavier.current) => {
+        if (d.multiple) return d.resoudre(d.choix.filter((_: any, i: number) => cochesClavier.current.has(i)).map((c: any) => c.valeur));
+        const liste = visiblesClavier(), choix = liste[Math.min(pos, Math.max(0, liste.length - 1))];
+        if (choix) d.resoudre(choix.c.valeur);
     };
     useKeyboard((k) => {
         if (d.detail && (k.name === 'pageup' || k.name === 'pagedown')) return detail.current?.scrollBy(k.name === 'pageup' ? -5 : 5);
         if (k.name === 'escape') return d.resoudre(undefined);
-        if (k.name === 'up') return setIndex(Math.max(0, courant - 1));
-        if (k.name === 'down') return setIndex(Math.min(visibles.length - 1, courant + 1));
+        if (k.name === 'up') return deplacer(Math.max(0, indexClavier.current - 1));
+        if (k.name === 'down') return deplacer(Math.max(0, Math.min(visiblesClavier().length - 1, indexClavier.current + 1)));
         if (k.name === 'return') return valider();
-        if (d.multiple && k.name === 'space') return visibles[courant] && basculer(visibles[courant].i);
+        if (d.multiple && k.name === 'space') { const choix = visiblesClavier()[indexClavier.current]; if (choix) basculer(choix.i); return; }
         if (d.recherche) {
-            if (k.name === 'backspace') return setFiltre((f) => f.slice(0, -1));
+            if (k.name === 'backspace') return filtrer(filtreClavier.current.slice(0, -1));
             if (imprimable(k)) {
-                setIndex(0);
-                return setFiltre((f) => f + k.sequence);
+                return filtrer(filtreClavier.current + k.sequence);
             }
         }
     });
@@ -79,24 +95,29 @@ export function Choix({ d, hauteur }: { d: any; hauteur: number }) {
 }
 
 // Saisie d'un texte ; masquée (jetons, mots de passe) : on n'affiche que des •
-export function Saisie({ d }: { d: any }) {
+export function Saisie(props: { d: any }) {
+    return <ContenuSaisie key={cleDemande(props.d)} {...props} />;
+}
+function ContenuSaisie({ d }: { d: any }) {
     const [v, setV] = useState<string>(d.defaut ?? '');
+    const valeur = useRef<string>(d.defaut ?? '');
+    const changer = (texte: string) => { valeur.current = texte; setV(texte); };
     useKeyboard((k) => {
         if (k.name === 'escape') return d.resoudre(undefined);
-        if (k.name === 'return') return d.resoudre(v);
+        if (k.name === 'return') return d.resoudre(valeur.current);
         if (!d.masque) return;   // le champ <input> gère la frappe lui-même
-        if (k.name === 'backspace') return setV((x) => x.slice(0, -1));
-        if (imprimable(k)) setV((x) => x + k.sequence);
+        if (k.name === 'backspace') return changer(valeur.current.slice(0, -1));
+        if (imprimable(k)) changer(valeur.current + k.sequence);
     });
     usePaste((e: any) => {
-        if (d.masque) setV((x) => x + (e?.text ?? String(e ?? '')).replace(/[\r\n]/g, ''));
+        if (d.masque) changer(valeur.current + (e?.text ?? String(e ?? '')).replace(/[\r\n]/g, ''));
     });
     return (
         <box flexDirection="column" border borderStyle="rounded" borderColor={theme.primaire} paddingLeft={1} paddingRight={1}>
             <text fg={theme.primaire} attributes={GRAS}>{d.message}</text>
             <box height={1} flexDirection="row">
                 <text fg={theme.accent}>❯ </text>
-                {d.masque ? <text>{'•'.repeat(v.length)}</text> : <input flexGrow={1} focused value={v} onInput={setV} />}
+                {d.masque ? <text>{'•'.repeat(v.length)}</text> : <input flexGrow={1} focused value={v} onInput={changer} />}
             </box>
             <text fg={fond.discret}>Entrée valider · Échap annuler</text>
         </box>
