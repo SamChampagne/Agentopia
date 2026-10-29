@@ -1,34 +1,55 @@
-# Claudetopia
+# Agentopia
 
-Poste de pilotage pour travailler avec Claude Code : sessions Claude en direct, **équipes d'agents** sur un projet, projets, Git, Docker, serveurs SSH.
+Poste de pilotage pour travailler avec Claude, Codex, Perplexity et des **équipes d’agents** : conversations, projets, Git, Docker et serveurs SSH.
 
-## Installation en une ligne (n'importe quel poste Windows)
+**[Télécharger Agentopia pour Windows](https://github.com/SamChampagne/Agentopia/releases/download/agentopia-1.4.0-beta.3/Agentopia-Setup.exe)** · [Notes de version et ZIP portable](https://github.com/SamChampagne/Agentopia/releases/tag/agentopia-1.4.0-beta.3)
+
+Version disponible : **1.4.0-beta.3 · Windows x64**. Cette page décrit la bêta publiée ; ses sources se trouvent actuellement sur la branche [codex/sessions-multi-agents](https://github.com/SamChampagne/Agentopia/tree/codex/sessions-multi-agents), avec la [revue du code dans la PR #1](https://github.com/SamChampagne/Agentopia/pull/1).
+
+**Sessions intégrées Claude, Codex et Perplexity** : `+ Session` ou `/session`, configuration via `/fournisseurs`, collaboration via **Équipes → Nouvelle équipe**. [Connexion, utilisation et limites](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.3/docs/sessions-multi-agents.md).
+
+**Bêta 1.4** : attente utilisateur exclue de la limite de travail, permissions lisibles avec commande exacte, bilan **Relire (b) → Intégrer → Ranger**, et mises à jour adaptées au canal stable ou bêta. [Notes de version](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.3/docs/beta-1.4.md).
+
+**Version 1.3.1** : récupération des verrous de session après plantage, protection contre deux workers exécutant le même tour et sauvegarde des équipes avant chaque écriture. Un fichier d’équipes illisible est signalé dans **Équipes → Récupérer les équipes** : la restauration conserve une copie du fichier abîmé et met le moteur en pause, sans relancer les tâches. Les conversations et branches restent en place.
+
+**Version 1.3** : **Actions (a) → Modifier le plan** permet d’ajuster objectif, consignes, agents et dépendances avant le premier lancement. Une intégration interrompue peut reprendre dans sa conversation et sa branche, en conservant les fichiers et conflits en cours. Le moteur empêche deux équipes d’intégrer simultanément dans le même dossier. Les menus gèrent les frappes rapides et chaque dialogue retrouve ses propres valeurs. Les écrans existants sont conservés.
+
+Les nouvelles équipes proposent un parcours guidé (développement + revue, correction + vérification, recherche + code + revue), les agents disponibles et un aperçu avant lancement. **Actions (a)** permet aussi d’enregistrer un modèle réutilisable, de consulter le bilan commun et de reprendre une tâche interrompue dans sa conversation et sa branche existantes.
+
+Dans un projet, **Mission** guide aussi le travail avec un seul agent. Les équipes lancées et les tâches planifiées sont pilotées par un moteur indépendant de la fenêtre. **Config → Moteur des équipes** permet la pause globale ; **Utilisation des agents** et **Limites des agents** affichent les données disponibles et les limites réglables.
+
+Lancer **Agentopia.bat** depuis les sources, ou le raccourci **Agentopia** après installation. L’ancien lanceur `Claudetopia.bat` reste compatible. Les fichiers `.claudetopia*`, les historiques et les clés existants sont conservés après le changement de nom. Le dépôt s’appelle désormais **SamChampagne/Agentopia**.
+
+## Installation Windows
+
+Télécharger **[Agentopia-Setup.exe depuis la bêta 1.4](https://github.com/SamChampagne/Agentopia/releases/tag/agentopia-1.4.0-beta.3)**. Le paquet contient Node 24, Bun et les dépendances de l’interface. Un double-clic installe dans le profil utilisateur, vérifie l’interface et ouvre la préparation guidée. Aucun terminal de compilation n’est nécessaire.
+
+Au premier lancement, choisis les projets et les agents à utiliser. Agentopia détecte les outils présents, propose les installations nécessaires et guide la connexion. Une interruption conserve les choix déjà faits. Le même parcours reste accessible avec **Config → Préparer le poste** ou `/scan`.
+
+`/maj`, `/reparer` et `/retour-version` gèrent les installations Windows : téléchargement vérifié, réparation avec le paquet conservé et retour à la version précédente. Les données personnelles sont séparées du logiciel. [Détails de construction et de validation](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.3/docs/distribution-windows.md).
+
+## Installation depuis les sources
 
 Dans PowerShell :
 
 ```powershell
-git clone https://github.com/SamChampagne/ClaudeTopia.git "$HOME\Claudetopia"; & "$HOME\Claudetopia\Installer.bat"
+git clone --branch codex/sessions-multi-agents https://github.com/SamChampagne/Agentopia.git "$HOME\Agentopia"; & "$HOME\Agentopia\Installer.bat"
 ```
 
-Dans Claudetopia, **`/installation`** affiche cette ligne avec la bonne adresse, prête à copier.
-
-Si le dépôt est public, aussi :
-
-```powershell
-irm https://raw.githubusercontent.com/SamChampagne/ClaudeTopia/main/install.ps1 | iex
-```
+La branche `codex/sessions-multi-agents` contient la bêta Agentopia. Utilise cette branche pour retrouver les fonctions décrites ici. **`/installation`** donne aussi le lien des téléchargements et une commande qui conserve la branche utilisée.
 
 Sinon : copier ce dossier sur le poste et double-cliquer sur **Installer.bat**.
 
 L'installateur vérifie les prérequis et dit clairement quoi installer s'il manque quelque chose,
-installe les dépendances, compile, prépare Node 24 (pour la souris) et crée le raccourci **Claudetopia** sur le bureau.
-Pour mettre à jour plus tard : **`/maj`** dans Claudetopia.
+installe les dépendances, compile, prépare Node 24 (pour la souris) et crée le raccourci **Agentopia** sur le bureau.
+Pour mettre à jour plus tard : **`/maj`** dans Agentopia.
 
-Seul **Node.js 18+** est obligatoire (`winget install OpenJS.NodeJS.LTS`). Le reste est conseillé :
+Le Setup inclut **Node 24 et Bun**. Pour développer depuis les sources, utilise également ces runtimes. Les outils suivants dépendent des fonctions choisies :
 
 | Outil | Pour | Installation |
 |---|---|---|
-| Claude Code | les sessions et équipes Claude | `npm install -g @anthropic-ai/claude-code` |
+| Codex CLI | les sessions et équipes Codex | connexion guidée dans `/fournisseurs` |
+| Claude Code | les sessions natives Claude CLI | `npm install -g @anthropic-ai/claude-code` |
 | Git | statut des projets, commits, journal, équipes | `winget install Git.Git` |
 | Windows Terminal | souris, onglets | `winget install Microsoft.WindowsTerminal` |
 | VS Code | boutons « VS Code » | `winget install Microsoft.VisualStudioCode` |
@@ -44,40 +65,48 @@ et peut être pris directement dans le presse-papiers), clé et serveurs SSH, SF
 
 ## Premier lancement
 
-Claudetopia scanne le poste (projets, doublons, serveurs SSH, outils) et propose les projets à suivre.
+Agentopia scanne les projets, signale les doublons, puis prépare les fournisseurs choisis. Les clés API sont demandées dans une saisie masquée ; Codex propose la connexion dans le navigateur. Le diagnostic de connexion ne génère pas de réponse payante.
 Ensuite :
 
 - **`/diagnostic`** vérifie que tout fonctionne et dit quoi corriger ;
-- **`/config`** (bouton « Config ») : compte Claude, identité Git, jetons GitHub / Azure DevOps / GitLab, thème, nom affiché ;
+- **`/config`** (bouton « Config ») : fournisseurs, agent par défaut, maître, identité Git, connexions et apparence ;
 - **`?`** affiche l'aide et les raccourcis.
 
 ## Équipes d'agents
 
 Bouton **Équipes** en haut (ou `/equipe`, ou « Équipe d'agents » dans les actions d'un projet) :
 
-1. tu choisis un projet et tu écris l'objectif ;
-2. un **chef d'équipe** lit le code et découpe l'objectif en tâches, chacune avec un rôle métier
-   (architecte, backend, frontend, données, tests, sécurité, doc, DevOps) ;
-3. tu valides le plan (▶ Lancer) : les agents travaillent **en parallèle**, chacun dans son propre worktree git ;
-   une tâche qui dépend d'une autre attend, puis récupère sa branche ;
-4. quand tout est fait, **⇄ Intégrer** : un intégrateur fusionne les branches, résout les conflits et lance les tests.
+1. tu choisis un projet, un objectif et un parcours : développement + revue, correction + vérification, recherche + code + revue, ou composition manuelle ;
+2. tu vérifies les missions, les fournisseurs et les dépendances ; **Actions → Modifier le plan** permet de les ajuster avant le lancement ;
+3. tu lances l’équipe : les tâches indépendantes avancent **en parallèle**, chaque agent de code dans son propre worktree Git ;
+4. tu réponds aux permissions dans l’app, avec l’action expliquée et la commande exacte. L’attente de ta réponse ne consomme pas la limite de travail ;
+5. **Relire (b)** rassemble résultats, commandes observées et diffs. Tu peux écarter une branche, puis choisir **Intégrer → Ranger**.
 
-Toute l'équipe tient sur **une seule carte** dans la colonne de gauche (progression, permissions en attente).
-Réglages dans `~/.claudetopia.json` : `equipe.parallele` (agents en même temps, 3 par défaut)
-et `equipe.permissions` (`acceptEdits` par défaut : les agents modifient les fichiers sans demander,
-mais demandent avant les commandes).
+Toute l'équipe tient sur **une seule carte** dans la colonne de gauche. Les équipes de code nécessitent un dépôt Git avec un commit et un dossier sans changements non commités au lancement. Les résultats des dépendances sont transmis aux agents suivants.
+
+**Reprendre** conserve la conversation, la branche et les fichiers existants. Le moteur continue après fermeture de la fenêtre tant que le PC reste allumé. Après un redémarrage du PC, ouvrir Agentopia redémarre le moteur. `/tout-arreter` met le travail en pause.
+
+### Fournisseurs et comptes
+
+| Fournisseur | Rôle | Connexion |
+|---|---|---|
+| **Codex** | Code, fichiers, commandes, revue | CLI Codex et connexion de ton compte |
+| **Claude** | Code, fichiers, commandes, revue | Clé API Anthropic pour les sessions intégrées |
+| **Perplexity** | Recherche web et réponses avec sources | Clé API Perplexity |
+
+Les sessions Claude intégrées utilisent l’API Anthropic, distincte de l’abonnement Claude. L’accès au CLI Claude installé reste disponible. Perplexity ne modifie pas les fichiers du projet. La connexion se fait dans **Config → Fournisseurs IA** ou `/fournisseurs`.
 
 ## Le maître
 
-Sous la liste des sessions, à gauche, **◇ MAÎTRE** est un Claude toujours ouvert qui gère tes sessions à ta place.
+Sous la liste des sessions, à gauche, **◇ MAÎTRE** utilise Codex, Claude, Perplexity ou Claude CLI selon **Config → Agent maître**. En automatique, il privilégie l’agent par défaut disponible.
 Clique sa zone (ou **Alt+M**) puis écris en bas, par exemple :
 « ferme les sessions finies », « où en est mon-projet ? », « lance une session sur mon-api pour écrire les tests »,
 « dis à la session de dev de continuer ».
 
-Il voit l'état à jour (sessions, équipes, projets) et répond par des commandes Claudetopia, exécutées comme si tu les tapais.
+Il voit l'état à jour (sessions, équipes, projets) et répond par des commandes Agentopia, exécutées comme si tu les tapais.
 Avant d'arrêter ou de supprimer une session, il demande **une** confirmation.
-Il démarre en arrière-plan au lancement : il répond ensuite en 2 à 4 secondes.
-Réglages dans `~/.claudetopia.json` : `maitre.modele` (`haiku` par défaut, rapide), `maitre.actif`.
+Il ne lance aucun modèle au démarrage : il attend une demande. Pour une mission collective, il propose un plan avec les agents et les dépendances ; tu peux le lancer, le garder sans démarrer ou l’annuler.
+Réglages dans `~/.claudetopia.json` : `maitre.fournisseur`, `maitre.actif` ; `maitre.modele` concerne le transport Claude CLI.
 
 ## Serveurs SSH et fichiers (SFTP)
 
@@ -85,7 +114,7 @@ Vue **SSH** (bouton en haut) : se connecter, tester l'accès de Claude, **+ Ajou
 (dans `~/.ssh/config`, le reste du fichier est gardé, sauvegarde `config.claudetopia.bak`), **⚿ Installer ma clé**
 (une dernière fois le mot de passe, ensuite connexion sans mot de passe) et **⇅ Fichiers** pour parcourir le serveur.
 
-`/sftp` ouvre aussi des connexions **SFTP** configurées dans Claudetopia (`/sftp-ajouter`), par clé ou par **mot de passe**
+`/sftp` ouvre aussi des connexions **SFTP** configurées dans Agentopia (`/sftp-ajouter`), par clé ou par **mot de passe**
 (chiffré par Windows, seul ton compte peut le relire). Dans la vue Fichiers : ouvrir un fichier dans VS Code, télécharger,
 envoyer, créer un dossier, supprimer. L'empreinte d'un serveur est enregistrée à la 1re connexion : si elle change, la connexion est refusée.
 
@@ -94,12 +123,6 @@ envoyer, créer un dossier, supprimer. L'empreinte d'un serveur est enregistrée
 - **← Retour** ferme la vue d'une conversation ; **✕ Fermer la session** la ferme vraiment (arrière-plan : arrêtée et retirée,
   reprenable plus tard ; onglet : Claude s'arrête). Aussi au clic droit sur sa carte, ou en le demandant au maître.
 - Les cartes suivent les fichiers de Claude Code en direct : une session fermée ou lancée apparaît ou disparaît aussitôt.
-
-## Poste modeste (8 Go)
-
-Claudetopia occupe ~110 Mo et ~3 % d'un cœur au repos. Le maître (~250 Mo) s'endort après 30 min sans demande
-(5 min sous 12 Go de RAM, où il ne démarre d'ailleurs qu'au premier besoin) ; réglable avec `maitre.veille` (minutes, 0 = jamais).
-Si Claude Code n'est pas installé ou pas connecté, la zone du maître le dit : un clic l'installe ou ouvre la connexion.
 
 ## Se repérer
 
@@ -110,6 +133,8 @@ Si Claude Code n'est pas installé ou pas connecté, la zone du maître le dit :
 - **◉ Live** (`/global`) : la vue globale en direct, avec les sessions, les équipes, ce qui se passe dans chaque serveur SSH
   (charge, mémoire, disque, conteneurs ; serveurs accessibles par clé) et Docker.
 - Ce qui est sous la souris s'éclaire ; la barre du bas montre les raccourcis du moment.
+- Dans **Projets**, taper filtre la liste. La barre du bas explique qu’elle est en pause et conserve ton brouillon. **Échap** efface le filtre, puis revient à la barre de message.
+- Dans **Live**, les bordures restent stables pendant que les données se mettent à jour.
 
 ## Confort et outils
 
@@ -118,19 +143,22 @@ Si Claude Code n'est pas installé ou pas connecté, la zone du maître le dit :
 | **Ctrl+K** | palette : tout chercher et lancer (« proj com » → Commit · mon-projet) |
 | **Ctrl+F** | chercher dans la conversation ouverte |
 | **`/questions`** | ce que les sessions attendent de toi, avec la réponse proposée (clic sur « en attente ») |
-| **⎘ Copier** | le dernier bloc de code de Claude (bouton de la conversation, clic droit) |
+| **⎘ Copier** | le dernier bloc de code ou la dernière réponse de l’agent |
 | **glisser un fichier** | dans la fenêtre : pièce jointe du message |
 | **`/cout`, `/budget`** | coût du jour en équivalent API (barre du bas), alerte au-delà d'un budget |
-| **`/planifier`** | une session chaque jour à heure fixe (tant que Claudetopia est ouvert) |
+| **`/planifier`** | un agent chaque jour à heure fixe, via le moteur en arrière-plan |
+| **`/mission`** | corriger, développer ou analyser avec l’agent de code choisi |
+| **`/tout-arreter`, `/moteur`** | pause globale persistante ; état et reprise du moteur |
+| **`/utilisation`, `/limites-agents`** | tours, jetons et coûts renseignés ; limites de tours et de durée |
 | **`/pr-corriger`, `/ci-reparer`** | GitHub : corriger les commentaires d'une PR, réparer un pipeline en échec |
 | **`/surveiller-logs`** | notification à chaque erreur dans les logs d'un conteneur ; analyse par Claude |
 | **`/exporter`, `/importer`** | emporter sa configuration sur un autre poste (sans aucun secret) |
 | **`/mode clair`, `/cartes detaillees`** | terminal à fond blanc, cartes sur 3 lignes |
-| **`/apparence`** | profil Windows Terminal « Claudetopia » : Catppuccin, Tokyo Night, Dracula, Nord ou Gruvbox, police Cascadia Code, transparence acrylique, effet rétro (`/apparence retirer` l'enlève) |
+| **`/apparence`** | profil Windows Terminal « Agentopia » : Catppuccin, Tokyo Night, Dracula, Nord ou Gruvbox, police Cascadia Code, transparence acrylique, effet rétro (`/apparence retirer` l'enlève) |
 | **`/theme`** | couleurs de l'interface, dont les mêmes palettes |
 | **`/notifications-cliquables`** | un clic sur une notification ouvre la session (lien enregistré pour ton compte) |
 
-Au lancement, Claudetopia rouvre la conversation ou la vue où tu en étais.
+Au lancement, Agentopia rouvre la conversation ou la vue où tu en étais.
 Les équipes ont des modèles prêts (audit sécurité, dépendances, tests, mise en prod…) et, avant de fusionner,
 chaque tâche se relit (≠ Voir le diff) et peut être écartée.
 
@@ -146,10 +174,20 @@ chaque tâche se relit (≠ Voir le diff) et peut être écartée.
 
 Les anciens fichiers `~/.cli-perso*` sont repris automatiquement au premier lancement.
 
+## Validation de la bêta
+
+La version publiée a passé **97 tests Node**, **6 scénarios d’interface** et les contrôles du vrai Setup sur un Windows GitHub distinct du poste de développement : installation, mise à jour, réparation, retour arrière et conservation des données. Les téléchargements ont été vérifiés par SHA-256.
+
+Les fournisseurs sont simulés en CI. Un parcours Codex réel avec développement, revue et reprise d’intégration a aussi été testé sur la base 1.3.1 ; les parcours Claude et Perplexity restent à valider avec leurs comptes réels.
+
+[Résultat de la validation Windows](https://github.com/SamChampagne/Agentopia/actions/runs/40903567365)
+
 ## Développement
 
 ```
 npm run build          # compile src/ vers dist/
+npm run test:ci        # types, moteur et parcours d’interface, fournisseurs simulés
+npm run package:windows # construit le Setup et le ZIP sur Windows x64
 npm test               # interface (clics et clavier simulés) + synchro git
 npm run test:equipe    # moteur d'équipe sur un dépôt jetable (plan réel par Claude)
 npm run test:fluidite  # rafraîchissements et réactivité au repos
