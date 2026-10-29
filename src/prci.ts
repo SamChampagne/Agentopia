@@ -2,13 +2,13 @@ import type { Commande } from './commandes.js';
 import { appel, Depot } from './git.js';
 import { jeton } from './jetons.js';
 import { lireSynchro } from './synchro.js';
-import { lancerArrierePlan } from './agents.js';
+import { choisirAgent } from './choixAgent.js';
+import { creerIntegree, envoyerIntegree } from './sessionsIntegrees.js';
 import { choisir, tache } from './ui/bus.js';
 import { bus } from './ui/bus.js';
 import { c } from './theme.js';
 
-// De GitHub à une session Claude : corriger les commentaires d'une revue de PR, réparer un pipeline en échec.
-// Agentopia lit lui-même les commentaires et les échecs (avec ton jeton) et les donne à Claude dans la consigne.
+// De GitHub à l’agent de code choisi : commentaires de PR et pipelines en échec.
 
 const entetes = (cle: string) => ({ Authorization: `Bearer ${cle}`, Accept: 'application/vnd.github+json' });
 
@@ -29,8 +29,9 @@ function cleGitHub(): string {
 }
 
 async function demarrer(d: Depot, nom: string, consigne: string): Promise<void> {
-    const { id, sortie } = await tache(`Démarrage de la session sur ${d.projet.nom}`, () => lancerArrierePlan(d.cheminGit, nom, consigne));
-    if (!id) return console.log(c.erreur(`✕ ${sortie.split('\n').find(Boolean) ?? 'la session n\'a pas démarré'}`));
+    const fournisseur = await choisirAgent(true);
+    const { id } = creerIntegree(fournisseur, d.cheminGit, nom);
+    await tache(`Démarrage de la session sur ${d.projet.nom}`, () => envoyerIntegree(id, consigne));
     console.log(c.succes(`✓ Session ${id} lancée sur ${d.projet.nom} · « ${nom} »`));
     bus.emit('selectionner', id);
 }
@@ -39,7 +40,7 @@ export function commandesPrCi(): Commande[] {
     return [
         {
             nom: 'pr-corriger', args: '[projet] [numéro]', groupe: 'Git',
-            description: 'Corriger les commentaires de revue d\'une pull request GitHub (Claude les reçoit tous)',
+            description: 'Corriger les commentaires d’une pull request GitHub avec l’agent choisi',
             executer: async ({ args }) => {
                 const cle = cleGitHub();
                 const d = await choisirDepotGitHub(args[0]);
@@ -72,7 +73,7 @@ Pour chaque commentaire : fais la correction demandée (ou explique pourquoi ell
         },
         {
             nom: 'ci-reparer', args: '[projet]', groupe: 'Git',
-            description: 'Réparer le dernier pipeline GitHub Actions en échec (Claude reçoit les jobs et étapes qui ont cassé)',
+            description: 'Réparer le dernier pipeline GitHub Actions en échec avec l’agent choisi',
             executer: async ({ args }) => {
                 const cle = cleGitHub();
                 const d = await choisirDepotGitHub(args[0]);

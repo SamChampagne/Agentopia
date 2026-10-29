@@ -16,7 +16,7 @@ async function vue<P extends object>(module: Promise<Record<string, unknown>>, n
 // ─── Palette (Ctrl+K) : tout ce qu'on peut faire, une recherche floue ────────
 
 const ACTIONS_PROJET: [string, string][] = [
-    ['✻ Nouvelle conversation', '/session'], ['✓ Commit (Claude CLI)', '/commit'], ['⌕ Revue du diff (Claude CLI)', '/revue'], ['⇣ Pull', '/pull'],
+    ['✦ Mission guidée', '/mission'], ['✻ Nouvelle conversation', '/session'], ['✓ Commit avec un agent', '/commit'], ['⌕ Revue du diff', '/revue'], ['⇣ Pull', '/pull'],
     ['◧ VS Code', '/code'], ['❯ Terminal', '/terminal defaut'], ['◆ Équipe mixte', '/equipe-mixte'], ['◆ Équipe Claude CLI', '/equipe nouvelle'], ['▤ Explorateur', '/ouvrir'], ['≡ Toutes les actions', '/actions'],
 ];
 
@@ -58,8 +58,8 @@ export function commandesPlus(config: Config): Commande[] {
     const sauver = async () => (await import('./config.js')).sauverConfig(config);
     return [
         {
-            nom: 'planifier', groupe: 'Claude',
-            description: 'Planifier une session Claude chaque jour à une heure donnée (ex. revue des PR à 8 h)',
+            nom: 'planifier', groupe: 'Agents',
+            description: 'Planifier un agent chaque jour à une heure donnée, même la fenêtre fermée',
             executer: async () => {
                 const { getProjets } = await import('./commandes.js');
                 const { choisir, saisir } = await import('./ui/bus.js');
@@ -74,25 +74,29 @@ export function commandesPlus(config: Config): Commande[] {
                     { label: '⇣ Tirer et vérifier le build', valeur: 'Fais git pull, installe les dépendances, lance la compilation et les tests, et corrige ce qui casse.' },
                     ...Object.entries(config.prompts).map(([n, t]) => ({ label: `★ @${n}`, valeur: t, description: t })),
                 ], false);
-                const consigne = (await saisir('Consigne pour Claude', depart)).trim();
+                const consigne = (await saisir('Consigne pour l’agent', depart)).trim();
                 if (!consigne) return;
+                const { choisirAgent } = await import('./choixAgent.js');
+                const fournisseur = await choisirAgent(true);
                 const heure = (await saisir('Heure (HH:MM)', '08:00')).trim().replace('h', ':').padStart(5, '0');
-                if (!/^\d\d:\d\d$/.test(heure)) return console.log(c.alerte('Heure invalide (ex. 08:00)'));
+                const { heureValide } = await import('./planificateur.js');
+                if (!heureValide(heure)) return console.log(c.alerte('Heure invalide (ex. 08:00)'));
                 const jours = await choisir('Quels jours ?', [
                     { label: 'Du lundi au vendredi', valeur: [1, 2, 3, 4, 5] },
                     { label: 'Tous les jours', valeur: [] as number[] },
                     { label: 'Le lundi seulement', valeur: [1] },
                     { label: 'Le vendredi seulement', valeur: [5] },
                 ], false);
-                config.planifications = [...(config.planifications ?? []), { id: Math.random().toString(16).slice(2, 8), nom, heure, jours, projet, consigne, actif: true }];
+                config.planifications = [...(config.planifications ?? []), { id: crypto.randomUUID(), nom, heure, jours, projet, consigne, actif: true, fournisseur }];
                 await sauver();
                 const { decrireJours } = await import('./planificateur.js');
                 console.log(c.succes(`◴ « ${nom} » : ${decrireJours(jours)} à ${heure} · /planifications pour gérer`));
-                console.log(c.discret('Elle tourne pendant que Agentopia est ouvert ; si l\'heure est passée pendant qu\'il était fermé, elle part au lancement suivant (le même jour).'));
+                await (await import('./moteurClient.js')).assurerMoteur();
+                console.log(c.discret('Le moteur continue après fermeture de la fenêtre. Après redémarrage du PC, ouvre Agentopia. Une tâche manquée est rattrapée le même jour.'));
             },
         },
         {
-            nom: 'planifications', groupe: 'Claude',
+            nom: 'planifications', groupe: 'Agents',
             description: 'Tâches planifiées : lancer maintenant, activer / désactiver, supprimer',
             executer: async () => {
                 const { choisir } = await import('./ui/bus.js');
@@ -101,7 +105,7 @@ export function commandesPlus(config: Config): Commande[] {
                 const liste = config.planifications ?? [];
                 const p = await choisir<import('./planificateur.js').Planification | 'nouvelle'>('Tâches planifiées', [
                     { label: '+ Nouvelle tâche planifiée', valeur: 'nouvelle' },
-                    ...liste.map((x) => ({ label: `${x.actif ? '◴' : '○'} ${x.nom}`, valeur: x, description: `${decrireJours(x.jours)} à ${x.heure} · ${x.projet.split(/[\\/]/).pop()} · dernier : ${dernierLancement(x.id) ?? 'jamais'}` })),
+                    ...liste.map((x) => ({ label: `${x.actif ? '◴' : '○'} ${x.nom}`, valeur: x, description: `${x.fournisseur ?? 'Claude CLI (ancienne tâche)'} · ${decrireJours(x.jours)} à ${x.heure} · ${x.projet.split(/[\\/]/).pop()} · dernier : ${dernierLancement(x.id) ?? 'jamais'}` })),
                 ], false);
                 if (p === 'nouvelle') {
                     const { COMMANDES } = await import('./commandes.js');

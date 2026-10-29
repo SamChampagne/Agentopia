@@ -1,6 +1,6 @@
 import { spawnSync } from 'child_process';
 import { Projet, brancheGit } from './projets.js';
-import { demanderClaude, parLignes } from './claude.js';
+import { demanderAgentTexte } from './choixAgent.js';
 import { choisir, confirmer, saisir, tache } from './ui/bus.js';
 import { c } from './theme.js';
 import { boite, ligneMarkdown } from './affichage.js';
@@ -22,7 +22,7 @@ function tronquer(diff: string): string {
     return diff.length > MAX_DIFF ? diff.slice(0, MAX_DIFF) + '\n\n[... diff tronqué ...]' : diff;
 }
 
-// Relecture par Claude de tout ce qui n'est pas commité
+// Relecture par le fournisseur choisi, avec un contexte limité au diff fourni.
 export async function revue(projet: Projet): Promise<void> {
     if (!estDepot(projet.chemin)) return;
     const aHead = git(['rev-parse', '--verify', 'HEAD'], projet.chemin).ok;
@@ -38,13 +38,12 @@ Liste les problèmes par sévérité avec fichier:ligne :
 - 🟠 à corriger
 - 🟡 suggestion
 Termine par une ligne "Verdict :" (prêt à committer ou non). Sois concis, en français.
-${nouveaux ? `\nNouveaux fichiers non suivis :\n${nouveaux}\n` : ''}
+${nouveaux ? `\nNouveaux fichiers non suivis (contenu non fourni, à vérifier séparément) :\n${nouveaux}\n` : ''}
 \`\`\`diff
 ${tronquer(diff)}
 \`\`\``;
-    const flux = parLignes((l) => console.log(ligneMarkdown(l)));
-    await tache(`Claude relit le diff de ${projet.nom}`, () => demanderClaude(prompt, { cwd: projet.chemin, surTexte: flux.pousser }));
-    flux.finir();
+    const resultat = await demanderAgentTexte(prompt, projet.chemin);
+    for (const ligne of resultat.split('\n')) console.log(ligneMarkdown(ligne));
 }
 
 async function genererMessage(projet: Projet, diff: string, stat: string): Promise<string> {
@@ -58,11 +57,11 @@ ${stat}
 \`\`\`diff
 ${tronquer(diff)}
 \`\`\``;
-    const brut = await tache('Claude écrit le message de commit', () => demanderClaude(prompt, { cwd: projet.chemin, modele: 'haiku' }));
+    const brut = await demanderAgentTexte(prompt, projet.chemin);
     return brut.replace(/^```\w*\n?|```$/g, '').trim();
 }
 
-// Message de commit généré par Claude, à valider / modifier / régénérer
+// Message généré par l’agent choisi, à valider / modifier / régénérer.
 export async function commit(projet: Projet): Promise<void> {
     if (!estDepot(projet.chemin)) return;
     if (!git(['status', '--porcelain'], projet.chemin).sortie) {

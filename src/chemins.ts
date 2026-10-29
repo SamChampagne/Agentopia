@@ -28,6 +28,8 @@ export const CHEMINS = {
     etat: fichier('-etat.json'),
     brouillons: fichier('-brouillons'),
     preparation: fichier('-preparation.json'),
+    moteur: fichier('-moteur'),
+    utilisation: fichier('-utilisation'),
     historiqueNatif: fichier('-historique-natif.json'),
     planifications: fichier('-planifications.json'),   // dernier lancement de chaque tâche planifiée   // où on en était : conversation ouverte, vue affichée (reprise au lancement)   // empreintes des serveurs SFTP déjà vus          // dossier de travail du maître (ses sessions n'ont pas de carte)
 };

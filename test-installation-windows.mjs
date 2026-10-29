@@ -14,6 +14,7 @@ const temoin = path.join(donnees, 'conversation-a-preserver.json'); fs.writeFile
 const systeme = process.env.SystemRoot || 'C:\\Windows';
 const env = { ...process.env, PATH: [path.join(systeme, 'System32'), path.join(systeme, 'System32', 'WindowsPowerShell', 'v1.0')].join(';'),
     CLAUDETOPIA_DATA_DIR: donnees, CLAUDETOPIA_TEST_UI: '1', CLAUDETOPIA_SANS_REPRISE: '1' };
+let moteurPid;
 function lancer(programme, args, options = {}) {
     const r = spawnSync(programme, args, { encoding: 'utf8', windowsHide: true, timeout: 180_000, env, ...options });
     assert.equal(r.status, 0, `${programme} : ${r.error?.message || r.stderr || r.stdout}`);
@@ -32,6 +33,15 @@ try {
     assert.match(sortie, /moteurs, dépendances et interface vérifiés/);
     assert.match(lancer(path.join(version, 'runtime', 'node.exe'), ['--version']), /^v(?:2[4-9]|[3-9]\d)\./);
     assert.ok(lancer(path.join(version, 'runtime', 'bun.exe'), ['--version']).trim());
+    console.log('Moteur embarqué : survit à son lanceur et reste unique entre deux ouvertures…');
+    const scriptMoteur = `const m = await import(${JSON.stringify(pathToFileURL(path.join(version, 'dist', 'moteurClient.js')).href)}); await m.assurerMoteur(); console.log(JSON.stringify(m.etatMoteur()));`;
+    const demarrerMoteur = () => JSON.parse(lancer(path.join(version, 'runtime', 'node.exe'), ['--input-type=module', '-e', scriptMoteur], {
+        env: { ...env, CLAUDETOPIA_TEST_UI: '0', AGENTOPIA_SANS_MOTEUR: '', AGENTOPIA_MOTEUR: '', PATH: `${path.join(version, 'runtime')};${env.PATH}` },
+    }));
+    const premierMoteur = demarrerMoteur(); moteurPid = premierMoteur.pid;
+    assert.equal(premierMoteur.actif, true); assert.ok(moteurPid);
+    assert.equal(demarrerMoteur().pid, moteurPid);
+    process.kill(moteurPid, 'SIGKILL'); moteurPid = undefined;
     const archive = path.join(destination, 'paquets', `${initiale}.zip`);
     const hash = fs.readFileSync(`${archive}.sha256`, 'utf8').trim();
     assert.equal(sha256(archive), hash);
@@ -48,8 +58,9 @@ try {
     await assert.rejects(installerArchive(archive, '0'.repeat(64), { destination, raccourci: false }), /incomplet ou modifié/);
     assert.equal(activation().active, initiale);
     assert.equal(fs.readFileSync(temoin, 'utf8'), '{"message":"à conserver"}');
-    console.log('✓ Setup, runtimes inclus, interface, réparation, retour arrière, contrôle d’intégrité et données préservées');
+    console.log('✓ Setup, runtimes inclus, interface, moteur détaché unique, réparation, retour arrière, contrôle d’intégrité et données préservées');
 } finally {
+    if (moteurPid) { try { process.kill(moteurPid, 'SIGKILL'); } catch {} }
     const rel = path.relative(os.tmpdir(), temporaire);
     if (rel && !rel.startsWith('..') && !path.isAbsolute(rel) && path.basename(temporaire).startsWith('agentopia-installation-test-')) fs.rmSync(temporaire, { recursive: true, force: true });
 }

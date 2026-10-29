@@ -8,6 +8,7 @@ import { creerEquipe, equipeDe, lancerEquipe, avancerEquipes, avancement, equipe
 import { CHEMINS } from './dist/chemins.js';
 
 const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'equipe-'));
+process.env.AGENTOPIA_SANS_MOTEUR = '1';
 const git = (cmd) => execSync(`git -c user.name=t -c user.email=t@t ${cmd}`, { cwd: dossier, stdio: 'pipe' });
 fs.writeFileSync(path.join(dossier, 'calc.js'), 'export const additionner = (a, b) => a + b;\n');
 fs.writeFileSync(path.join(dossier, 'README.md'), '# Calc\n\nPetite bibliothèque de calcul.\n');
@@ -22,7 +23,7 @@ console.log(`plan en ${Math.round((Date.now() - t0) / 1000)} s · état ${plan.e
 console.log('résumé :', plan.resume);
 for (const t of plan.taches) console.log(` ${t.id} [${t.role}] ${t.titre}${t.dependances.length ? ' ← ' + t.dependances.join(',') : ''}`);
 
-console.log('lancement sur un dossier non accepté :', lancerEquipe(e.id) ?? 'lancé (inattendu)');
+console.log('lancement sur un dossier non accepté :', await lancerEquipe(e.id) ?? 'lancé (inattendu)');
 
 // Suivi simulé : chaque tâche a une session qui travaille, puis qui s'arrête
 for (const t of plan.taches) Object.assign(t, { etat: 'en cours', agentId: `faux-${t.id}`, debut: Date.now() });

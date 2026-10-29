@@ -16,6 +16,8 @@ export const general = (parlerAuMaitre: () => void): Article[] => [
     { label: '◈ Parler au maître (Alt+M)', valeur: parlerAuMaitre },
     { label: '⚿ Connexions (comptes, serveurs, outils)', valeur: '/connexions' },
     { label: '+ Nouvelle conversation', valeur: '/session' },
+    { label: '✦ Mission guidée', valeur: '/mission' },
+    { label: '■ Tout mettre en pause', valeur: '/tout-arreter' },
     { label: '◆ Équipe avec plusieurs fournisseurs', valeur: '/equipe-mixte' },
     { label: '⚿ Configurer les fournisseurs IA', valeur: '/fournisseurs' },
     { label: '◆ Nouvelle équipe d\'agents', valeur: '/equipe nouvelle' },

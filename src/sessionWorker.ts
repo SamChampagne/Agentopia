@@ -8,6 +8,9 @@ import type { ContexteAgent, PermissionAgent, ReponsePermission } from './provid
 import { executerClaude } from './providers/claude.js';
 import { executerCodex } from './providers/codex.js';
 import { executerPerplexity } from './providers/perplexity.js';
+import { chargerConfig } from './config.js';
+import { sauverUsage, normaliserUsage } from './utilisation.js';
+import { spawnSync } from 'node:child_process';
 
 export async function travailler(id: string, tour: string, executer?: (c: ContexteAgent) => Promise<string>): Promise<void> {
     const s = lireIntegree(id);
@@ -15,6 +18,7 @@ export async function travailler(id: string, tour: string, executer?: (c: Contex
     const dossier = dossierIntegre(id), fichier = (nom: string) => path.join(dossier, nom);
     const controller = new AbortController();
     s.pid = process.pid;
+    s.bilan = { commandes: [] };
     const sauver = () => sauverIntegree(s);
     sauver();
     let filePermission = Promise.resolve();
@@ -48,7 +52,9 @@ export async function travailler(id: string, tour: string, executer?: (c: Contex
     const arreter = () => controller.abort();
     process.once('SIGTERM', arreter); process.once('SIGINT', arreter);
     // Borne de durée pour qu'un fournisseur muet ne conserve pas un worker indéfiniment.
-    const limite = setTimeout(arreter, 60 * 60_000);
+    const minutes = Math.max(1, Math.min(180, chargerConfig().limitesAgents?.dureeMinutes || 60));
+    let delaiAtteint = false;
+    const limite = setTimeout(() => { delaiAtteint = true; arreter(); }, minutes * 60_000);
     try {
         const r = JSON.parse(fs.readFileSync(fichier('requete.json'), 'utf8'));
         if (r.tour !== tour) throw new Error('Requête périmée');
@@ -62,26 +68,42 @@ export async function travailler(id: string, tour: string, executer?: (c: Contex
         }
         ajouterMessage(id, 'user', r.prompt);
         const contexte: ContexteAgent = { session: s, prompt: r.prompt, historique: historique.slice(-20), signal: controller.signal,
-            evenement: (e) => ajouterMessage(id, e.role, e.texte, e.fichier), permission: demander,
+            evenement: (e) => {
+                ajouterMessage(id, e.role, e.texte, e.fichier);
+                if (e.commande) s.bilan!.commandes.push({ commande: e.commande.slice(0, 1000), codeSortie: e.codeSortie });
+                if (s.bilan!.commandes.length > 50) s.bilan!.commandes.shift();
+            }, permission: demander,
+            utilisation: (usage) => { s.utilisation = normaliserUsage(usage); if (s.recuUsage) sauverUsage(s.recuUsage, s.utilisation); },
             thread: (threadId) => { s.threadId = threadId; sauver(); },
         };
         const adaptateur = executer || ({ claude: executerClaude, codex: executerCodex, perplexity: executerPerplexity }[s.fournisseur]);
         s.resultat = await adaptateur(contexte);
+        s.bilan.resume = s.resultat;
         controller.signal.throwIfAborted();
         s.etat = 'attend'; s.issue = 'success';
     } catch (e) {
         s.etat = controller.signal.aborted ? 'arretee' : 'erreur';
         s.issue = controller.signal.aborted ? 'cancelled' : 'error';
-        s.erreur = controller.signal.aborted ? 'Tour interrompu. La conversation peut être reprise.' : (e as Error).message;
+        s.erreur = delaiAtteint ? `Limite de ${minutes} minutes atteinte. Config → Limites des agents, puis Reprendre.`
+            : controller.signal.aborted ? 'Tour interrompu. La conversation peut être reprise.' : (e as Error).message;
         // Retirer les jetons usuels des messages d'erreur des bibliothèques.
         s.erreur = s.erreur.replace(/(?:sk-|pplx-)[\w-]+/g, '[clé masquée]').slice(0, 3000);
         ajouterMessage(id, 'assistant', `⚠ ${s.erreur}`);
     } finally {
         clearInterval(pouls); clearTimeout(limite);
         process.off('SIGTERM', arreter); process.off('SIGINT', arreter);
-        s.permission = undefined; s.pid = undefined; sauver();
-        fs.rmSync(fichier('requete.json'), { force: true });
-        fs.rmSync(fichier('verrou'), { force: true });
+        s.permission = undefined; s.pid = undefined;
+        if (s.fournisseur !== 'perplexity') {
+            const r = spawnSync('git', ['status', '--short'], { cwd: s.cwd, windowsHide: true, encoding: 'utf8', timeout: 5000 });
+            if (r.status === 0) s.bilan!.fichiers = r.stdout.trim() || 'Dossier propre (les changements peuvent déjà être commités).';
+        }
+        try {
+            try { if (s.recuUsage) sauverUsage(s.recuUsage, s.utilisation ?? {}, s.issue ?? 'error'); }
+            finally { sauver(); }
+        } finally {
+            fs.rmSync(fichier('requete.json'), { force: true });
+            fs.rmSync(fichier('verrou'), { force: true });
+        }
     }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -4,6 +4,8 @@ Poste de pilotage pour travailler avec Claude, Codex, Perplexity et des **équip
 
 **Sessions intégrées Claude, Codex et Perplexity** : `+ Session` ou `/session`, configuration via `/fournisseurs`, collaboration via `/equipe-mixte`. [Connexion, utilisation et limites](docs/sessions-multi-agents.md).
 
+**Version 1.1** : dans un projet, **Mission** guide les parcours Corriger un bug, Ajouter une fonction et Analyser. Les équipes lancées et les tâches planifiées sont pilotées par un moteur indépendant de la fenêtre. **Config → Moteur des équipes** permet la pause globale ; **Utilisation des agents** et **Limites des agents** affichent les données disponibles et les limites réglables. Les écrans existants sont conservés.
+
 Lancer **Agentopia.bat** (ou le raccourci **Agentopia**). L’ancien lanceur `Claudetopia.bat` reste compatible. Les fichiers `.claudetopia*`, les historiques et les clés existants sont conservés ; seule l’ancienne bannière par défaut devient **AGENTOPIA**. Le dépôt GitHub garde pour l’instant son adresse `SamChampagne/ClaudeTopia`.
 
 ## Installation Windows
@@ -133,7 +135,10 @@ Si Claude Code n'est pas installé ou pas connecté, la zone du maître le dit :
 | **⎘ Copier** | le dernier bloc de code de Claude (bouton de la conversation, clic droit) |
 | **glisser un fichier** | dans la fenêtre : pièce jointe du message |
 | **`/cout`, `/budget`** | coût du jour en équivalent API (barre du bas), alerte au-delà d'un budget |
-| **`/planifier`** | une session chaque jour à heure fixe (tant que Agentopia est ouvert) |
+| **`/planifier`** | un agent chaque jour à heure fixe, via le moteur en arrière-plan |
+| **`/mission`** | corriger, développer ou analyser avec l’agent de code choisi |
+| **`/tout-arreter`, `/moteur`** | pause globale persistante ; état et reprise du moteur |
+| **`/utilisation`, `/limites-agents`** | tours, jetons et coûts renseignés ; limites de tours et de durée |
 | **`/pr-corriger`, `/ci-reparer`** | GitHub : corriger les commentaires d'une PR, réparer un pipeline en échec |
 | **`/surveiller-logs`** | notification à chaque erreur dans les logs d'un conteneur ; analyse par Claude |
 | **`/exporter`, `/importer`** | emporter sa configuration sur un autre poste (sans aucun secret) |

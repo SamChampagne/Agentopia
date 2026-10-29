@@ -31,7 +31,11 @@ export async function executerPerplexity(c: ContexteAgent, requete: typeof fetch
     });
     if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'Clé Perplexity refusée · /fournisseurs'
         : r.status === 429 ? 'Limite Perplexity atteinte. Réessaie plus tard.' : `Perplexity : erreur HTTP ${r.status}`);
-    const texte = decoderPerplexity(await r.json());
+    const reponse: any = await r.json();
+    if (reponse.usage) c.utilisation?.({ entree: reponse.usage.input_tokens, sortie: reponse.usage.output_tokens,
+        cache: reponse.usage.input_tokens_details?.cached_tokens,
+        coutUSD: reponse.usage.cost?.currency === 'USD' ? reponse.usage.cost.total_cost : undefined });
+    const texte = decoderPerplexity(reponse);
     c.evenement({ role: 'assistant', texte });
     return texte;
 }

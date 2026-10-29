@@ -16,6 +16,11 @@ export function actionsSession(s: SessionVue): ActionSession[] {
         { label: '← Retour', action: 'fermer', aide: 'Revenir au cockpit. Le tour continue en arrière-plan.' },
         ...(s.permission ? [{ label: '! Répondre à l’agent', action: 'autorisation', aide: s.permission.titre }] : []),
         ...(['travaille', 'bloquee'].includes(s.statut) ? [{ label: '■ Interrompre', action: 'interrompre', aide: 'Arrêter le tour. La conversation et les fichiers sont conservés.' }] : []),
+        ...(!['travaille', 'bloquee'].includes(s.statut) && ['error', 'cancelled'].includes(s.issue ?? '') ? [
+            { label: '↻ Reprendre', action: 'reprendre-agent', aide: 'Vérifier la connexion et relancer la dernière demande avec l’historique.' },
+            { label: '⚿ Reconnecter', action: 'reconnecter', aide: 'Réparer la connexion du fournisseur, puis reprendre la demande.' },
+        ] : []),
+        ...(!['travaille', 'bloquee'].includes(s.statut) ? [{ label: '≡ Bilan', action: 'bilan', aide: 'Résultat, commandes observées, état Git et coût disponible.' }] : []),
         ...(s.issue === 'success' && s.resultat ? [{ label: '⇄ Passer à un agent', action: 'transmettre', aide: 'Transmettre la réponse et ses sources à Claude, Codex ou Perplexity.' }] : []),
         { label: '⎘ Copier la réponse', action: 'copier-reponse', aide: 'Copier la dernière réponse.' },
         ...(s.fournisseur !== 'perplexity' ? [{ label: '± Changements', action: 'changements', aide: 'Voir les fichiers modifiés dans cette session.' }] : []),
@@ -31,8 +36,8 @@ export function actionsSession(s: SessionVue): ActionSession[] {
         { label: '± Changements', action: 'changements', aide: 'Les fichiers que cette session a modifiés et leur diff, prêts à commiter.' },
         { label: '⎘ Copier le code', action: 'copier-code', aide: 'Copier le dernier bloc de code de Claude dans le presse-papiers.' },
         { label: '⎘ Copier la réponse', action: 'copier-reponse', aide: 'Copier la dernière réponse de Claude dans le presse-papiers.' },
-        { label: '⌕ Revue du diff', action: 'revue', aide: 'Faire relire par Claude les changements non commités du projet.' },
-        { label: '✓ Commit', action: 'commit', aide: 'Commiter les changements avec un message écrit par Claude.' },
+        { label: '⌕ Revue du diff', action: 'revue', aide: 'Faire relire les changements par l’agent choisi.' },
+        { label: '✓ Commit', action: 'commit', aide: 'Commiter les changements avec un message écrit par l’agent choisi.' },
         { label: '◧ VS Code', action: 'code', aide: 'Ouvrir le dossier du projet dans VS Code.' },
         { label: '▤ Dossier', action: 'dossier', aide: 'Ouvrir le dossier du projet dans l’explorateur Windows.' },
         ...(terminaux().length ? [{ label: '❯ Terminal', action: 'terminal', aide: 'Ouvrir un terminal dans le dossier du projet.' }] : []),
@@ -42,6 +47,8 @@ export function actionsSession(s: SessionVue): ActionSession[] {
 }
 
 export function commandeSession(action: string, s: SessionVue): string | undefined {
+    if (s.integree && action === 'reconnecter') return `/fournisseurs ${s.fournisseur}`;
+    if (s.integree && ['reprendre-agent', 'bilan'].includes(action)) return `/${action} ${s.sessionId}`;
     if (['autorisation', 'interrompre', 'transmettre'].includes(action) && s.integree) return `/${action} ${s.sessionId}`;
     if (action === 'copier-reponse') return `/copier-reponse ${s.sessionId}`;
     if (action === 'dossier') return `/ouvrir ${citerArgument(s.cwd)}`;

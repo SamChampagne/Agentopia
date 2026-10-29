@@ -24,11 +24,21 @@ L’apparition automatique des threads créés ici dans l’application Codex n�
 
 Les agents distincts n’ont pas automatiquement accès aux conversations des autres. **Passer à un agent** et les dépendances d’une **équipe mixte** transmettent explicitement les résultats. Deux agents de code peuvent voir les mêmes fichiers lorsqu’ils travaillent dans le même dossier ; les équipes utilisent des worktrees distincts.
 
-Le **maître** utilise le fournisseur choisi dans Config ou un choix automatique parmi les outils configurés. Il ne génère rien au démarrage. Il peut proposer un plan mixte de 1 à 8 tâches, validé avant création/lancement. Les revues/commits assistés, la planification native et les outils de coût Claude CLI restent spécifiques à Claude. Le compte Claude CLI et la clé API Claude intégré sont deux connexions distinctes.
+Le **maître** utilise le fournisseur choisi dans Config ou un choix automatique parmi les outils configurés. Il ne génère rien au démarrage. Il peut proposer un plan mixte de 1 à 8 tâches, validé avant création/lancement. Les revues et messages de commit utilisent le fournisseur choisi ; les corrections de PR/CI utilisent l’agent de code choisi. Les nouvelles tâches planifiées enregistrent également leur fournisseur. Les anciennes planifications sans fournisseur restent explicitement Claude CLI, sans migration implicite vers une API payante. Le compte Claude CLI et la clé API Claude intégré sont deux connexions distinctes.
 
 Références : [stockage local sous Windows](https://learn.chatgpt.com/docs/app/windows#share-config-auth-and-sessions-with-wsl), [historique et filtres app-server](https://learn.chatgpt.com/docs/app-server#list-threads-with-pagination--filters).
 
-Les tours tournent dans des processus séparés de l’interface. L’historique et l’identifiant de conversation du fournisseur sont conservés pour les messages suivants. Les tâches trop longues sont interrompues après une heure ; une recherche Perplexity est limitée à trois minutes. Le budget et le coût des sessions intégrées ne sont pas encore agrégés dans le tableau des coûts Claude CLI.
+Les tours tournent dans des processus séparés de l’interface. L’historique et l’identifiant de conversation du fournisseur sont conservés pour les messages suivants. Leur durée maximale est réglable (60 minutes par défaut, 1 à 180 minutes). Les conseils courts gardent leur plafond de deux minutes ; Perplexity garde son plafond de trois minutes, même si la limite globale est plus élevée.
+
+## Missions, résultats et utilisation
+
+Dans le détail d’un projet, **Mission** propose **Corriger un bug**, **Ajouter une fonction** ou **Analyser le projet**. Le projet ouvert est prérempli. L’agent par défaut est utilisé s’il peut travailler sur le code ; sinon le seul agent de code prêt est proposé automatiquement, ou un choix est demandé. La connexion est vérifiée avant lancement. L’analyse crée une conversation en lecture seule (sandbox Codex ; outils Read/Glob/Grep et mode plan Claude). Les parcours sont aussi accessibles par `/corriger`, `/fonction` et `/analyser`.
+
+Après une erreur ou un arrêt, **Reprendre** renvoie la dernière demande avec l’historique ; **Reconnecter** ouvre la configuration du fournisseur. Un tour partiellement exécuté peut avoir déjà modifié des fichiers : la reprise est une nouvelle demande, pas une annulation des changements. **Bilan** montre le résumé de l’agent, les 50 dernières commandes observées et leurs codes de sortie lorsqu’ils sont fournis, l’état Git final et l’utilisation du dernier tour. Un résumé du modèle ou un dossier Git propre ne prouve pas que les tests ont réussi. Les anciennes sessions peuvent ne pas disposer de ces données.
+
+**Config → Utilisation des agents** (`/utilisation`) rassemble les tours démarrés aujourd’hui, leurs jetons et les coûts USD rapportés. Un coût absent est indiqué **indisponible**, jamais zéro. Claude et Codex transmettent des compteurs cumulatifs : seule la différence avec la référence précédente est retenue. Un ancien historique repris sans référence peut avoir un premier tour incomplet. Les estimations du fournisseur ne sont pas une facture ; Codex n’est pas converti artificiellement en dollars. Le tableau `/cout` reste dédié à Claude CLI.
+
+**Config → Limites des agents** (`/limites-agents`) règle le nombre maximal de tours démarrés par jour, partagé entre sessions intégrées et conseils, et la durée maximale d’un tour. Zéro tour signifie sans limite. Une réservation est enregistrée avant lancement, donc un démarrage échoué compte aussi. La limite de durée s’applique aux nouveaux tours ; les anciens conservent la leur. Ces limites ne contrôlent pas les sessions natives Claude CLI et ne constituent pas un plafond de facturation en dollars.
 
 ## Équipes
 
@@ -41,7 +51,11 @@ Le plan est enregistré avant tout appel. Ouvrir l’équipe, vérifier les miss
 
 Les résultats et sources des dépendances sont transmis au prochain agent ; leurs branches sont fusionnées dans son worktree avant son lancement. Un conflit Git bloque la tâche. Une tâche n’est marquée terminée qu’après un succès explicite du fournisseur, un résumé non vide et, pour le code, un worktree propre. Cela ne constitue pas une preuve que les tests métier sont suffisants : lire les résultats et les diffs avant intégration.
 
-Garder au moins une fenêtre Agentopia ouverte pour que l’ordonnanceur lance les tâches suivantes. Les tours déjà démarrés continuent si l’interface ferme. **Intégrer** lance un agent dans le checkout principal après vérification qu’il est propre. Il fusionne les branches retenues et exécute les vérifications demandées. Aucun push automatique.
+Un moteur détaché unique par dossier de données lance les tâches suivantes, même après fermeture des fenêtres. Il retrouve les workers en cours après son redémarrage. Les réservations empêchent de rejouer une même tentative ; un lancement interrompu ou ambigu demande une vérification/reprise explicite. La création d’un plan Claude CLI reste liée à la fenêtre jusqu’à l’enregistrement du plan. **Intégrer** lance un agent dans le checkout principal après vérification qu’il est propre. Il fusionne les branches retenues et exécute les vérifications demandées. Aucun push automatique.
+
+**Config → Moteur des équipes** (`/moteur`) affiche son état. `/tout-arreter` enregistre une pause persistante et demande l’interruption des équipes, des agents intégrés et des sessions natives en arrière-plan ; les onglets CLI interactifs restent indépendants. La pause bloque également les nouveaux tours intégrés et conseils. Reprendre le moteur ne relance pas les équipes arrêtées : utiliser **Lancer** sur leur carte. Les permissions attendent toujours une réponse explicite. Les changements déjà effectués sont conservés.
+
+Le PC doit rester allumé. Aucun service de démarrage Windows n’est installé : après un redémarrage du poste, ouvrir Agentopia redémarre le moteur. Les tâches planifiées manquées sont rattrapées le même jour, avec une réservation préalable pour empêcher une double exécution automatique. Une erreur ou un crash laisse une trace consultable dans `/planifications` ; un nouvel essai manuel reste possible. Un processus de session disparu est signalé après deux minutes sans activité, jamais déclaré réussi.
 
 Archiver conserve les transcripts et les worktrees ; leur nettoyage automatique n’est pas implémenté. Les sessions, réservations et worktrees sont dans `~/.claudetopia-agents/`. La configuration et les clés restent dans les fichiers Agentopia habituels. `CLAUDETOPIA_DATA_DIR` permet un répertoire de données indépendant, notamment pour les tests.
 
@@ -66,6 +80,7 @@ Les étapes de compilation ci-dessus concernent les installations depuis les sou
 ## Vérifications
 
 ```powershell
+npm run test:ci
 npm run test:agents
 npm run check:tui
 bun tui/test-agents.tsx
@@ -75,6 +90,8 @@ node test-codex-protocole.mjs
 ```
 
 Les tests d’agents utilisent des transports simulés et un dépôt Git temporaire. Ils couvrent états, permissions, interruptions, erreurs, verrouillage, protocoles, sources, dépendances et isolation des branches. Le dernier diagnostic parle au vrai app-server Codex sans créer de conversation ni appeler de modèle. Aucun de ces tests ne valide une exécution payante chez Claude ou Perplexity.
+
+La suite `test:ci` comprend aussi un moteur et des workers dans des processus séparés : unicité, arrêt brutal, reprise, dépendances sans doublon et pause persistante. Les tests d’utilisation couvrent les compteurs cumulés, le coût absent, les limites, les bilans et les réservations de planification. Les tests TUI vérifient les parcours clavier existants et la mission guidée. Le workflow `.github/workflows/validation.yml` lance cette suite sous Windows à chaque push/PR ; il ne publie aucun paquet et n’appelle aucun modèle.
 
 Références : [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview), [Codex app-server](https://learn.chatgpt.com/docs/app-server), [Perplexity Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart).
 

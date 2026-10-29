@@ -14,6 +14,8 @@ import { validerDependances } from './equipePlan.js';
 import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
 import { disponibilite } from './providers/config.js';
 import { RACINE_SESSIONS, creerIntegree, envoyerIntegree, lireIntegree, ecrireAtomique } from './sessionsIntegrees.js';
+import { commanderMoteur, localAuMoteur } from './moteurClient.js';
+import { sousVerrou } from './verrou.js';
 
 // Équipe d'agents sur un projet :
 //   1. un chef d'équipe (claude -p, lecture seule) découpe l'objectif en tâches, chacune avec un rôle métier
@@ -97,6 +99,8 @@ export interface Equipe {
 
 export const equipes = new EventEmitter();
 let liste: Equipe[] = charger();
+let empreintes = new Map(liste.map((e) => [e.id, JSON.stringify(e)]));
+export function rechargerEquipes(): void { liste = charger(); empreintes = new Map(liste.map((e) => [e.id, JSON.stringify(e)])); }
 
 function charger(): Equipe[] {
     try {
@@ -108,12 +112,17 @@ function charger(): Equipe[] {
 
 let ecrit = '';
 function sauver(): void {
-    try {
+    sousVerrou(`${CHEMINS.equipes}.verrou`, () => {
+        // L'interface peut créer un plan pendant que le moteur suit une autre équipe.
+        // Écrire seulement nos équipes modifiées conserve celles ajoutées ailleurs.
+        const disque = new Map(charger().map((e) => [e.id, e]));
+        for (const e of liste) if (JSON.stringify(e) !== empreintes.get(e.id)) disque.set(e.id, e);
+        const locales = new Map(liste.map((e) => [e.id, e]));
+        liste = [...disque.values()].map((e) => JSON.stringify(e) === JSON.stringify(locales.get(e.id)) ? locales.get(e.id)! : e);
         ecrit = JSON.stringify(liste, null, 2);
         ecrireAtomique(CHEMINS.equipes, liste);
-    } catch {
-        // disque plein, fichier verrouillé : l'état reste en mémoire
-    }
+        empreintes = new Map(liste.map((e) => [e.id, JSON.stringify(e)]));
+    });
     equipes.emit('maj');
 }
 
@@ -130,6 +139,7 @@ export function suivreFichierEquipes(): void {
                 contenu = fs.readFileSync(CHEMINS.equipes, 'utf-8');
                 if (contenu === ecrit) return;
                 liste = JSON.parse(contenu);
+                empreintes = new Map(liste.map((e) => [e.id, JSON.stringify(e)]));
                 ecrit = contenu;
                 equipes.emit('maj');
             } catch {
@@ -262,9 +272,12 @@ export async function planifier(e: Equipe): Promise<void> {
 
 // ─── Exécution ───────────────────────────────────────────────────────────────
 
-export function lancerEquipe(id: string): string | undefined {
+export async function lancerEquipe(id: string): Promise<string | undefined> {
+    if (!localAuMoteur()) return commanderMoteur('lancer', id);
     const e = equipeDe(id);
     if (!e) return 'équipe introuvable';
+    if (e.etat === 'en cours') return undefined;
+    if (e.etat === 'integration') return 'L’intégration est déjà en cours';
     try { validerDependances(e.taches); } catch (err) { return (err as Error).message; }
     if (e.mixte) {
         for (const f of new Set(e.taches.map((t) => t.fournisseur!))) {
@@ -316,6 +329,9 @@ Termine par un résumé : branches fusionnées, conflits résolus, état de la c
 }
 
 const enLancement = new Set<Tache>();
+const lancements = new Set<Promise<void>>();
+export async function attendreLancements(): Promise<void> { await Promise.allSettled([...lancements]); }
+function suivreLancement(p: Promise<void>): void { lancements.add(p); void p.finally(() => lancements.delete(p)).catch(() => {}); }
 
 async function demarrer(e: Equipe, t: Tache, dansWorktree: boolean, envoyer = envoyerIntegree): Promise<void> {
     if (t.fournisseur) return demarrerMixte(e, t, dansWorktree, envoyer);
@@ -323,22 +339,22 @@ async function demarrer(e: Equipe, t: Tache, dansWorktree: boolean, envoyer = en
     t.etat = 'en cours';
     t.debut = Date.now();
     t.vuTravailler = false;
-    sauver();
-    const r = role(t.role);
-    const { id, sortie } = await lancerArrierePlan(
-        e.projet,
-        `${e.nomProjet} · ${t.titre}`.slice(0, 60),
-        dansWorktree ? consigneTache(e, t) : consigneIntegration(e),
-        undefined,
-        { worktree: dansWorktree ? `equipe-${e.id}-${t.id}` : undefined, role: r.consigne, permissions: chargerConfig().equipe?.permissions || undefined },
-    );
-    enLancement.delete(t);
-    if (id) t.agentId = id;
-    else {
+    try {
+        sauver();
+        const r = role(t.role);
+        const { id, sortie } = await lancerArrierePlan(
+            e.projet,
+            `${e.nomProjet} · ${t.titre}`.slice(0, 60),
+            dansWorktree ? consigneTache(e, t) : consigneIntegration(e),
+            undefined,
+            { worktree: dansWorktree ? `equipe-${e.id}-${t.id}` : undefined, role: r.consigne, permissions: chargerConfig().equipe?.permissions || undefined },
+        );
+        if (!id) throw new Error(sortie.split('\n').find(Boolean) ?? 'La session n’a pas démarré');
+        t.agentId = id;
+    } catch (err) {
         t.etat = 'erreur';
-        t.resultat = sortie.split('\n').find(Boolean) ?? 'la session n\'a pas démarré';
-    }
-    sauver();
+        t.resultat = (err as Error).message;
+    } finally { enLancement.delete(t); sauver(); }
 }
 
 function gitVerifie(args: string[], cwd: string): string {
@@ -468,7 +484,7 @@ export function avancerEquipes(agents: SessionVue[], services = { envoyer: envoy
             for (const t of e.taches.filter(prete)) {
                 if (actives >= parallele) break;
                 actives++;
-                void demarrer(e, t, true, services.envoyer);
+                suivreLancement(demarrer(e, t, true, services.envoyer));
             }
             if (e.taches.every((t) => t.etat === 'faite')) {
                 e.etat = 'prete';
@@ -501,8 +517,11 @@ export function modifsLocales(e: Equipe): number {
 }
 
 export async function integrer(id: string): Promise<string | undefined> {
+    if (!localAuMoteur()) return commanderMoteur('integrer', id);
     const e = equipeDe(id);
     if (!e) return 'équipe introuvable';
+    if (e.etat === 'integration') return 'L’intégration est déjà en cours';
+    if (e.etat === 'finie') return 'Cette équipe est déjà intégrée';
     if (modifsLocales(e)) return 'Le dossier du projet contient des modifications non commitées : range-les avant l’intégration';
     if (e.mixte && e.taches.some((t) => !t.ecartee && t.etat !== 'faite')) return 'Attends la fin des tâches ou écarte celles qui ont échoué avant d’intégrer';
     if (!e.taches.some((t) => t.branche && !t.ecartee)) return 'aucune branche à fusionner (toutes écartées ?)';
@@ -515,6 +534,7 @@ export async function integrer(id: string): Promise<string | undefined> {
 }
 
 export async function arreterEquipe(id: string): Promise<void> {
+    if (!localAuMoteur()) return commanderMoteur('arreter', id);
     const e = equipeDe(id);
     if (!e) return;
     const actives = [...e.taches, ...(e.integrateur ? [e.integrateur] : [])].filter((t) => t.agentId && (t.etat === 'en cours' || t.etat === 'bloquee'));
@@ -527,16 +547,19 @@ export async function arreterEquipe(id: string): Promise<void> {
     sauver();
 }
 
-export function relancerTache(id: string, tache: string): string | undefined {
+export async function relancerTache(id: string, tache: string): Promise<string | undefined> {
+    if (!localAuMoteur()) return commanderMoteur('relancer', id, tache);
     const e = equipeDe(id);
     const t = e?.taches.find((x) => x.id === tache);
     if (!e || !t) return 'tâche introuvable';
+    if (['en cours', 'bloquee'].includes(t.etat)) return 'Cette tâche est encore active ; interromps-la avant de la relancer';
     Object.assign(t, { etat: 'attente', agentId: undefined, sessionId: undefined, branche: undefined, cwd: undefined, resultat: undefined, vuTravailler: false, absentDepuis: undefined, tentative: randomUUID().slice(0, 8) });
     return lancerEquipe(id);
 }
 
 // Écarter une tâche (son diff ne convient pas) ou la garder de nouveau
-export function basculerEcart(id: string, tache: string): boolean {
+export async function basculerEcart(id: string, tache: string): Promise<boolean> {
+    if (!localAuMoteur()) return commanderMoteur('ecarter', id, tache);
     const t = equipeDe(id)?.taches.find((x) => x.id === tache);
     if (!t?.branche) return false;
     t.ecartee = !t.ecartee;
@@ -553,7 +576,8 @@ export function diffTache(id: string, tache: string): { resume: string; diff: st
     return { resume: lire(['diff', '--stat', `HEAD...${t.branche}`]), diff: lire(['diff', '--color=always', `HEAD...${t.branche}`]) };
 }
 
-export function retirerTache(id: string, tache: string): void {
+export async function retirerTache(id: string, tache: string): Promise<void> {
+    if (!localAuMoteur()) return commanderMoteur('retirer', id, tache);
     const e = equipeDe(id);
     if (!e || e.etat !== 'plan') return;
     e.taches = e.taches.filter((t) => t.id !== tache);
@@ -564,6 +588,7 @@ export function retirerTache(id: string, tache: string): void {
 // Range l'équipe : les sessions sont retirées (Claude supprime leur worktree quand c'est sans risque) ;
 // les branches restent dans le dépôt
 export async function terminerEquipe(id: string): Promise<void> {
+    if (!localAuMoteur()) return commanderMoteur('ranger', id);
     const e = equipeDe(id);
     if (!e) return;
     await arreterEquipe(id);

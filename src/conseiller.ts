@@ -1,12 +1,14 @@
 import * as fs from 'node:fs';
 import { CHEMINS, surPath } from './chemins.js';
-import type { Config } from './config.js';
+import { chargerConfig, type Config } from './config.js';
 import { disponibilite } from './providers/config.js';
 import { FOURNISSEURS, type Fournisseur, type ContexteAgent } from './providers/types.js';
 import { executerClaude } from './providers/claude.js';
 import { executerCodex } from './providers/codex.js';
 import { executerPerplexity } from './providers/perplexity.js';
 import { validerDependances } from './equipePlan.js';
+import { commencerUsage, sauverUsage } from './utilisation.js';
+import type { Utilisation } from './providers/types.js';
 
 export type FournisseurMaitre = Fournisseur | 'claude-cli';
 export function fournisseurMaitre(config: Config, disponible = (f: FournisseurMaitre) => f === 'claude-cli' ? !!surPath('claude') : disponibilite(f).pret): FournisseurMaitre | undefined {
@@ -19,14 +21,18 @@ export function fournisseurMaitre(config: Config, disponible = (f: FournisseurMa
 export const nomMaitre = (f?: FournisseurMaitre) => f === 'claude-cli' ? 'Claude CLI' : f ? FOURNISSEURS[f].nom : 'à configurer';
 let controleur: AbortController | undefined;
 export function interrompreConseil() { controleur?.abort(); }
-export async function conseiller(f: Fournisseur, prompt: string, executer = { claude: executerClaude, codex: executerCodex, perplexity: executerPerplexity }[f]): Promise<{ texte?: string; erreur?: string }> {
+export async function conseiller(f: Fournisseur, prompt: string, executer = { claude: executerClaude, codex: executerCodex, perplexity: executerPerplexity }[f], options: { cwd?: string } = {}): Promise<{ texte?: string; erreur?: string }> {
     fs.mkdirSync(CHEMINS.maitre, { recursive: true });
     controleur = new AbortController();
-    const signal = AbortSignal.any([controleur.signal, AbortSignal.timeout(120_000)]);
-    const contexte: ContexteAgent = { session: { id: 'maitre', fournisseur: f, cwd: CHEMINS.maitre, titre: 'Maître', creee: Date.now(), maj: Date.now(), tour: '', etat: 'travaille' },
+    const delai = Math.min(120_000, Math.max(1, chargerConfig().limitesAgents?.dureeMinutes || 60) * 60_000);
+    const signal = AbortSignal.any([controleur.signal, AbortSignal.timeout(delai)]);
+    let recu: string | undefined, usage: Utilisation = {};
+    const contexte: ContexteAgent = { session: { id: 'conseil', fournisseur: f, cwd: options.cwd ?? CHEMINS.maitre, titre: 'Conseil', creee: Date.now(), maj: Date.now(), tour: '', etat: 'travaille' },
+        utilisation: (u) => { usage = u; if (recu) sauverUsage(recu, usage); },
         prompt, historique: [], signal, conseil: true, evenement: () => {}, thread: () => {}, permission: async () => ({ accepte: false }) };
-    try { return { texte: await executer(contexte) }; }
-    catch (e) { return { erreur: `${nomMaitre(f)} : ${(e as Error).message.replace(/(?:sk-|pplx-)[\w-]+/g, '[clé masquée]').slice(0, 400)}` }; }
+    try { recu = commencerUsage('conseil', f); const texte = await executer(contexte); sauverUsage(recu, usage, 'success'); return { texte }; }
+    catch (e) { try { if (recu) sauverUsage(recu, usage, 'error'); } catch { /* Garder l'erreur initiale ; reçu incomplet visible. */ }
+        return { erreur: `${nomMaitre(f)} : ${(e as Error).message.replace(/(?:sk-|pplx-)[\w-]+/g, '[clé masquée]').slice(0, 400)}` }; }
     finally { controleur = undefined; }
 }
 
@@ -60,6 +66,6 @@ export async function proposerPlan(plan?: PlanMaitre): Promise<void> {
     }
     const { creerEquipeMixte, lancerEquipe } = await import('./equipe.js');
     const equipe = creerEquipeMixte(candidats[0], plan.objectif, plan.taches);
-    if (action === 'lancer') { const erreur = lancerEquipe(equipe.id); if (erreur) throw new Error(erreur); }
+    if (action === 'lancer') { const erreur = await lancerEquipe(equipe.id); if (erreur) throw new Error(erreur); }
     bus.emit('lancer', `/equipe ${equipe.id}`);
 }

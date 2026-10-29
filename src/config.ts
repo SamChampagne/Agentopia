@@ -20,6 +20,7 @@ export interface Config {
     prenom: string;                     // pour le "Bonjour" (sinon : git user.name / user.email)
     lancement: 'fond' | 'onglet';       // où /claude-cli ouvre les sessions natives
     fournisseurDefaut?: Fournisseur | 'choisir'; // nouvelles conversations intégrées
+    limitesAgents?: { toursJour: number; dureeMinutes: number };
     dockerDistant: string[];            // serveurs SSH dont on surveille aussi les conteneurs Docker
     largeurLaterale: number;            // largeur de la colonne de gauche (0 = automatique)
     fetchAuto: boolean;                 // git fetch de tous les dépôts toutes les 5 min, en fond
@@ -99,7 +100,11 @@ export function chargerConfig(): Config {
 }
 
 export function sauverConfig(config: Config): void {
-    fs.writeFileSync(CHEMIN_CONFIG, JSON.stringify(config, null, 2), 'utf-8');
+    const temporaire = `${CHEMIN_CONFIG}.${process.pid}.${crypto.randomUUID()}.tmp`;
+    try {
+        fs.writeFileSync(temporaire, JSON.stringify(config, null, 2), 'utf-8');
+        fs.renameSync(temporaire, CHEMIN_CONFIG);
+    } finally { fs.rmSync(temporaire, { force: true }); }
 }
 
 export function chargerHistorique(): string[] {

@@ -34,6 +34,13 @@ try {
     root.render(<App quitter={() => {}} />); await dessiner();
     assert.match(ui.captureCharFrame(), /AGENTOPIA/);
     assert.doesNotMatch(ui.captureCharFrame(), /CLAUDETOPIA/);
+    const mission = COMMANDES.find((c: any) => c.nom === 'mission')!.executer({ args: [], reste: '', apresProjet: '', projet: { nom: 'Fixture', chemin: dossier } as any });
+    const missionAnnulee = Promise.resolve(mission).catch((e) => { assert.equal(e.constructor.name, 'Annule'); });
+    await dessiner();
+    assert.match(ui.captureCharFrame(), /Corriger un bug/);
+    assert.match(ui.captureCharFrame(), /Ajouter une fonction/);
+    assert.match(ui.captureCharFrame(), /Analyser le projet/);
+    ui.mockInput.pressEscape(); await dessiner(); await missionAnnulee;
     // Le choix du fournisseur se fait dans l'interface, sans ouvrir de session réelle.
     bus.emit('lancer', '/agent-defaut'); await dessiner();
     assert.match(ui.captureCharFrame(), /Agent des nouvelles conversations/);
@@ -85,6 +92,11 @@ try {
     fs.writeFileSync(CHEMINS.etat, JSON.stringify({ session: 'session-b' }));
     root.render(<App quitter={() => {}} />); await dessiner(); await dessiner();
     assert.match(ui.captureCharFrame(), /brouillon beta suite/);
+    d.agents[0].statut = 'erreur' as any; d.agents[0].issue = 'error';
+    await choisir('session-a');
+    assert.match(ui.captureCharFrame(), /Reprendre/);
+    assert.match(ui.captureCharFrame(), /Reconnecter/);
+    assert.match(ui.captureCharFrame(), /Bilan/);
     process.stdout.write('✓ TUI : deux conversations, pièces jointes isolées, recherche, vue Projets et reprise après fermeture\n');
 } finally {
     root.render(<text>fin</text>); await dessiner(); await ui.dispose();

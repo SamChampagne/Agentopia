@@ -12,6 +12,7 @@ const racine = fs.mkdtempSync(path.join(os.tmpdir(), 'claudetopia-agents-test-')
 process.env.CLAUDETOPIA_DATA_DIR = path.join(racine, 'donnees');
 process.env.ANTHROPIC_API_KEY = 'sk-fixture-only';
 process.env.PERPLEXITY_API_KEY = 'pplx-fixture-only';
+process.env.AGENTOPIA_SANS_MOTEUR = '1';
 fs.mkdirSync(process.env.CLAUDETOPIA_DATA_DIR);
 const sessions = await import('./dist/sessionsIntegrees.js');
 const { travailler } = await import('./dist/sessionWorker.js');
@@ -257,4 +258,17 @@ test('une ancienne session Claude qui attend n’est pas une tâche terminée', 
     t.fournisseur = undefined; t.etat = 'en cours'; t.agentId = 'native-fixture'; t.vuTravailler = true;
     equipe.avancerEquipes([{ id: t.agentId, statut: 'attend', sessionId: 'native', cwd: e.projet }], { envoyer() { assert.fail(); }, notifier() {} });
     assert.equal(t.etat, 'bloquee'); assert.notEqual(e.etat, 'prete'); e.archivee = true;
+});
+
+test('une double action ne relance pas une tâche active ou deux intégrateurs dans le checkout principal', async () => {
+    const e = equipe.creerEquipeMixte({ chemin: path.join(racine, 'projet'), nom: 'Doublons' }, 'Fixture', [
+        { titre: 'Code', fournisseur: 'claude', consigne: 'coder', dependances: [] },
+    ]);
+    e.etat = 'en cours'; e.taches[0].etat = 'en cours'; e.taches[0].agentId = 'agent-actif';
+    assert.match(await equipe.relancerTache(e.id, 't1'), /encore active/);
+    assert.equal(e.taches[0].agentId, 'agent-actif');
+    e.etat = 'integration';
+    assert.match(await equipe.integrer(e.id), /déjà en cours/);
+    assert.match(await equipe.lancerEquipe(e.id), /déjà en cours/);
+    e.archivee = true;
 });

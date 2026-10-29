@@ -12,8 +12,8 @@ import { toast, jouerSon } from '../notifications.js';
 import { bus } from './bus.js';
 import { mettreAJourCout, dollars } from '../cout.js';
 import { fichiersChauds } from '../modifications.js';
-import { verifierPlanifications } from '../planificateur.js';
-import { Equipe, equipes, lireEquipes, avancerEquipes, agentsDesEquipes, suivreFichierEquipes } from '../equipe.js';
+import { assurerMoteur, moteurEnPause } from '../moteurClient.js';
+import { Equipe, equipes, lireEquipes, agentsDesEquipes, suivreFichierEquipes } from '../equipe.js';
 import {
     Serveur, UsageProjet, ConnexionActive, Acces, inventaire, usageParServeur, joignable, connexionsActives, lireAcces,
 } from '../ssh.js';
@@ -155,7 +155,7 @@ async function lireAgents(): Promise<void> {
     // Le maître est un Claude comme les autres : il n'a pas de carte
     donnees.agents = (await listerAgents()).filter((a) => path.resolve(a.cwd).toLowerCase() !== DOSSIER_MAITRE && !estFermee(a.cle));
     donnees.activites = new Map(donnees.agents.map((a) => [a.sessionId, activiteDe(a.fichier)]));
-    avancerEquipes(donnees.agents);
+    if (!moteurEnPause() && process.env.CLAUDETOPIA_TEST_UI !== '1') void assurerMoteur().catch((e) => bus.emit('notice', (e as Error).message));
     donnees.equipes = lireEquipes();
     signalerChangements(avant);
     signalerConflits();
@@ -211,8 +211,6 @@ export function demarrerCollecte(): void {
         donnees.joignables = new Map(donnees.serveurs.map((s, i) => [s, etats[i]]));
     }, 60_000);
     boucle(async () => { donnees.connexions = await connexionsActives(); }, 15_000);
-    // Tâches planifiées : vérifiées toutes les minutes
-    setTimeout(() => boucle(() => verifierPlanifications(), 60_000), 15_000);
     // Coût du jour (équivalent API) et alerte de budget, une fois par jour
     let alerteBudget = '';
     setTimeout(() => boucle(async () => {

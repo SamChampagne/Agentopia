@@ -1,5 +1,6 @@
 import { commandesAssistant } from './assistantCommandes.js';
 import { commandesSessions } from './sessionsCommandes.js';
+import { commandesMissions } from './missions.js';
 import { estIntegree } from './sessionsIntegrees.js';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -277,7 +278,8 @@ async function menu(projetChoisi?: Projet): Promise<void> {
         { label: '↺ Historique des agents intégrés', valeur: 'historique-agents' },
         { label: '↺ Reprendre une session Claude CLI', valeur: 'sessions' },
         { label: '» Continuer la dernière session Claude CLI', valeur: 'reprendre' },
-        { label: '⌕ Revue du diff par Claude', valeur: 'revue' },
+        { label: '✦ Mission guidée : corriger, développer, analyser', valeur: 'mission' },
+        { label: '⌕ Revue du diff par un agent', valeur: 'revue' },
         { label: '✓ Commit avec message IA', valeur: 'commit' },
         { label: '⎇ Nouvelle branche (worktree)', valeur: 'branche' },
         { label: '− Nettoyer les worktrees', valeur: 'nettoyer' },
@@ -769,12 +771,12 @@ export const COMMANDES: Commande[] = [
     },
     {
         nom: 'commit', projet: true, args: '[projet]', groupe: 'Git',
-        description: 'Commit avec un message écrit par Claude',
+        description: 'Commit avec un message écrit par l’agent choisi',
         executer: ({ projet }) => commit(projet!),
     },
     {
         nom: 'revue', alias: ['review'], projet: true, args: '[projet]', groupe: 'Git',
-        description: 'Claude relit le diff avant commit',
+        description: 'L’agent choisi relit le diff avant commit',
         executer: ({ projet }) => revue(projet!),
     },
     {
@@ -957,6 +959,7 @@ export const COMMANDES: Commande[] = [
     ...commandesSsh(config),
     ...commandesConnexions(),
     ...commandesSessions(config),
+    ...commandesMissions(config),
     ...commandesPlus(config),
     ...commandesPrCi(),
     ...commandesTicket(getProjets),

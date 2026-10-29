@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { binaireCodex } from './config.js';
 import type { ContexteAgent } from './types.js';
+import { normaliserUsage } from '../utilisation.js';
 
 // Une connexion app-server par tour. Le thread persistant de Codex porte l'historique.
 // Le transport injectable permet de vérifier le protocole sans appel à un modèle.
@@ -18,6 +19,8 @@ export async function executerCodex(c: ContexteAgent, transport?: ChildProcessWi
     void fin.catch(() => {});
     const textes = new Map<string, string>();
     let resultat = '';
+    let tourLance = false;
+    let avant = c.session.threadId ? c.session.compteursCodex : { entree: 0, sortie: 0, cache: 0 };
     const envoyer = (objet: unknown) => { if (!proc.stdin.destroyed) proc.stdin.write(JSON.stringify(objet) + '\n'); };
     const requete = (method: string, params: unknown) => new Promise<any>((ok, ko) => {
         const id = ++seq;
@@ -60,6 +63,19 @@ export async function executerCodex(c: ContexteAgent, transport?: ChildProcessWi
         }
         const p = m.params || {};
         if (m.method === 'item/agentMessage/delta') textes.set(p.itemId, (textes.get(p.itemId) || '') + p.delta);
+        if (m.method === 'thread/tokenUsage/updated' && p.tokenUsage?.total) {
+            const u = p.tokenUsage.total;
+            const total = normaliserUsage({ entree: u.inputTokens, sortie: u.outputTokens, cache: u.cachedInputTokens });
+            if (!tourLance) avant = total; // historique rejoué lors de resume/fork
+            else {
+                const delta: typeof total = {};
+                for (const cle of ['entree', 'sortie', 'cache'] as const) {
+                    if (avant?.[cle] !== undefined && total[cle] !== undefined && total[cle]! >= avant[cle]!) delta[cle] = total[cle]! - avant[cle]!;
+                }
+                c.utilisation?.(delta);
+            }
+            c.session.compteursCodex = total;
+        }
         if (m.method === 'item/completed') {
             const item = p.item || {};
             if (item.type === 'agentMessage') {
@@ -67,7 +83,7 @@ export async function executerCodex(c: ContexteAgent, transport?: ChildProcessWi
                 if (texte) { c.evenement({ role: 'assistant', texte }); resultat = texte; }
                 textes.delete(item.id);
             }
-            if (item.type === 'commandExecution') c.evenement({ role: 'outil', texte: item.command || 'Commande Codex' });
+            if (item.type === 'commandExecution') c.evenement({ role: 'outil', texte: item.command || 'Commande Codex', commande: item.command, codeSortie: typeof item.exitCode === 'number' ? item.exitCode : undefined });
             if (item.type === 'fileChange') for (const f of item.changes || []) c.evenement({ role: 'outil', texte: 'Edit', fichier: f.path });
         }
         if (m.method === 'turn/completed') {
@@ -77,11 +93,11 @@ export async function executerCodex(c: ContexteAgent, transport?: ChildProcessWi
     });
     try {
         if (c.signal.aborted) throw new Error('Tour interrompu');
-        await requete('initialize', { clientInfo: { name: 'agentopia', title: 'Agentopia', version: '1.0.0' }, capabilities: { experimentalApi: true } });
+        await requete('initialize', { clientInfo: { name: 'agentopia', title: 'Agentopia', version: '1.1.0' }, capabilities: { experimentalApi: true } });
         envoyer({ method: 'initialized' });
         const params = { cwd: c.session.cwd, model: c.session.modele,
-            approvalPolicy: c.conseil ? 'never' : 'on-request', sandbox: c.conseil ? 'read-only' : 'workspace-write', approvalsReviewer: 'user',
-            ...(c.conseil ? { ephemeral: true, developerInstructions: 'Propose uniquement un plan JSON. Ne lance aucun outil. Les actions seront validées et exécutées par Agentopia.' } : {}) };
+            approvalPolicy: c.conseil || c.session.lectureSeule ? 'never' : 'on-request', sandbox: c.conseil || c.session.lectureSeule ? 'read-only' : 'workspace-write', approvalsReviewer: 'user',
+            ...(c.conseil ? { ephemeral: true, developerInstructions: 'Réponds uniquement au format demandé, à partir du contexte fourni. Ne lance aucun outil. Les actions seront validées et exécutées par Agentopia.' } : {}) };
         const copier = c.session.origine?.copieAuProchainMessage && c.session.threadId === c.session.origine.threadId;
         const r = copier
             ? await requete('thread/fork', { ...params, threadId: c.session.threadId, excludeTurns: true })
@@ -91,6 +107,7 @@ export async function executerCodex(c: ContexteAgent, transport?: ChildProcessWi
         const threadId = r.thread?.id;
         if (!threadId) throw new Error('Codex ne fournit pas d’identifiant de conversation');
         c.thread(threadId);
+        tourLance = true;
         await requete('turn/start', { threadId, input: [{ type: 'text', text: c.prompt }] });
         await fin;
         return resultat;

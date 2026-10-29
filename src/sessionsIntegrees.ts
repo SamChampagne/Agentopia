@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { surPath } from './chemins.js';
 import { disponibilite } from './providers/config.js';
+import { commencerUsage, sauverUsage } from './utilisation.js';
 import type { Fournisseur, SessionIntegree, ReponsePermission } from './providers/types.js';
 
 export const RACINE_SESSIONS = path.resolve(process.env.CLAUDETOPIA_DATA_DIR || path.join(os.homedir(), '.claudetopia-agents'));
@@ -40,6 +41,7 @@ export function listerIntegrees(avecArchives = false): SessionIntegree[] {
                 if (mort) {
                     s.etat = 'erreur'; s.issue = 'error'; s.erreur = 'Le processus a été interrompu. Tu peux reprendre la conversation.';
                     s.permission = undefined; sauverIntegree(s);
+                    try { if (s.recuUsage) sauverUsage(s.recuUsage, s.utilisation ?? {}, 'error'); } catch { /* Le reçu reste incomplet si le disque est indisponible. */ }
                     fs.rmSync(path.join(dossierIntegre(id), 'verrou'), { force: true });
                 }
             }
@@ -79,6 +81,8 @@ export async function envoyerIntegree(id: string, prompt: string): Promise<void>
     try {
         s.tour = randomUUID(); s.etat = 'travaille'; s.issue = undefined; s.erreur = undefined;
         s.permission = undefined; s.resultat = undefined; s.pid = undefined;
+        s.dernierPrompt = prompt; s.utilisation = undefined; s.bilan = undefined; s.recuUsage = undefined;
+        s.recuUsage = commencerUsage(s.id, s.fournisseur);
         fs.rmSync(path.join(dossier, 'arret'), { force: true });
         ecrireAtomique(path.join(dossier, 'requete.json'), { tour: s.tour, prompt });
         sauverIntegree(s);
@@ -91,6 +95,7 @@ export async function envoyerIntegree(id: string, prompt: string): Promise<void>
         enfant.unref();
     } catch (e) {
         s.etat = 'erreur'; s.issue = 'error'; s.erreur = (e as Error).message; sauverIntegree(s);
+        if (s.recuUsage) sauverUsage(s.recuUsage, {}, 'error');
         fs.rmSync(verrou, { force: true }); throw e;
     }
 }

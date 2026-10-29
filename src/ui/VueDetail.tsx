@@ -33,7 +33,7 @@ export function contenuDetail(detail: Detail, d: Donnees, projets: Projet[]): Co
         const sessions = d.agents.filter((a) => path.resolve(a.cwd).toLowerCase().startsWith(path.resolve(p.chemin).toLowerCase()));
         return {
             titre: [{ t: '● ', c: couleurProjet(p.nom) }, { t: p.nom, gras: true }, { t: `  ${p.chemin}`, c: 'gray' }],
-            boutons: [RETOUR, { label: '✻ Session', action: `/session ${citerArgument(p.chemin)}` }, { label: '✓ Commit', action: `/commit ${citerArgument(p.chemin)}` },
+            boutons: [RETOUR, { label: '✦ Mission', action: `/mission ${citerArgument(p.chemin)}` }, { label: '✻ Session', action: `/session ${citerArgument(p.chemin)}` }, { label: '✓ Commit', action: `/commit ${citerArgument(p.chemin)}` },
                 { label: '⇣ Pull', action: `/pull ${citerArgument(p.chemin)}` }, { label: '◧ VS Code', action: `/code ${citerArgument(p.chemin)}` },
                 { label: '❯ Terminal', action: `/terminal defaut ${citerArgument(p.chemin)}` }, { label: '⋯ Actions', action: `/actions ${citerArgument(p.chemin)}` }],
             lignes: [

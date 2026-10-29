@@ -136,6 +136,9 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
     };
 
     async function agir(action: string) {
+        try { await appliquer(action); } catch (e) { setMessage(`✕ ${(e as Error).message}`); }
+    }
+    async function appliquer(action: string) {
         setMessage('');
         if (action !== aConfirmer) setAConfirmer(undefined);
         if (action === 'fermer') return retour ? retour() : fermer();
@@ -146,12 +149,12 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
             return void bus.emit('lancer', `/equipe-diff ${e.id} ${courante.id}`);
         }
         if (action === 'ecarter' && courante) {
-            const ecartee = basculerEcart(e.id, courante.id);
+            const ecartee = await basculerEcart(e.id, courante.id);
             return setMessage(ecartee ? `✕ ${courante.titre} est écartée : l'intégrateur ne fusionnera pas sa branche` : `↺ ${courante.titre} sera fusionnée`);
         }
         if (action === 'lancer') {
             const erreur = courante && (courante.etat === 'erreur' || courante.etat === 'arretee') && e.etat !== 'erreur'
-                ? relancerTache(e.id, courante.id) : lancerEquipe(e.id);
+                ? await relancerTache(e.id, courante.id) : await lancerEquipe(e.id);
             return setMessage(erreur ?? `▶ Équipe lancée : ${Math.min(taches.length, 3)} agents démarrent · suis-les ici ou sur la carte ◆`);
         }
         if (action === 'replan') {
