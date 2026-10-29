@@ -4,10 +4,9 @@ import { sauvegardeEquipes } from './stockageEquipes.js';
 import { editerPlan } from './editionEquipe.js';
 import { choisir, saisir, bus, confirmer } from './ui/bus.js';
 import { guiderConnexion } from './providers/assistantConnexion.js';
-import { bilanEquipe } from './equipeBilan.js';
+import { relireEquipe } from './finEquipe.js';
 import { enregistrerModeleEquipe, lireModelesEquipes, retirerModeleEquipe } from './modelesEquipes.js';
 import { decrirePlan } from './equipesGuidees.js';
-import { copier } from './lanceurs.js';
 
 const retrouver = (id: string) => {
     rechargerEquipes(); const e = equipeDe(id); if (!e || e.archivee) throw new Error('Équipe introuvable'); return e;
@@ -45,9 +44,7 @@ export function commandesEquipes(): Commande[] {
         { nom: 'equipe-bilan', args: '<équipe>', groupe: 'Agents', description: 'Résultats, blocages, vérifications et utilisation d’une équipe', executer: async ({ args }) => {
             if (!args[0] && !lireEquipes().length) { bus.emit('notice', 'Aucune équipe · Équipes → Nouvelle équipe pour créer ton premier plan'); return; }
             const id = args[0] || await choisir('Quelle équipe ?', lireEquipes().map((e) => ({ label: e.nomProjet, valeur: e.id, description: e.objectif })), true);
-            const e = retrouver(id), bilan = bilanEquipe(e);
-            const action = await choisir('Bilan de l’équipe', [{ label: 'Retour à l’équipe', valeur: 'retour' }, { label: 'Copier le bilan complet', valeur: 'copier' }], false, bilan);
-            if (action === 'copier') { copier(bilan); bus.emit('notice', 'Bilan copié'); } ouvrir(id);
+            await relireEquipe(id);
         } },
         { nom: 'equipe-actions', args: '<équipe>', groupe: 'Agents', cache: true, description: 'Reprendre le travail, voir le bilan et réutiliser le plan', executer: async ({ args }) => {
             const e = retrouver(args[0]);

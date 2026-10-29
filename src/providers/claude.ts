@@ -26,7 +26,9 @@ export async function executerClaude(c: ContexteAgent, requete: typeof query = q
                 if (c.session.lectureSeule && !['Read', 'Glob', 'Grep'].includes(nom)) return { behavior: 'deny', message: 'Cette mission est en lecture seule. Ouvre une mission Corriger ou Ajouter une fonction pour modifier le projet.' };
                 const questions = nom === 'AskUserQuestion' && Array.isArray(input.questions)
                     ? input.questions.map((q: any, i: number) => ({ id: String(i), question: String(q.question), options: q.options?.map((o: any) => String(o.label)) })) : undefined;
-                const r = await c.permission({ titre: nom, detail: JSON.stringify(input, null, 2), questions });
+                const r = await c.permission({ titre: nom, detail: JSON.stringify(input, null, 2), questions,
+                    action: nom === 'Bash' ? 'commande' : ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(nom) ? 'fichiers' : 'outil',
+                    commande: nom === 'Bash' && typeof input.command === 'string' ? input.command : undefined, dossier: c.session.cwd });
                 if (!r.accepte) return { behavior: 'deny', message: 'Refusé par l’utilisateur dans Agentopia' };
                 if (questions) return { behavior: 'allow', updatedInput: { ...input,
                     answers: Object.fromEntries(questions.map((q) => [q.question, r.reponses?.[q.id] || ''])) } };

@@ -68,6 +68,28 @@ try {
     const archive = path.join(destination, 'paquets', `${initiale}.zip`);
     const hash = fs.readFileSync(`${archive}.sha256`, 'utf8').trim();
     assert.equal(sha256(archive), hash);
+    console.log('Mise à jour par le gestionnaire de l’app, puis retour à la version installée…');
+    // Le réseau est simulé ; le ZIP, son contrôle et son installation sont réels.
+    const nouveauId = `${initiale}-maj-fixture`, nouvelleVersion = '99.0.0';
+    const zipMaj = path.join(temporaire, 'mise-a-jour.zip'); fs.copyFileSync(archive, zipMaj);
+    const manifesteMaj = { ...JSON.parse(fs.readFileSync(path.join(version, 'distribution.json'), 'utf8')), id: nouveauId, version: nouvelleVersion };
+    const ps = (s) => `'${s.replaceAll("'", "''")}'`;
+    const modifierZip = `Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[IO.Compression.ZipFile]::Open(${ps(zipMaj)},[IO.Compression.ZipArchiveMode]::Update); try { $z.GetEntry('distribution.json').Delete(); $s=New-Object IO.StreamWriter($z.CreateEntry('distribution.json').Open()); try { $s.Write(${ps(JSON.stringify(manifesteMaj))}) } finally { $s.Dispose() } } finally { $z.Dispose() }`;
+    lancer('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(modifierZip, 'utf16le').toString('base64')]);
+    const { maintenirDistribution } = await import('./dist/distribution.js');
+    const { bus } = await import('./dist/ui/bus.js');
+    const fetchAvant = globalThis.fetch, rootAvant = process.env.AGENTOPIA_DISTRIBUTION_ROOT;
+    const repondre = (d) => { if (d?.type === 'choix') d.resoudre(true); };
+    const tag = `agentopia-${nouvelleVersion}`, base = `https://github.com/SamChampagne/ClaudeTopia/releases/download/${tag}/`;
+    const publication = { tag_name: tag, prerelease: false, assets: ['agentopia-release.json', 'Agentopia-Windows-x64.zip'].map((name) => ({ name, browser_download_url: base + name })) };
+    globalThis.fetch = async (url) => url.includes('/releases?') ? Response.json([publication])
+        : url.endsWith('agentopia-release.json') ? Response.json({ format: 'agentopia-release-v1', plateforme: 'win32-x64', id: nouveauId, version: nouvelleVersion, asset: 'Agentopia-Windows-x64.zip', sha256: sha256(zipMaj) })
+        : new Response(fs.readFileSync(zipMaj));
+    process.env.AGENTOPIA_DISTRIBUTION_ROOT = destination; bus.on('demande', repondre);
+    try { await maintenirDistribution(version); }
+    finally { globalThis.fetch = fetchAvant; bus.off('demande', repondre); if (rootAvant === undefined) delete process.env.AGENTOPIA_DISTRIBUTION_ROOT; else process.env.AGENTOPIA_DISTRIBUTION_ROOT = rootAvant; }
+    assert.equal(activation().active, nouveauId); assert.equal(activation().precedente, initiale);
+    activerVersion(destination, initiale); assert.equal(activation().active, initiale);
     console.log('Réparation depuis le paquet local puis retour à la version précédente…');
     const reparee = await installerArchive(archive, hash, { destination, reparer: true, raccourci: false });
     assert.notEqual(reparee.id, initiale); assert.equal(activation().precedente, initiale);

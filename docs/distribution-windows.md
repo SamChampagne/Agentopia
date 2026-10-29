@@ -11,7 +11,7 @@ Les réglages, secrets chiffrés et conversations restent dans les chemins utili
 ## Maintenance
 
 - `/version` indique l’identifiant exact et le dossier de la version exécutée.
-- `/maj` lit la dernière Release GitHub compatible, demande l’installation et vérifie le SHA-256 du téléchargement. Une Release sans paquet compatible ne remplace rien.
+- `/maj` cherche une version Windows supérieure, demande l’installation et vérifie le SHA-256 du téléchargement. Le canal bêta accepte les bêtas suivantes et les versions stables supérieures ; le canal stable exclut les préversions. Une Release sans paquet compatible ne remplace rien.
 - `/reparer` extrait le paquet conservé localement, contrôle les fichiers et le démarrage de l’interface, puis active une nouvelle copie. Les données utilisateur sont conservées.
 - `/retour-version` vérifie et réactive la version précédente. Fermer puis relancer Agentopia après ces opérations.
 
@@ -46,4 +46,8 @@ La version 1.3.1 ajoute la récupération après plantage et les sauvegardes des
 node test-installation-windows.mjs releases/<identifiant>
 ```
 
-Le test installe dans un dossier temporaire avec espaces, sans raccourci ni lancement interactif. Il exécute l’interface de test avec les runtimes inclus et un PATH restreint, vérifie une réparation hors ligne, le retour à la version précédente et le refus d’un fichier altéré. Aucun fournisseur n’est appelé. Cela constitue une validation isolée sur le poste de développement, pas un test dans une VM Windows vierge ni une validation SmartScreen/antivirus.
+Le test installe dans un dossier temporaire avec espaces, sans raccourci ni lancement interactif. Il exécute l’interface avec les runtimes inclus et un PATH restreint. Il passe ensuite par le gestionnaire de mise à jour de l’app (réponses HTTP simulées, véritable ZIP et installation), puis vérifie réparation hors ligne, retour arrière et refus d’un fichier altéré. Aucun fournisseur n’est appelé. Le workflow GitHub exécute ces contrôles sur un runner Windows distinct avant de publier un tag bêta. Ce contrôle ne constitue pas une validation SmartScreen/antivirus.
+
+Pour publier : pousser un tag `agentopia-<version>-beta.<numéro>` correspondant à la version du package. Le job Windows compile et teste le Setup ; le job de publication crée ensuite la préversion avec ses quatre fichiers (Setup, ZIP, manifeste, SHA256). Un échec de validation empêche la publication. `workflow_dispatch` permet aussi de valider un paquet sans publier.
+
+La gestion du tour est séparée en `sessionWorker` (cycle de vie), `horlogeTravail` (budget actif), `demandesPermission` (file de réponses), `presentationPermission` (texte), `finEquipe` (parcours final) et `versionsDistribution` (sélection et validation des mises à jour). Ces responsabilités peuvent évoluer indépendamment des adaptateurs fournisseurs.

@@ -8,7 +8,7 @@ permissions:
 jobs:
   verifier:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v7
@@ -20,3 +20,49 @@ jobs:
       - run: bun install --frozen-lockfile
         working-directory: tui
       - run: npm run test:ci
+      - name: Vérifier la version du tag
+        if: startsWith(github.ref, 'refs/tags/agentopia-')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: node -e "if(process.env.TAG !== 'agentopia-' + require('./package.json').version) process.exit(1)"
+      - name: Construire le téléchargement Windows
+        if: startsWith(github.ref, 'refs/tags/agentopia-') || github.event_name == 'workflow_dispatch'
+        id: paquet
+        shell: pwsh
+        run: |
+          npm run package:windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $paquet = Get-ChildItem releases -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'Agentopia-Setup.exe') } | Sort-Object Name -Descending | Select-Object -First 1
+          "dossier=$($paquet.FullName)" >> $env:GITHUB_OUTPUT
+      - name: Installer, mettre à jour, réparer et revenir en arrière sur Windows
+        if: steps.paquet.outcome == 'success'
+        run: node test-installation-windows.mjs "${{ steps.paquet.outputs.dossier }}"
+      - uses: actions/upload-artifact@v4
+        if: steps.paquet.outcome == 'success'
+        with:
+          name: agentopia-windows
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            releases/*/Agentopia-Setup.exe
+            releases/*/Agentopia-Windows-x64.zip
+            releases/*/agentopia-release.json
+            releases/*/SHA256SUMS.txt
+  publier-beta:
+    needs: verifier
+    if: startsWith(github.ref, 'refs/tags/agentopia-') && contains(github.ref, '-beta.')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: agentopia-windows
+          path: paquets
+      - name: Publier la bêta vérifiée
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" --verify-tag --prerelease --latest=false --title "Agentopia ${TAG#agentopia-}" --notes-file docs/beta-1.4.md paquets/*/Agentopia-Setup.exe paquets/*/Agentopia-Windows-x64.zip paquets/*/agentopia-release.json paquets/*/SHA256SUMS.txt

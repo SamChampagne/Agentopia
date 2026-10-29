@@ -1,16 +1,16 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { setTimeout as pause } from 'node:timers/promises';
 import { ajouterMessage, dossierIntegre, sauverIntegree, prendreExecution, terminerExecution } from './sessionsIntegrees.js';
-import type { ContexteAgent, PermissionAgent, ReponsePermission, SessionIntegree } from './providers/types.js';
+import type { ContexteAgent, SessionIntegree } from './providers/types.js';
 import { executerClaude } from './providers/claude.js';
 import { executerCodex } from './providers/codex.js';
 import { executerPerplexity } from './providers/perplexity.js';
 import { chargerConfig } from './config.js';
 import { sauverUsage, normaliserUsage } from './utilisation.js';
 import { spawnSync } from 'node:child_process';
+import { HorlogeTravail } from './horlogeTravail.js';
+import { creerDemandesPermission } from './demandesPermission.js';
 
 export async function travailler(id: string, tour: string, executer?: (c: ContexteAgent) => Promise<string>): Promise<void> {
     const execution = prendreExecution(id, tour);
@@ -27,33 +27,16 @@ async function executerTour(s: SessionIntegree, executer?: (c: ContexteAgent) =>
     s.bilan = { commandes: [] };
     const sauver = () => { if (!termine) sauverIntegree(s); };
     sauver();
-    let filePermission = Promise.resolve();
-    const demander = async (p: Omit<PermissionAgent, 'id'>): Promise<ReponsePermission> => {
-        const precede = filePermission;
-        let liberer!: () => void;
-        filePermission = new Promise<void>((ok) => { liberer = ok; });
-        await precede;
-        const permission = { ...p, id: randomUUID() };
-        try {
-            controller.signal.throwIfAborted();
-            s.etat = 'bloquee'; s.permission = permission; sauver();
-            const reponse = fichier(`reponse-${permission.id}.json`);
-            while (!controller.signal.aborted) {
-                if (fs.existsSync(reponse)) {
-                    const r = JSON.parse(fs.readFileSync(reponse, 'utf8'));
-                    fs.rmSync(reponse, { force: true });
-                    if (r.tour === tour) return r;
-                }
-                await pause(250, undefined, { signal: controller.signal });
-            }
-            throw new Error('Tour interrompu');
-        } finally {
-            // Le transport peut terminer avant que sa promesse de permission se ferme.
-            // Une réponse tardive ne doit jamais ressusciter le tour ni écraser le suivant.
-            if (!termine) { s.permission = undefined; s.etat = 'travaille'; sauver(); }
-            liberer();
-        }
-    };
+    const minutes = Math.max(1, Math.min(180, chargerConfig().limitesAgents?.dureeMinutes || 60));
+    let delaiAtteint = false;
+    const horloge = new HorlogeTravail(minutes * 60_000, () => { delaiAtteint = true; controller.abort(); });
+    const demander = creerDemandesPermission({ dossier, tour, signal: controller.signal,
+        suspendre: () => horloge.suspendre(),
+        publier: (permission) => {
+            if (termine) return;
+            s.permission = permission; s.etat = permission ? 'bloquee' : 'travaille'; sauver();
+        },
+    });
     const pouls = setInterval(() => {
         try {
             if (fs.existsSync(fichier('arret')) && JSON.parse(fs.readFileSync(fichier('arret'), 'utf8')).tour === tour) controller.abort();
@@ -62,10 +45,6 @@ async function executerTour(s: SessionIntegree, executer?: (c: ContexteAgent) =>
     }, 1000);
     const arreter = () => controller.abort();
     process.once('SIGTERM', arreter); process.once('SIGINT', arreter);
-    // Borne de durée pour qu'un fournisseur muet ne conserve pas un worker indéfiniment.
-    const minutes = Math.max(1, Math.min(180, chargerConfig().limitesAgents?.dureeMinutes || 60));
-    let delaiAtteint = false;
-    const limite = setTimeout(() => { delaiAtteint = true; arreter(); }, minutes * 60_000);
     try {
         const r = JSON.parse(fs.readFileSync(fichier('requete.json'), 'utf8'));
         if (r.tour !== tour) throw new Error('Requête périmée');
@@ -96,14 +75,14 @@ async function executerTour(s: SessionIntegree, executer?: (c: ContexteAgent) =>
     } catch (e) {
         s.etat = controller.signal.aborted ? 'arretee' : 'erreur';
         s.issue = controller.signal.aborted ? 'cancelled' : 'error';
-        s.erreur = delaiAtteint ? `Limite de ${minutes} minutes atteinte. Config → Limites des agents, puis Reprendre.`
+        s.erreur = delaiAtteint ? `Limite de ${minutes} minutes de travail atteinte (attente utilisateur exclue). Config → Limites des agents, puis Reprendre.`
             : controller.signal.aborted ? 'Tour interrompu. La conversation peut être reprise.' : (e as Error).message;
         // Retirer les jetons usuels des messages d'erreur des bibliothèques.
         s.erreur = s.erreur.replace(/(?:sk-|pplx-)[\w-]+/g, '[clé masquée]').slice(0, 3000);
         ajouterMessage(id, 'assistant', `⚠ ${s.erreur}`);
     } finally {
         termine = true; controller.abort();
-        clearInterval(pouls); clearTimeout(limite);
+        clearInterval(pouls); horloge.arreter(); s.bilan.durees = horloge.bilan();
         process.off('SIGTERM', arreter); process.off('SIGINT', arreter);
         s.permission = undefined; s.pid = undefined; s.demarragePoste = undefined;
         if (s.fournisseur !== 'perplexity') {

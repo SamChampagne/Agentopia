@@ -9,7 +9,7 @@ import { ecrireAtomique } from './sessionsIntegrees.js';
 import { processusVivant } from './verrou.js';
 
 export const DOSSIER_MOTEUR = CHEMINS.moteur;
-export const VERSION_MOTEUR = '1.3.1';
+export const VERSION_MOTEUR = '1.4.0-beta.1';
 export const localAuMoteur = () => process.env.AGENTOPIA_MOTEUR === '1' || process.env.AGENTOPIA_SANS_MOTEUR === '1';
 export const moteurEnPause = () => fs.existsSync(path.join(DOSSIER_MOTEUR, 'pause.json'));
 export function etatMoteur(): { actif: boolean; pause: boolean; pid?: number; erreur?: string; date?: number; version?: string } {

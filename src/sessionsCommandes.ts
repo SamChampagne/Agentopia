@@ -1,4 +1,5 @@
 import type { Commande, Contexte } from './commandes.js';
+import { presenterPermission } from './presentationPermission.js';
 import { sauverConfig, type Config } from './config.js';
 import { bus, choisir, saisir } from './ui/bus.js';
 import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
@@ -93,16 +94,22 @@ export function commandesSessions(config: Config): Commande[] {
         { nom: 'autorisation', args: '<session>', groupe: 'Agents', cache: true, description: 'Répondre à une demande de l’agent', executer: async ({ args }) => {
             const s = lireIntegree(args[0]), p = s?.permission;
             if (!s || !p) { bus.emit('notice', 'Aucune autorisation en attente'); return; }
-            console.log(`${p.titre}\n${p.detail}`);
             if (p.questions?.length) {
                 const reponses: Record<string, string> = {};
                 for (const q of p.questions) reponses[q.id] = await saisir(`${q.question}${q.options?.length ? ` (${q.options.join(' / ')})` : ''}`);
                 repondrePermission(s.id, p.id, { accepte: true, reponses });
             } else {
-                const accepte = await choisir(`Autorisation : ${p.titre}`, [
-                    { label: 'Refuser cette action', valeur: false }, { label: 'Autoriser cette action une fois', valeur: true },
-                ], false, p.detail);
-                repondrePermission(s.id, p.id, { accepte });
+                const presentation = presenterPermission(p);
+                let details = false;
+                while (true) {
+                    const action = await choisir(presentation.titre, [
+                        { label: 'Refuser cette action', valeur: 'refuser' },
+                        { label: 'Autoriser cette action une fois', valeur: 'autoriser' },
+                        { label: details ? 'Revenir au résumé' : 'Voir les détails techniques', valeur: 'details' },
+                    ], false, details ? presentation.details : presentation.contexte);
+                    if (action === 'details') { details = !details; continue; }
+                    repondrePermission(s.id, p.id, { accepte: action === 'autoriser' }); break;
+                }
             }
         } },
         { nom: 'interrompre', args: '<session>', groupe: 'Agents', cache: true, description: 'Interrompre le tour et conserver la conversation', executer: ({ args }) => {

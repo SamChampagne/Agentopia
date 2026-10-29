@@ -4,6 +4,8 @@ Poste de pilotage pour travailler avec Claude, Codex, Perplexity et des **équip
 
 **Sessions intégrées Claude, Codex et Perplexity** : `+ Session` ou `/session`, configuration via `/fournisseurs`, collaboration via **Équipes → Nouvelle équipe**. [Connexion, utilisation et limites](docs/sessions-multi-agents.md).
 
+**Bêta 1.4** : attente utilisateur exclue de la limite de travail, permissions lisibles avec commande exacte, bilan **Relire (b) → Intégrer → Ranger**, et mises à jour adaptées au canal stable ou bêta. [Notes de version](docs/beta-1.4.md).
+
 **Version 1.3.1** : récupération des verrous de session après plantage, protection contre deux workers exécutant le même tour et sauvegarde des équipes avant chaque écriture. Un fichier d’équipes illisible est signalé dans **Équipes → Récupérer les équipes** : la restauration conserve une copie du fichier abîmé et met le moteur en pause, sans relancer les tâches. Les conversations et branches restent en place.
 
 **Version 1.3** : **Actions (a) → Modifier le plan** permet d’ajuster objectif, consignes, agents et dépendances avant le premier lancement. Une intégration interrompue peut reprendre dans sa conversation et sa branche, en conservant les fichiers et conflits en cours. Le moteur empêche deux équipes d’intégrer simultanément dans le même dossier. Les menus gèrent les frappes rapides et chaque dialogue retrouve ses propres valeurs. Les écrans existants sont conservés.
@@ -16,7 +18,7 @@ Lancer **Agentopia.bat** (ou le raccourci **Agentopia**). L’ancien lanceur `Cl
 
 ## Installation Windows
 
-Le paquet **Agentopia-Setup.exe** contient Node 24, Bun et les dépendances de l’interface. Un double-clic installe dans le profil utilisateur, vérifie l’interface et ouvre la préparation guidée. Aucun terminal de compilation n’est nécessaire. **Ce paquet est pour l’instant construit localement ; il n’est pas encore publié dans les Releases GitHub.**
+Télécharger **[Agentopia-Setup.exe depuis la bêta 1.4](https://github.com/SamChampagne/ClaudeTopia/releases/tag/agentopia-1.4.0-beta.1)**. Le paquet contient Node 24, Bun et les dépendances de l’interface. Un double-clic installe dans le profil utilisateur, vérifie l’interface et ouvre la préparation guidée. Aucun terminal de compilation n’est nécessaire.
 
 Au premier lancement, choisis les projets et les agents à utiliser. Agentopia détecte les outils présents, propose les installations nécessaires et guide la connexion. Une interruption conserve les choix déjà faits. Le même parcours reste accessible avec **Config → Préparer le poste** ou `/scan`.
 
@@ -27,16 +29,10 @@ Au premier lancement, choisis les projets et les agents à utiliser. Agentopia d
 Dans PowerShell :
 
 ```powershell
-git clone https://github.com/SamChampagne/ClaudeTopia.git "$HOME\Agentopia"; & "$HOME\Agentopia\Installer.bat"
+git clone --branch codex/sessions-multi-agents https://github.com/SamChampagne/ClaudeTopia.git "$HOME\Agentopia"; & "$HOME\Agentopia\Installer.bat"
 ```
 
-Dans Agentopia, **`/installation`** affiche cette ligne avec la bonne adresse, prête à copier.
-
-Si le dépôt est public, aussi :
-
-```powershell
-irm https://raw.githubusercontent.com/SamChampagne/ClaudeTopia/main/install.ps1 | iex
-```
+La branche `codex/sessions-multi-agents` contient la bêta Agentopia. Le nom historique du dépôt reste ClaudeTopia. **`/installation`** donne aussi le lien des téléchargements et une commande qui conserve la branche utilisée.
 
 Sinon : copier ce dossier sur le poste et double-cliquer sur **Installer.bat**.
 

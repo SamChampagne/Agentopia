@@ -87,6 +87,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: any; fermer: () => void; retour
         setMessage('');
         if (action !== aConfirmer) setAConfirmer(undefined);
         if (action === 'fermer') return quitter();
+        if (action === 'bilan-equipe') { fermer(); return void bus.emit('lancer', `/equipe-bilan ${e.id}`); }
         if (action === 'actions-equipe' || (action === 'lancer' && e.mixte)) {
             fermer();
             const commande = action === 'actions-equipe' || e.taches.some((t: any) => ['erreur', 'arretee'].includes(t.etat)) ? 'equipe-actions' : 'equipe-lancer';
@@ -149,6 +150,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: any; fermer: () => void; retour
         if (k.name === 'return') ouvrirSession(courante?.agentId);
         if (k.sequence === 'l' && (e.etat === 'plan' || e.etat === 'erreur')) void agir('lancer');
         if (k.sequence === 'a') void agir('actions-equipe');
+        if (k.sequence === 'b') void agir('bilan-equipe');
     });
 
     const etat = etatEquipe(e, t0);

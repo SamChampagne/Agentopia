@@ -22,6 +22,7 @@ export function bilanEquipe(e: Equipe): string {
         parties.push(`${t.id} · ${t.titre} · ${t.fournisseur ? FOURNISSEURS[t.fournisseur].nom : 'Claude CLI'} · ${t.etat}${t.ecartee ? ' · écartée de la fusion' : ''}\n`
             + `${prochaineAction(e, t)}\n${t.branche ? `Branche : ${t.branche}\n` : ''}${t.cwd ? `Dossier : ${t.cwd}\n` : ''}`
             + `Résultat ou blocage rapporté :\n${t.resultat || s?.erreur || s?.resultat || 'Aucun résultat final disponible.'}\n`
+            + (s?.bilan?.durees ? `Durée : ${Math.ceil(s.bilan.durees.travailMs / 1000)} s de travail · ${Math.ceil(s.bilan.durees.attenteMs / 1000)} s d’attente utilisateur\n` : '')
             + 'Commandes observées au dernier tour :\n'
             + (s?.bilan?.commandes.length ? s.bilan.commandes.map((c) => `${c.codeSortie === undefined ? 'Résultat non renseigné' : `Code de sortie ${c.codeSortie}`} · ${c.commande}`).join('\n') : 'Aucune preuve d’exécution de commande disponible.'));
     }

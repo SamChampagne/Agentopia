@@ -102,6 +102,11 @@ function boutonsEquipeBase(e: Equipe, t?: Tache) {
 
 export function boutonsEquipe(e: Equipe, t?: Tache) {
     let boutons = boutonsEquipeBase(e, t);
+    if (['prete', 'finie', 'erreur'].includes(e.etat)) {
+        // Les diffs et le choix des branches sont regroupés dans Relire.
+        boutons = boutons.filter((b) => !['diff', 'ecarter', 'agent', 'integrateur'].includes(b.action));
+        boutons.unshift({ label: '≡ Relire (b)', action: 'bilan-equipe' });
+    }
     if (e.mixte && e.etat === 'prete' && e.integrateur?.agentId && ['erreur', 'arretee'].includes(e.integrateur.etat)) {
         boutons = boutons.map((b) => b.action === 'integrer' ? { label: '↻ Reprendre l’intégration (a)', action: 'actions-equipe' } : b);
     }
@@ -112,6 +117,10 @@ export function boutonsEquipe(e: Equipe, t?: Tache) {
         const i = boutons.findIndex((b) => b.action === 'lancer');
         if (i >= 0) boutons[i] = { label: '↻ Débloquer (a)', action: 'actions-equipe' };
     }
+    if (e.etat === 'prete' && boutons.some((b) => ['integrer', 'actions-equipe'].includes(b.action))) {
+        boutons = boutons.filter((b) => b.action !== 'ranger'); // Toujours accessible depuis Relire.
+    }
+    boutons = boutons.map((b) => b.action === 'ranger' ? { ...b, label: '✓ Ranger' } : b);
     if (boutons.some((b) => b.action === 'actions-equipe')) return boutons;
     return [boutons[0], { label: '⋯ Actions (a)', action: 'actions-equipe' }, ...boutons.slice(1)];
 }
@@ -158,6 +167,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
         setMessage('');
         if (action !== aConfirmer) setAConfirmer(undefined);
         if (action === 'fermer') return retour ? retour() : fermer();
+        if (action === 'bilan-equipe') { fermer(); return void bus.emit('lancer', `/equipe-bilan ${e.id}`); }
         if (action === 'actions-equipe' || (action === 'lancer' && e.mixte)) {
             fermer();
             const commande = action === 'actions-equipe' || e.taches.some((t) => ['erreur', 'arretee'].includes(t.etat)) ? 'equipe-actions' : 'equipe-lancer';
@@ -233,6 +243,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
         if (key.return) ouvrirSession(courante?.agentId);
         if (input === 'l' && (e.etat === 'plan' || e.etat === 'erreur')) void agir('lancer');
         if (input === 'a') void agir('actions-equipe');
+        if (input === 'b') void agir('bilan-equipe');
     });
 
     const etat = etatEquipe(e, t0);

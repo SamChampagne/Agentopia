@@ -54,6 +54,9 @@ export async function installerArchive(archive, hashAttendu, options = {}) {
         // Vérifier les entrées avant extraction, y compris les séparateurs Windows.
         powershell(String.raw`Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[IO.Compression.ZipFile]::OpenRead(${ps(archive)}); try { foreach ($e in $z.Entries) { if ($e.FullName -match '(^[/\\]|(^|[/\\])\.\.([/\\]|$)|:)' ) { throw 'Chemin interdit dans le paquet' } } } finally { $z.Dispose() }; [IO.Compression.ZipFile]::ExtractToDirectory(${ps(archive)}, ${ps(temporaire)})`);
         const manifeste = verifierPaquet(temporaire);
+        if ((options.idAttendu && manifeste.id !== options.idAttendu) || (options.versionAttendue && manifeste.version !== options.versionAttendue)) {
+            throw new Error('Le paquet ne correspond pas à la version annoncée. La version actuelle est conservée.');
+        }
         const diagnostic = spawnSync(path.join(temporaire, 'runtime', 'node.exe'), [path.join(temporaire, 'dist', 'index.js'), '--verifier-installation'], {
             encoding: 'utf8', windowsHide: true, timeout: 60_000,
             env: { ...process.env, PATH: `${path.join(temporaire, 'runtime')}${path.delimiter}${process.env.PATH || ''}`, CLAUDETOPIA_DATA_DIR: path.join(temporaire, '.verification') },

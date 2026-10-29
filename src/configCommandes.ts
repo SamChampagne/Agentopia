@@ -298,6 +298,7 @@ export function commandesConfig(config: Config): Commande[] {
             nom: 'installation', groupe: 'Config',
             description: 'La ligne à copier pour installer Agentopia sur un autre poste',
             executer: () => {
+                console.log('Téléchargement Windows : https://github.com/SamChampagne/ClaudeTopia/releases');
                 if (estDistribution(RACINE_CLI)) {
                     console.log('Partager Agentopia-Setup.exe : il contient les moteurs et ouvre la préparation guidée. Les réglages et clés personnelles ne font pas partie du paquet.');
                     console.log('Versions publiées : https://github.com/SamChampagne/ClaudeTopia/releases');
@@ -309,15 +310,12 @@ export function commandesConfig(config: Config): Commande[] {
                     console.log(c.discret('Une fois poussé, cette commande affiche la ligne exacte à partager.'));
                     return;
                 }
-                const ligne = `git clone ${depot} "$HOME\\Agentopia"; & "$HOME\\Agentopia\\Installer.bat"`;
+                const branche = spawnSync('git', ['branch', '--show-current'], { cwd: RACINE_CLI, encoding: 'utf-8' }).stdout?.trim();
+                const optionBranche = branche && /^[\w./-]+$/.test(branche) ? ` --branch ${branche}` : '';
+                const ligne = `git clone${optionBranche} ${depot} "$HOME\\Agentopia"; & "$HOME\\Agentopia\\Installer.bat"`;
                 console.log(titre('Installer Agentopia sur un autre poste'));
                 console.log('Dans PowerShell, une seule ligne :\n');
                 console.log(c.accent(ligne));
-                const brut = /github\.com[/:]([^/]+)\/(.+?)(\.git)?$/.exec(depot);
-                if (brut) {
-                    console.log(c.discret('\nSi le dépôt GitHub est public, aussi :'));
-                    console.log(c.accent(`$env:CLAUDETOPIA_DEPOT='${depot}'; irm https://raw.githubusercontent.com/${brut[1]}/${brut[2]}/main/install.ps1 | iex`));
-                }
                 console.log(c.discret('\nL’installateur prépare le logiciel et son raccourci. Agentopia scanne ensuite les projets et guide la connexion des agents que tu choisis.'));
             },
         },

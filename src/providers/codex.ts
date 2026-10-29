@@ -41,7 +41,9 @@ export async function executerCodex(c: ContexteAgent, transport?: ChildProcessWi
     const demande = async (m: any) => {
         const p = m.params || {};
         if (['item/commandExecution/requestApproval', 'item/fileChange/requestApproval'].includes(m.method)) {
-            const r = await c.permission({ titre: p.command || p.reason || 'Autorisation Codex', detail: JSON.stringify(p, null, 2) });
+            const r = await c.permission({ titre: p.reason || 'Autorisation Codex', detail: JSON.stringify(p, null, 2),
+                action: m.method === 'item/fileChange/requestApproval' ? 'fichiers' : 'commande',
+                commande: typeof p.command === 'string' ? p.command : undefined, dossier: p.cwd || c.session.cwd });
             envoyer({ id: m.id, result: { decision: r.accepte ? 'accept' : 'decline' } });
         } else if (m.method === 'item/tool/requestUserInput') {
             const questions = (p.questions || []).map((q: any) => ({ id: q.id, question: q.question, options: q.options?.map((o: any) => o.label) }));
@@ -93,7 +95,7 @@ export async function executerCodex(c: ContexteAgent, transport?: ChildProcessWi
     });
     try {
         if (c.signal.aborted) throw new Error('Tour interrompu');
-        await requete('initialize', { clientInfo: { name: 'agentopia', title: 'Agentopia', version: '1.3.1' }, capabilities: { experimentalApi: true } });
+        await requete('initialize', { clientInfo: { name: 'agentopia', title: 'Agentopia', version: '1.4.0-beta.1' }, capabilities: { experimentalApi: true } });
         envoyer({ method: 'initialized' });
         const params = { cwd: c.session.cwd, model: c.session.modele,
             approvalPolicy: c.conseil || c.session.lectureSeule ? 'never' : 'on-request', sandbox: c.conseil || c.session.lectureSeule ? 'read-only' : 'workspace-write', approvalsReviewer: 'user',

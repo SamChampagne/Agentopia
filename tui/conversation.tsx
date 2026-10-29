@@ -8,6 +8,7 @@ import { dollars } from '../dist/cout.js';
 import { theme, fond, couleurProjet } from '../dist/theme.js';
 import { Boutons } from './vues/commun.tsx';
 import { DiffDirect } from './diffDirect.tsx';
+import { presenterPermission } from '../dist/presentationPermission.js';
 
 // Conversation d'une session : ses actions à gauche (la description de celle survolée en dessous),
 // le texte à droite. Défilement natif à la molette, collé en bas : la fin suit en direct ; texte sélectionnable.
@@ -56,7 +57,7 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
                 </text>
                 {cout !== undefined && <text fg={fond.discret}>{`${dollars(cout)} `}</text>}
             </box>
-            {s.permission && <box paddingLeft={1} onMouseDown={() => agir('autorisation')}><text fg="#fb923c" wrapMode="word">{`! ${s.permission.titre} · clique ici pour répondre`}</text></box>}
+            {s.permission && <box paddingLeft={1} onMouseDown={() => agir('autorisation')}><text fg="#fb923c" wrapMode="word">{`! ${presenterPermission(s.permission).titre} · ${s.permission.commande || s.permission.titre} · clique ici pour répondre`}</text></box>}
             {s.erreur && <text fg="#facc15" wrapMode="word">{s.erreur}</text>}
             {s.integree && !messages.length && <text fg={fond.discret} paddingLeft={1}>Écris ton premier message dans la barre ci-dessous.</text>}
             {position === 'haut' && <box paddingLeft={1}><Boutons boutons={actions} agir={agir} /></box>}

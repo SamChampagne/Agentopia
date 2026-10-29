@@ -10,6 +10,7 @@ export function nomAgentDefaut(f?: Fournisseur | 'choisir'): string {
 export interface QuestionAgent { id: string; question: string; options?: string[] }
 export interface PermissionAgent {
     id: string; titre: string; detail: string; questions?: QuestionAgent[];
+    action?: 'commande' | 'fichiers' | 'outil'; commande?: string; dossier?: string;
 }
 export interface ReponsePermission { accepte: boolean; reponses?: Record<string, string> }
 export interface Utilisation { entree?: number; sortie?: number; cache?: number; coutUSD?: number }
@@ -23,7 +24,8 @@ export interface SessionIntegree {
     lectureSeule?: boolean;
     compteursClaude?: Utilisation;
     compteursCodex?: Utilisation;
-    bilan?: { commandes: { commande: string; codeSortie?: number }[]; fichiers?: string; resume?: string };
+    bilan?: { commandes: { commande: string; codeSortie?: number }[]; fichiers?: string; resume?: string;
+        durees?: { travailMs: number; attenteMs: number } };
     origine?: { fournisseur: 'codex'; threadId: string; copieAuProchainMessage: boolean };
 }
 export interface EvenementAgent {

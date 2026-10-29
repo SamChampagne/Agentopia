@@ -1,4 +1,5 @@
 import { citerArgument } from '../ligneCommande.js';
+import { presenterPermission } from '../presentationPermission.js';
 import type { SessionVue } from '../agents.js';
 import type { ActionSession } from './mise.js';
 import { terminaux } from '../terminaux.js';
@@ -14,7 +15,7 @@ import { correspond } from '../projets.js';
 export function actionsSession(s: SessionVue): ActionSession[] {
     if (s.integree) return [
         { label: '← Retour', action: 'fermer', aide: 'Revenir au cockpit. Le tour continue en arrière-plan.' },
-        ...(s.permission ? [{ label: '! Répondre à l’agent', action: 'autorisation', aide: s.permission.titre }] : []),
+        ...(s.permission ? [{ label: '! Répondre à l’agent', action: 'autorisation', aide: presenterPermission(s.permission).titre }] : []),
         ...(['travaille', 'bloquee'].includes(s.statut) ? [{ label: '■ Interrompre', action: 'interrompre', aide: 'Arrêter le tour. La conversation et les fichiers sont conservés.' }] : []),
         ...(!['travaille', 'bloquee'].includes(s.statut) && ['error', 'cancelled'].includes(s.issue ?? '') ? [
             { label: '↻ Reprendre', action: 'reprendre-agent', aide: 'Vérifier la connexion et relancer la dernière demande avec l’historique.' },

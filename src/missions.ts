@@ -22,6 +22,7 @@ export function bilanSession(s: SessionIntegree): string {
         'Résumé de l’agent :', b?.resume || s.resultat || 'Aucun résultat final disponible.',
         'Commandes observées :', ...(b?.commandes.length ? b.commandes.map((c) => `${c.codeSortie === undefined ? 'Résultat non renseigné' : `Code de sortie ${c.codeSortie}`} · ${c.commande}`) : ['Aucune preuve d’exécution de commande disponible.']),
         b?.fichiers ? `État Git en fin de tour :\n${b.fichiers}` : '',
+        b?.durees ? `Durée : ${Math.ceil(b.durees.travailMs / 1000)} s de travail · ${Math.ceil(b.durees.attenteMs / 1000)} s d’attente utilisateur (hors limite)` : '',
         `Utilisation du dernier tour : ${s.utilisation?.coutUSD === undefined ? 'coût indisponible' : s.utilisation.coutUSD.toFixed(4) + ' $ US estimés par le fournisseur'}`,
     ].filter(Boolean).join('\n\n');
 }
@@ -56,7 +57,7 @@ export function commandesMissions(config?: Config): Commande[] {
         { nom: 'limites-agents', groupe: 'Config', description: 'Limiter le nombre de tours du jour et la durée d’un tour', executer: async () => {
             const c = chargerConfig();
             const tours = Number(await saisir('Maximum de tours par jour, tous agents intégrés et conseils confondus (0 = sans limite)', String(c.limitesAgents?.toursJour ?? 0)));
-            const minutes = Number(await saisir('Durée maximale d’un tour en minutes (1 à 180)', String(c.limitesAgents?.dureeMinutes ?? 60)));
+            const minutes = Number(await saisir('Minutes de travail maximum par tour (1 à 180 ; attente utilisateur exclue)', String(c.limitesAgents?.dureeMinutes ?? 60)));
             if (!Number.isInteger(tours) || tours < 0 || !Number.isFinite(minutes) || minutes < 1 || minutes > 180) throw new Error('Limites invalides ; aucun réglage modifié');
             c.limitesAgents = { toursJour: tours, dureeMinutes: minutes }; sauverConfig(c);
             if (config) config.limitesAgents = c.limitesAgents;
