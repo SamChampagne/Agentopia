@@ -9,7 +9,7 @@ import { lireHotes, DOSSIER_SSH } from './sshConfig.js';
 import { secret } from './jetons.js';
 
 // Parcourir les fichiers d'un serveur (SFTP) : les serveurs de ~/.ssh/config, et les connexions SFTP
-// configurées dans Claudetopia (avec clé ou mot de passe, chiffré par Windows). Bibliothèque ssh2 :
+// configurées dans Agentopia (avec clé ou mot de passe, chiffré par Windows). Bibliothèque ssh2 :
 // pas de programme externe, et le mot de passe n'apparaît jamais dans une ligne de commande.
 
 export interface ConnexionSftp {

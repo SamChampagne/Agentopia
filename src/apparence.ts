@@ -5,13 +5,14 @@ import { Config, sauverConfig } from './config.js';
 import { RACINE_CLI, creerRaccourci } from './configCommandes.js';
 import { PALETTES, appliquerTheme, c } from './theme.js';
 import { choisir, confirmer } from './ui/bus.js';
+import { cheminProfilTerminal, GUID_PROFIL } from './profilTerminal.js';
 
-// Profil Windows Terminal « Claudetopia » : jeu de couleurs, police, transparence acrylique, marges, effet rétro.
+// Profil Windows Terminal « Agentopia » : jeu de couleurs, police, transparence acrylique, marges, effet rétro.
 // Ajouté par un « fragment » (fichier à part que Windows Terminal lit au démarrage) : les réglages de
 // l'utilisateur ne sont pas touchés, et /apparence retirer l'enlève.
 
-const FRAGMENT = path.join(process.env.LOCALAPPDATA ?? '', 'Microsoft', 'Windows Terminal', 'Fragments', 'Claudetopia', 'claudetopia.json');
-const GUID = '{7e6c2b1e-1c5a-4d4e-9a5e-c1a0d70b1a01}';
+const FRAGMENT = cheminProfilTerminal();
+const GUID = GUID_PROFIL;
 
 type Schema = Record<string, string>;
 const couleurs = (fond: string, texte: string, curseur: string, selection: string, c16: string[]): Schema => ({
@@ -34,13 +35,13 @@ export const profilInstalle = () => fs.existsSync(FRAGMENT);
 export function commandesApparence(config: Config): Commande[] {
     return [{
         nom: 'apparence', args: '[retirer]', groupe: 'Config',
-        description: 'Profil Windows Terminal « Claudetopia » : couleurs, police, transparence, effet rétro',
+        description: 'Profil Windows Terminal « Agentopia » : couleurs, police, transparence, effet rétro',
         executer: async ({ args }) => {
             if (!process.env.LOCALAPPDATA) return console.log(c.alerte('Windows Terminal introuvable sur ce poste'));
             if (args[0] === 'retirer') {
                 fs.rmSync(path.dirname(FRAGMENT), { recursive: true, force: true });
                 creerRaccourci();
-                return console.log(c.succes('Profil Claudetopia retiré de Windows Terminal · le raccourci ouvre de nouveau le profil par défaut'));
+                return console.log(c.succes('Profil Agentopia retiré de Windows Terminal · le raccourci ouvre de nouveau le profil par défaut'));
             }
             const schema = await choisir('Couleurs du terminal', Object.keys(SCHEMAS).map((n) => ({
                 label: n, valeur: n, description: `fond ${SCHEMAS[n].background} · ${n === 'Catppuccin' ? 'doux, pastel' : n === 'Tokyo Night' ? 'bleu nuit' : n === 'Dracula' ? 'violet contrasté' : n === 'Nord' ? 'bleu glacier' : 'chaud, rétro'}`,
@@ -54,13 +55,13 @@ export function commandesApparence(config: Config): Commande[] {
                 { label: 'Non', valeur: false },
                 { label: 'Oui', valeur: true },
             ], false);
-            if (!await confirmer(`Ajouter le profil « Claudetopia » à Windows Terminal (fichier à part, tes réglages ne changent pas) et faire ouvrir ce profil par le raccourci du bureau ?`)) return;
-            const nomSchema = `Claudetopia ${schema}`;
+            if (!await confirmer(`Ajouter le profil « Agentopia » à Windows Terminal (fichier à part, tes réglages ne changent pas) et faire ouvrir ce profil par le raccourci du bureau ?`)) return;
+            const nomSchema = `Agentopia ${schema}`;
             const fragment = {
                 profiles: [{
                     guid: GUID,
-                    name: 'Claudetopia',
-                    commandline: `cmd.exe /k "${path.join(RACINE_CLI, 'Claudetopia.bat')}"`,
+                    name: 'Agentopia',
+                    commandline: `cmd.exe /k "${path.join(RACINE_CLI, 'Agentopia.bat')}"`,
                     startingDirectory: RACINE_CLI,
                     colorScheme: nomSchema,
                     font: { face: 'Cascadia Code', size: 11 },
@@ -68,7 +69,7 @@ export function commandesApparence(config: Config): Commande[] {
                     useAcrylic: opacite < 100,
                     padding: '8, 6',
                     cursorShape: 'bar',
-                    tabTitle: 'Claudetopia',
+                    tabTitle: 'Agentopia',
                     suppressApplicationTitle: true,
                     'experimental.retroTerminalEffect': retro,
                 }],
@@ -83,8 +84,8 @@ export function commandesApparence(config: Config): Commande[] {
                 sauverConfig(config);
             }
             const r = creerRaccourci();
-            console.log(c.succes(`✓ Profil « Claudetopia » ajouté (${schema}${opacite < 100 ? `, acrylique ${opacite} %` : ''}${retro ? ', effet rétro' : ''})`));
-            console.log(r.ok ? c.discret('Ferme cette fenêtre et rouvre Claudetopia avec le raccourci du bureau pour voir le résultat.') : c.alerte(`Raccourci : ${r.message}`));
+            console.log(c.succes(`✓ Profil « Agentopia » ajouté (${schema}${opacite < 100 ? `, acrylique ${opacite} %` : ''}${retro ? ', effet rétro' : ''})`));
+            console.log(r.ok ? c.discret('Ferme cette fenêtre et rouvre Agentopia avec le raccourci du bureau pour voir le résultat.') : c.alerte(`Raccourci : ${r.message}`));
         },
     }];
 }

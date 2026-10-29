@@ -1,6 +1,8 @@
+import { citerArgument } from '../dist/ligneCommande.js';
 import { terminaux } from '../dist/terminaux.js';
 import { copier } from '../dist/lanceurs.js';
 import { lignesJournal } from '../dist/ui/journal.js';
+import { actionsSession, commandeSession } from '../dist/ui/saisie.js';
 
 // Menus du clic droit : les mêmes articles que l'interface Ink (App.tsx), selon ce qui est sous la souris.
 // valeur : une commande « /… » à lancer, ou une fonction de l'interface.
@@ -13,7 +15,9 @@ export const ici = (dossier: string): Article[] => terminaux().map((t: any) => (
 export const general = (parlerAuMaitre: () => void): Article[] => [
     { label: '◈ Parler au maître (Alt+M)', valeur: parlerAuMaitre },
     { label: '⚿ Connexions (comptes, serveurs, outils)', valeur: '/connexions' },
-    { label: '+ Nouvelle session Claude', valeur: '/nouvelle' },
+    { label: '+ Nouvelle conversation', valeur: '/session' },
+    { label: '◆ Équipe avec plusieurs fournisseurs', valeur: '/equipe-mixte' },
+    { label: '⚿ Configurer les fournisseurs IA', valeur: '/fournisseurs' },
     { label: '◆ Nouvelle équipe d\'agents', valeur: '/equipe nouvelle' },
     { label: '⚑ Tâche depuis un ticket', valeur: '/ticket' },
     { label: '▸ Session depuis un modèle', valeur: '/modele' },
@@ -22,6 +26,10 @@ export const general = (parlerAuMaitre: () => void): Article[] => [
 ];
 
 export function menuSession(s: any, ouvrir: () => void): Menu {
+    if (s.integree) return { titre: `${s.fournisseur} · ${s.nom}`, articles: [
+        { label: '↵ Ouvrir la conversation', valeur: ouvrir },
+        ...actionsSession(s).filter((a) => a.action !== 'fermer').map((a) => ({ label: a.label, valeur: commandeSession(a.action, s)!, description: a.aide })),
+    ] };
     return {
         titre: `● ${s.nom} · ${s.titre || (s.arrierePlan ? s.id : 'onglet')}`,
         articles: [
@@ -36,10 +44,10 @@ export function menuSession(s: any, ouvrir: () => void): Menu {
             { label: '± Voir ses changements', valeur: `/changements ${s.sessionId}` },
             { label: '⎘ Copier le dernier bloc de code', valeur: `/copier-code ${s.sessionId}` },
             { label: '⎘ Copier la dernière réponse', valeur: `/copier-reponse ${s.sessionId}` },
-            { label: '⌕ Revue du diff', valeur: `/revue ${s.cwd}` },
-            { label: '✓ Commit avec message IA', valeur: `/commit ${s.cwd}` },
-            { label: '◧ VS Code', valeur: `/code ${s.cwd}` },
-            { label: '▤ Explorateur', valeur: `/ouvrir ${s.cwd}` },
+            { label: '⌕ Revue du diff', valeur: `/revue ${citerArgument(s.cwd)}` },
+            { label: '✓ Commit avec message IA', valeur: `/commit ${citerArgument(s.cwd)}` },
+            { label: '◧ VS Code', valeur: `/code ${citerArgument(s.cwd)}` },
+            { label: '▤ Explorateur', valeur: `/ouvrir ${citerArgument(s.cwd)}` },
             ...ici(s.cwd),
             { label: '✕ Fermer la session', valeur: `/fermer ${s.id ?? s.pid}`, description: s.arrierePlan ? 'arrêtée et retirée (reprenable plus tard)' : 'arrête Claude dans son onglet' },
         ],

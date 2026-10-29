@@ -1,3 +1,4 @@
+import { citerArgument } from '../ligneCommande.js';
 import { useEffect, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { useTailleVue, useClicsVue, Separateur, Titre } from './Vues.js';
@@ -46,7 +47,7 @@ export function VueRecents({ fermer }: { fermer: () => void }) {
     const ouvrir = (l?: Ligne) => {
         if (!l) return;
         fermer();
-        bus.emit('lancer', `/actions ${l.projet.chemin}`);
+        bus.emit('lancer', `/actions ${citerArgument(l.projet.chemin)}`);
     };
 
     useClicsVue((_, y) => {

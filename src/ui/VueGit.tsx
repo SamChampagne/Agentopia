@@ -1,3 +1,4 @@
+import { citerArgument } from '../ligneCommande.js';
 import { useEffect, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { useTailleVue, useClicsVue, LigneBoutons, Separateur, Titre } from './Vues.js';
@@ -90,7 +91,7 @@ export function VueGit({ fermer }: { fermer: () => void }) {
         if (!actifs.has(action)) return;
         if (action === 'pr-corriger' || action === 'ci') {
             fermer();
-            return void bus.emit('lancer', `/${action === 'ci' ? 'ci-reparer' : 'pr-corriger'} ${local!.projet.chemin}`);
+            return void bus.emit('lancer', `/${action === 'ci' ? 'ci-reparer' : 'pr-corriger'} ${citerArgument(local!.projet.chemin)}`);
         }
         if (action === 'fetch') {
             setMessage('git fetch sur tous les dépôts…');

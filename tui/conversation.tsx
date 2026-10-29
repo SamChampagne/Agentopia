@@ -52,10 +52,13 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
                 <text flexGrow={1} truncate>
                     <span fg={couleurProjet(s.nom)}>● </span>
                     <span fg={fond.texte} attributes={GRAS}>{s.nom}</span>
-                    <span fg="gray">{`  ${s.titre || s.id || ''}`}</span>
+                    <span fg="gray">{`  ${s.fournisseur ? `${s.fournisseur} · ` : ''}${s.titre || s.id || ''}`}</span>
                 </text>
                 {cout !== undefined && <text fg={fond.discret}>{`${dollars(cout)} `}</text>}
             </box>
+            {s.permission && <box paddingLeft={1} onMouseDown={() => agir('autorisation')}><text fg="#fb923c" wrapMode="word">{`! ${s.permission.titre} · clique ici pour répondre`}</text></box>}
+            {s.erreur && <text fg="#facc15" wrapMode="word">{s.erreur}</text>}
+            {s.integree && !messages.length && <text fg={fond.discret} paddingLeft={1}>Écris ton premier message dans la barre ci-dessous.</text>}
             {position === 'haut' && <box paddingLeft={1}><Boutons boutons={actions} agir={agir} /></box>}
             <box flexGrow={1} flexDirection={position === 'droite' ? 'row-reverse' : 'row'}>
                 {enColonne && <box width={COL} flexShrink={0} flexDirection="column" paddingLeft={1} paddingRight={2} paddingTop={1}>

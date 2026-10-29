@@ -1,3 +1,4 @@
+import { citerArgument } from '../ligneCommande.js';
 import type { SessionVue } from '../agents.js';
 import type { ActionSession } from './mise.js';
 import { terminaux } from '../terminaux.js';
@@ -11,12 +12,22 @@ import { correspond } from '../projets.js';
 // Nouveau style : toutes les actions de la session dans sa barre, sans menu à part (le texte reste visible)
 // La description s'affiche au survol (actions à gauche ou à droite)
 export function actionsSession(s: SessionVue): ActionSession[] {
+    if (s.integree) return [
+        { label: '← Retour', action: 'fermer', aide: 'Revenir au cockpit. Le tour continue en arrière-plan.' },
+        ...(s.permission ? [{ label: '! Répondre à l’agent', action: 'autorisation', aide: s.permission.titre }] : []),
+        ...(['travaille', 'bloquee'].includes(s.statut) ? [{ label: '■ Interrompre', action: 'interrompre', aide: 'Arrêter le tour. La conversation et les fichiers sont conservés.' }] : []),
+        ...(s.issue === 'success' && s.resultat ? [{ label: '⇄ Passer à un agent', action: 'transmettre', aide: 'Transmettre la réponse et ses sources à Claude, Codex ou Perplexity.' }] : []),
+        { label: '⎘ Copier la réponse', action: 'copier-reponse', aide: 'Copier la dernière réponse.' },
+        ...(s.fournisseur !== 'perplexity' ? [{ label: '± Changements', action: 'changements', aide: 'Voir les fichiers modifiés dans cette session.' }] : []),
+        { label: '◧ VS Code', action: 'code', aide: 'Ouvrir ce dossier dans VS Code.' },
+        { label: '✕ Archiver', action: 'fermer-session', aide: 'Interrompre et masquer la session. Son historique et ses fichiers restent sur disque.' },
+    ];
     return [
         { label: '← Retour', action: 'fermer', aide: 'Revenir au cockpit. La session continue de tourner.' },
         s.arrierePlan
             ? { label: '↵ Rejoindre', action: 'rejoindre', aide: 'Ouvrir cette session dans une nouvelle fenêtre pour lui écrire directement.' }
             : { label: '⑂ Continuer ici', action: 'copie', aide: 'Reprendre cette conversation dans une nouvelle session d’arrière-plan.' },
-        ...(s.arrierePlan ? [{ label: '⫿ À côté', action: 'a-cote', aide: 'Ouvrir cette session à côté de Claudetopia, dans la même fenêtre Windows Terminal (Alt+J).' }] : []),
+        ...(s.arrierePlan ? [{ label: '⫿ À côté', action: 'a-cote', aide: 'Ouvrir cette session à côté de Agentopia, dans la même fenêtre Windows Terminal (Alt+J).' }] : []),
         { label: '± Changements', action: 'changements', aide: 'Les fichiers que cette session a modifiés et leur diff, prêts à commiter.' },
         { label: '⎘ Copier le code', action: 'copier-code', aide: 'Copier le dernier bloc de code de Claude dans le presse-papiers.' },
         { label: '⎘ Copier la réponse', action: 'copier-reponse', aide: 'Copier la dernière réponse de Claude dans le presse-papiers.' },
@@ -31,19 +42,20 @@ export function actionsSession(s: SessionVue): ActionSession[] {
 }
 
 export function commandeSession(action: string, s: SessionVue): string | undefined {
+    if (['autorisation', 'interrompre', 'transmettre'].includes(action) && s.integree) return `/${action} ${s.sessionId}`;
     if (action === 'copier-reponse') return `/copier-reponse ${s.sessionId}`;
-    if (action === 'dossier') return `/ouvrir ${s.cwd}`;
-    if (action === 'terminal') return `/terminal ${terminaux()[0]?.cle ?? ''} ${s.cwd}`;
+    if (action === 'dossier') return `/ouvrir ${citerArgument(s.cwd)}`;
+    if (action === 'terminal') return `/terminal ${terminaux()[0]?.cle ?? ''} ${citerArgument(s.cwd)}`;
     if (action === 'rejoindre') return `/rejoindre ${s.id}`;
     if (action === 'a-cote') return `/rejoindre-cote ${s.id}`;
     if (action === 'changements') return `/changements ${s.sessionId}`;
     if (action === 'fermer-session') return `/fermer ${s.id ?? s.pid}`;
     if (action === 'copie') return `/copie ${s.sessionId}`;
-    if (action === 'code') return `/code ${s.cwd}`;
+    if (action === 'code') return `/code ${citerArgument(s.cwd)}`;
     if (action === 'favori') return `/favori-session ${s.sessionId}`;
-    if (action === 'revue') return `/revue ${s.cwd}`;
+    if (action === 'revue') return `/revue ${citerArgument(s.cwd)}`;
     if (action === 'copier-code') return `/copier-code ${s.sessionId}`;
-    if (action === 'commit') return `/commit ${s.cwd}`;
+    if (action === 'commit') return `/commit ${citerArgument(s.cwd)}`;
     return undefined;
 }
 
@@ -76,7 +88,7 @@ export function calculerSuggestions(saisie: string): Suggestion[] {
         return [...recents, ...projets.filter((p) => !recents.includes(p))]
             .filter((p) => !dernier || correspond(p.nom, dernier))
             .filter((p) => p.nom.toLowerCase() !== dernier.toLowerCase())
-            .map((p) => ({ texte: `${mots[0]} ${p.nom} `, label: p.nom, description: p.racine, executer: true }));
+            .map((p) => ({ texte: `${mots[0]} ${citerArgument(p.chemin)} `, label: p.nom, description: p.racine, executer: true }));
     }
     return [];
 }

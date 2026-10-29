@@ -141,7 +141,7 @@ export function lignesCockpit(d: Donnees, largeur: number, hauteur: number): { l
     const nJ = Math.max(4, nT - 15);
     const pluriel = (n: number, mot: string) => `${mot}${n > 1 ? 's' : ''}`;
     const fabriques: Record<string, () => string[]> = {
-        sessions: () => tuile('SESSIONS CLAUDE', gros(String(d.agents.length), pluriel(d.agents.length, 'ouverte')),
+        sessions: () => tuile('SESSIONS', gros(String(d.agents.length), pluriel(d.agents.length, 'ouverte')),
             actifs ? chalk.hex('#4ade80')(`${ANIM[tic % ANIM.length]} ${actifs} au travail`) : chalk.gray('○ aucune au travail'),
             recentes.length ? chalk.hex('#fb923c')(`! ${recentes.length} ${recentes.length > 1 ? 't’attendent' : 't’attend'}`) : chalk.gray('✓ rien ne t’attend'), nT),
         poste: () => tuile('CE POSTE', `${chalk.gray('CPU')} ${jauge(cpuNow, nJ)} ${chalk.bold(`${String(Math.round(cpuNow)).padStart(3)} %`)}`,

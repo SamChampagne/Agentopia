@@ -6,7 +6,7 @@ import { lancerArrierePlan } from './agents.js';
 import { toast } from './notifications.js';
 
 // Tâches planifiées : chaque jour (ou certains jours) à une heure donnée, une session Claude d'arrière-plan
-// démarre sur un projet avec une consigne. Elles tournent pendant que Claudetopia est ouvert ; si l'heure est
+// démarre sur un projet avec une consigne. Elles tournent pendant que Agentopia est ouvert ; si l'heure est
 // passée pendant qu'il était fermé, la tâche part au lancement suivant, le même jour.
 
 export interface Planification {

@@ -157,7 +157,7 @@ export function VueSftp({ fermer, cible }: { fermer: () => void; cible: any }) {
             {saisie ? (
                 <box height={1} flexDirection="row">
                     <text fg={theme.accent}>{saisie.quoi === 'envoyer' ? 'Fichier local à envoyer : ' : 'Nom du nouveau dossier : '}</text>
-                    <input flexGrow={1} focused value={saisie.texte} onSubmit={(v: string) => void validerSaisie(saisie.quoi, v)} />
+                    <input flexGrow={1} focused value={saisie.texte} onSubmit={(v: unknown) => { if (typeof v === 'string') void validerSaisie(saisie.quoi, v); }} />
                     <text fg="gray">  Entrée valider · Échap annuler</text>
                 </box>
             ) : <text truncate fg={erreur ? '#f87171' : message.startsWith('✓') ? '#4ade80' : 'gray'}>{message}</text>}

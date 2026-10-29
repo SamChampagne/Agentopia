@@ -10,7 +10,7 @@ import { CHEMINS } from './chemins.js';
 
 // ─── Lien claudetopia: (clic sur une notification) ───────────────────────────
 // Enregistré pour ce compte Windows seulement (HKCU, sans droits admin) : il lance outils/protocole.vbs,
-// qui écrit la demande dans ~/.claudetopia-ouvrir et met la fenêtre Claudetopia au premier plan.
+// qui écrit la demande dans ~/.claudetopia-ouvrir et met la fenêtre Agentopia au premier plan.
 
 const SCRIPT_LIEN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'outils', 'protocole.vbs');
 const FICHIER_DEMANDE = path.join(os.homedir(), '.claudetopia-ouvrir');
@@ -30,7 +30,7 @@ export function retirerLien(): void {
 export function enregistrerLien(): void {
     if (process.platform !== 'win32' || !fs.existsSync(SCRIPT_LIEN) || lienEnregistre()) return;
     const commande = `wscript.exe "${SCRIPT_LIEN}" "%1"`;
-    spawnSync('reg', ['add', CLE, '/ve', '/d', 'URL:Claudetopia', '/f']);
+    spawnSync('reg', ['add', CLE, '/ve', '/d', 'URL:Agentopia', '/f']);
     spawnSync('reg', ['add', CLE, '/v', 'URL Protocol', '/d', '', '/f']);
     spawnSync('reg', ['add', `${CLE}\\shell\\open\\command`, '/ve', '/d', commande, '/f']);
 }
@@ -58,7 +58,7 @@ export function surveillerLiens(): void {
 
 // Toast Windows natif via Windows PowerShell 5.1 (WinRT n'est pas dispo dans pwsh 7).
 // On l'envoie au nom de Windows Terminal : l'ID de PowerShell est filtré silencieusement sur ce poste.
-// lien : « claudetopia:session/<id> »… un clic sur la notification ouvre ça dans Claudetopia (voir enregistrerLien)
+// lien : « claudetopia:session/<id> »… un clic sur la notification ouvre ça dans Agentopia (voir enregistrerLien)
 // son : « fini » (le son habituel), « alerte » (plus marqué : une session a besoin de toi) ; aucun si /sons est coupé
 export type Son = 'fini' | 'alerte';
 const SONS_TOAST: Record<Son, string> = { fini: 'ms-winsoundevent:Notification.Default', alerte: 'ms-winsoundevent:Notification.Reminder' };

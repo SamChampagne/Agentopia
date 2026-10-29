@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { CHEMINS } from './chemins.js';
+import { CHEMINS, NOM, nomBanniere } from './chemins.js';
+import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
 
 // Fichier de config dans le dossier utilisateur : ~/.claudetopia.json
 export const CHEMIN_CONFIG = CHEMINS.config;
@@ -13,11 +14,12 @@ export interface Config {
     banniere: string;    // texte de la bannière au démarrage
     theme: { primaire: string; secondaire: string; accent: string };
     couleurs: Record<string, string>;   // couleur d'onglet forcée par projet : { "SaniPlan": "#e63946" }
-    notifications: boolean;             // toast Windows quand une session Claude t'attend
+    notifications: boolean;             // toast Windows quand une session t'attend
     prompts: Record<string, string>;    // prompts favoris : /claude saniplan @tests
     panneau: boolean;                   // panneau live (sessions + serveurs) au-dessus de la saisie
     prenom: string;                     // pour le "Bonjour" (sinon : git user.name / user.email)
-    lancement: 'fond' | 'onglet';       // où /claude ouvre les sessions
+    lancement: 'fond' | 'onglet';       // où /claude-cli ouvre les sessions natives
+    fournisseurDefaut?: Fournisseur | 'choisir'; // nouvelles conversations intégrées
     dockerDistant: string[];            // serveurs SSH dont on surveille aussi les conteneurs Docker
     largeurLaterale: number;            // largeur de la colonne de gauche (0 = automatique)
     fetchAuto: boolean;                 // git fetch de tous les dépôts toutes les 5 min, en fond
@@ -33,7 +35,7 @@ export interface Config {
     sons?: boolean;                    // petit son quand une session finit ou a besoin de toi
     themeAuto?: { mode: 'heure' | 'windows'; jour: string; soir: string };   // palette qui change le soir, ou selon le mode clair/sombre de Windows
     budgetJour?: number;                // alerte au-delà de ce coût du jour en $ (équivalent API) ; 0 = aucune
-    maitre: { actif: boolean; modele: string; veille?: number };   // veille : minutes d'inactivité avant de libérer sa mémoire (0 = jamais)
+    maitre: { actif: boolean; modele: string; veille?: number; fournisseur?: Fournisseur | 'claude-cli' | 'auto' };   // fournisseur du maître, indépendant des agents de travail
     sftp: import('./sftp.js').ConnexionSftp[];   // connexions SFTP (le mot de passe est chiffré à part)   // l'agent maître (gère les sessions) : haiku = rapide
 }
 
@@ -50,7 +52,7 @@ const PROMPTS_DEFAUT: Record<string, string> = {
 const CONFIG_DEFAUT: Config = {
     racines: [path.join(os.homedir(), 'dev'), 'C:\\dev'],
     extras: [],
-    banniere: 'CLAUDETOPIA',
+    banniere: NOM.toUpperCase(),
     theme: { primaire: '#00b4d8', secondaire: '#90e0ef', accent: '#f72585' },
     couleurs: {},
     notifications: true,
@@ -58,6 +60,7 @@ const CONFIG_DEFAUT: Config = {
     panneau: true,
     prenom: '',
     lancement: 'fond',
+    fournisseurDefaut: 'choisir',
     dockerDistant: [],
     largeurLaterale: 0,
     fetchAuto: true,
@@ -74,6 +77,11 @@ export function chargerConfig(): Config {
     try {
         const brut = JSON.parse(fs.readFileSync(CHEMIN_CONFIG, 'utf-8'));
         const config = { ...CONFIG_DEFAUT, ...brut, theme: { ...CONFIG_DEFAUT.theme, ...brut.theme } };
+        // Un fournisseur retiré/inconnu ne doit jamais déclencher un autre agent en silence.
+        if (!Object.hasOwn(FOURNISSEURS, config.fournisseurDefaut)) config.fournisseurDefaut = 'choisir';
+        // Renommer uniquement la bannière du produit ; garder les titres personnalisés.
+        config.banniere = nomBanniere(config.banniere);
+        if (config.banniere !== brut.banniere || config.fournisseurDefaut !== brut.fournisseurDefaut) sauverConfig(config);
         // L'ancien mode clair n'existe plus : sa palette (couleurs foncées) est illisible sur fond sombre
         if ('modeClair' in brut) {
             if (brut.modeClair) config.theme = { ...CONFIG_DEFAUT.theme };

@@ -36,7 +36,8 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
     return (
         <box flexGrow={1} flexDirection="column" paddingLeft={1}>
             <Titre texte="ÉQUIPES D'AGENTS" droite="clic = ouvrir · Échap fermer" />
-            <text fg="gray" wrapMode="word">Un chef d'équipe découpe ton objectif en tâches, puis plusieurs agents Claude les font en parallèle, chacun sur sa branche. À la fin, un intégrateur fusionne tout.</text>
+            <text fg="gray" wrapMode="word">Les agents travaillent sur leurs branches et partagent leurs résultats selon les dépendances. Garde Agentopia ouvert pour lancer les tâches suivantes. L’intégration se lance après revue.</text>
+            <text fg={theme.accent} onMouseDown={() => { fermer(); bus.emit('lancer', '/equipe-mixte'); }}>+ Équipe Claude / Codex / Perplexity · commande /equipe-mixte</text>
             <text> </text>
             <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {lignes.map((e: any, i) => {
@@ -51,8 +52,8 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
                                 {e ? <>
                                     <span fg="#c084fc">◆ </span>
                                     <span attributes={actif ? GRAS : 0}>{colonne(e.nomProjet, 18)}</span>
-                                    <span fg={etat.couleur}>{colonne(etat.texte, 24)}</span>
-                                    <span fg="gray">{colonne(`${av.faites}/${av.total}`, 6)}{e.objectif}</span>
+                                    <span fg={etat!.couleur}>{colonne(etat!.texte, 24)}</span>
+                                    <span fg="gray">{colonne(`${av!.faites}/${av!.total}`, 6)}{e.objectif}</span>
                                 </> : <span fg={theme.accent} attributes={GRAS}>+ Nouvelle équipe sur un projet…</span>}
                             </text>
                         </box>
@@ -151,7 +152,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: any; fermer: () => void; retour
             <text truncate><span fg="gray">Objectif : </span><span>{e.objectif}</span></text>
             <Boutons boutons={boutonsEquipe(e, courante)} agir={(a) => void agir(a)} />
             <text truncate fg={message.startsWith('!') || e.etat === 'erreur' ? '#facc15' : 'gray'}>{info || ' '}</text>
-            <text fg="gray">{'  ' + colonne('Tâche', 50) + colonne('Rôle', 17) + 'État'}</text>
+            <text fg="gray">{'  ' + colonne('Tâche', 43) + colonne('Agent / rôle', 24) + 'État'}</text>
             <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {e.etat === 'planification' && <text fg="#c084fc">{`  ${ANIM[t0 % ANIM.length]} Le chef d'équipe prépare le plan…`}</text>}
                 {taches.map((t: any) => {
@@ -164,8 +165,8 @@ function CorpsEquipe({ e, fermer, retour }: { e: any; fermer: () => void; retour
                             onMouseDown={() => (actif && t.agentId ? ouvrirSession(t.agentId) : setChoix(t.id))}>
                             <text truncate>
                                 <span fg={actif ? theme.accent : 'gray'}>{actif ? '❯ ' : '  '}</span>
-                                <span attributes={actif ? GRAS : 0}>{colonne(`${t.id === 'integration' ? '⇄' : t.id} ${t.titre}`, 50)}</span>
-                                <span fg={rt.couleur}>{colonne(`${rt.icone} ${rt.nom}`, 17)}</span>
+                                <span attributes={actif ? GRAS : 0}>{colonne(`${t.id === 'integration' ? '⇄' : t.id} ${t.titre}`, 43)}</span>
+                                <span fg={rt.couleur}>{colonne(t.fournisseur ? `${t.fournisseur} · ${rt.nom}` : `${rt.icone} ${rt.nom}`, 24)}</span>
                                 <span fg={et.couleur}>{et.texte}</span>
                             </text>
                         </box>
@@ -176,7 +177,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: any; fermer: () => void; retour
                 {!courante
                     ? <text fg="gray" wrapMode="word">{e.etat === 'planification' ? 'Le chef d\'équipe lit le code et découpe l\'objectif en tâches (1 à 3 minutes)…' : e.message ?? ''}</text>
                     : <>
-                        <text fg={r.couleur} truncate>{`${r.icone} ${r.nom} · ${courante.titre}${courante.branche ? `  ⎇ ${courante.branche}` : ''}`}</text>
+                        <text fg={r!.couleur} truncate>{`${courante.fournisseur || r!.nom} · ${courante.titre}${courante.branche ? `  ⎇ ${courante.branche}` : ''}`}</text>
                         <text wrapMode="word" selectable>{courante.resultat ? `Résultat : ${courante.resultat}` : courante.consigne}</text>
                     </>}
             </box>

@@ -61,7 +61,7 @@ async function echap() {
 
 await w(7000);
 let image = await ecran();
-verifier('accueil : cockpit et colonne', image.includes('SESSIONS CLAUDE') && image.includes('Sessions  Projets') && image.includes('SERVEURS SSH'), image);
+verifier('accueil : cockpit et colonne', image.includes('SESSIONS') && image.includes('Sessions  Projets') && image.includes('SERVEURS SSH'), image);
 
 await mockInput.typeText('/the');
 image = await ecran();
@@ -140,9 +140,9 @@ await mockMouse.click(12, 2);
 await ecran();
 await mockMouse.click(10, 3);
 image = await ecran();
-verifier('clic sur un projet : panneau de détail', image.includes('← Retour') && image.includes('SESSIONS CLAUDE (') && (image.includes('Branche') || image.includes('pas un dépôt git')), image);
+verifier('clic sur un projet : panneau de détail', image.includes('← Retour') && image.includes('SESSIONS (') && (image.includes('Branche') || image.includes('pas un dépôt git')), image);
 image = await echap();
-verifier('Échap referme le détail', !image.includes('SESSIONS CLAUDE ('), image);
+verifier('Échap referme le détail', !image.includes('SESSIONS ('), image);
 await mockMouse.click(3, 2);
 await ecran();
 
@@ -172,7 +172,7 @@ verifier('Échap referme Fichiers', !image.includes('⇅ FICHIERS'), image);
 image = await commande('/sorties');
 verifier('/sorties : journal complet', image.includes('▤ JOURNAL'), image);
 image = await echap();
-verifier('Échap revient au cockpit', image.includes('SESSIONS CLAUDE'), image);
+verifier('Échap revient au cockpit', image.includes('SESSIONS'), image);
 
 // La session qui a le plus de messages : on vérifie aussi que le texte s'affiche
 // Dans l'ordre des cartes affichées : seulement les actives (ni terminées, ni en pause), 5 lignes par carte
@@ -211,7 +211,7 @@ if (avecMessages >= 0) {
     await mockMouse.moveTo(60 + 6, 6);
     image = await ecran();
     image = await echap();
-    verifier('Échap referme la conversation', image.includes('SESSIONS CLAUDE'), image);
+    verifier('Échap referme la conversation', image.includes('SESSIONS'), image);
 }
 
 // Passer d'une vue à l'autre sans fermer la première (clic dans la barre du haut)
@@ -266,7 +266,7 @@ await mockMouse.click(120, 30, 2);
 image = await ecran();
 verifier('clic droit sur le cockpit : menu général', image.includes('Parler au maître') && image.includes('Nouvelle session Claude'), image);
 image = await echap();
-verifier('Échap referme le menu sans rien lancer', image.includes('SESSIONS CLAUDE'), image);
+verifier('Échap referme le menu sans rien lancer', image.includes('SESSIONS'), image);
 
 // Ctrl+K : la palette (recherche), refermée par Échap
 mockInput.pressKey('k', { ctrl: true });

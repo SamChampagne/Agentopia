@@ -1,3 +1,4 @@
+import { citerArgument } from '../../dist/ligneCommande.js';
 import { useEffect, useState } from 'react';
 import { useKeyboard } from '@opentui/react';
 import { GRAS, couper } from '../style.ts';
@@ -69,7 +70,7 @@ export function VueGit({ fermer }: { fermer: () => void }) {
         if (!actifs.has(action)) return;
         if (action === 'pr-corriger' || action === 'ci') {
             fermer();
-            return void bus.emit('lancer', `/${action === 'ci' ? 'ci-reparer' : 'pr-corriger'} ${local.projet.chemin}`);
+            return void bus.emit('lancer', `/${action === 'ci' ? 'ci-reparer' : 'pr-corriger'} ${citerArgument(local.projet.chemin)}`);
         }
         if (action === 'fetch') {
             setMessage('git fetch sur tous les dépôts…');
@@ -130,7 +131,7 @@ export function VueGit({ fermer }: { fermer: () => void }) {
         if (local.prs?.length) return <span fg={theme.accent}>{local.prs.slice(0, 3).map((p: any) => `#${p.numero} ${p.titre} (${p.auteur}${p.brouillon ? ', brouillon' : ''})`).join('  ·  ')}</span>;
         if (!local.hebergeur || !['GitHub', 'Azure DevOps', 'GitLab'].includes(local.hebergeur)) return <span fg="gray">« ◷ PR » ouvre la page du dépôt</span>;
         if (!jetons.includes(local.hebergeur)) return <span fg="gray">{`ajoute un jeton ${local.hebergeur} (⚿ Jetons) : PR et nouveaux dépôts visibles ici`}</span>;
-        const e = etatPR[local.hebergeur];
+        const e = etatPR[local.hebergeur as keyof typeof etatPR];
         return e && e !== 'ok' ? <span fg="#f87171">{`${local.hebergeur} : ${e} (⚿ Jetons pour le remplacer)`}</span> : <span fg="gray">aucune ouverte</span>;
     };
 

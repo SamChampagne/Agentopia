@@ -1,21 +1,24 @@
-﻿# Installation de Claudetopia sur un poste Windows : installe ce qui manque, compile, crée le raccourci,
-# puis lance Claudetopia qui scanne le poste (projets, serveurs SSH, outils).
+# Installation d'Agentopia sur un poste Windows : installe ce qui manque, compile, crée le raccourci,
+# puis lance Agentopia qui scanne le poste (projets, serveurs SSH, outils).
 # Trois façons de lancer :
 #   - double-clic sur Installer.bat dans le dossier ;
 #   - en une ligne (dépôt privé, avec ton accès git) :
-#       git clone <url du depot> "$HOME\Claudetopia"; & "$HOME\Claudetopia\Installer.bat"
+#       git clone <url du depot> "$HOME\Agentopia"; & "$HOME\Agentopia\Installer.bat"
 #   - en une ligne depuis le fichier brut (dépôt public) :
 #       irm <url brute de install.ps1> | iex
-#     Dans ce cas, le script récupère lui-même le code dans ~\Claudetopia (ou le met à jour), et installe Git au besoin.
+#     Dans ce cas, le script récupère lui-même le code dans ~\Agentopia (ou le met à jour), et installe Git au besoin.
 # Les programmes manquants s'installent avec winget (présent sur Windows 10 et 11 à jour).
 # Compatible Windows PowerShell 5.1 (présent sur tous les postes).
 
 # Les erreurs sont gérées à la main (codes de retour) : un simple avertissement de npm ne doit pas tout arrêter
 $ErrorActionPreference = 'Continue'
 
-# Adresse du dépôt, utilisée quand le script est lancé seul (irm | iex). /installation dans Claudetopia affiche la bonne ligne.
+# Adresse du dépôt, utilisée quand le script est lancé seul (irm | iex). /installation dans Agentopia affiche la bonne ligne.
 $Depot = if ($env:CLAUDETOPIA_DEPOT) { $env:CLAUDETOPIA_DEPOT } else { 'https://github.com/SamChampagne/ClaudeTopia.git' }
-$Dossier = Join-Path $HOME 'Claudetopia'
+$Dossier = Join-Path $HOME 'Agentopia'
+# Reprendre une installation existante sans créer une deuxième copie du projet.
+$AncienDossier = Join-Path $HOME 'Claudetopia'
+if (-not (Test-Path -LiteralPath $Dossier) -and (Test-Path -LiteralPath (Join-Path $AncienDossier '.git'))) { $Dossier = $AncienDossier }
 $problemes = @()
 
 function Titre($texte) { Write-Host ""; Write-Host "== $texte ==" -ForegroundColor Cyan }
@@ -54,7 +57,7 @@ function Installer($cmd, $id, $nom) {
 
 $racine = if ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { $null }
 if (-not $racine -or -not (Test-Path (Join-Path $racine 'package.json'))) {
-    Write-Host "Recuperation de Claudetopia dans $Dossier" -ForegroundColor Magenta
+    Write-Host "Recuperation de Agentopia dans $Dossier" -ForegroundColor Magenta
     if (-not (Installer 'git' 'Git.Git' 'Git')) {
         Write-Host "  [X]  Git est introuvable -> winget install Git.Git   (puis ferme et rouvre la fenetre)" -ForegroundColor Red
         return
@@ -76,7 +79,7 @@ if (-not $racine -or -not (Test-Path (Join-Path $racine 'package.json'))) {
 }
 Set-Location $racine
 
-Write-Host "Installation de Claudetopia" -ForegroundColor Magenta
+Write-Host "Installation de Agentopia" -ForegroundColor Magenta
 Write-Host "Dossier : $racine"
 if (-not (Present 'winget')) {
     Avert "winget est introuvable : les programmes manquants ne pourront pas s'installer tout seuls" "installe « App Installer » depuis le Microsoft Store, puis relance"
@@ -105,18 +108,12 @@ Ok "Node.js $versionNode"
 if (-not (Present 'npm')) { Erreur "npm est introuvable (normalement installe avec Node.js)" "reinstalle Node.js : winget install OpenJS.NodeJS.LTS"; Arreter "npm manquant" }
 Ok "npm $(npm --version)"
 
-# --- 2. Outils (installés s'ils manquent ; Claudetopia marche sans, mais certaines fonctions seront grisées) ---
+# --- 2. Outils (installés s'ils manquent ; Agentopia marche sans, mais certaines fonctions seront grisées) ---
 Titre "Outils"
 if (Installer 'git' 'Git.Git' 'Git') { Ok "Git" } else { Avert "Git absent : statut des projets, commits et journal indisponibles" "winget install Git.Git" }
 if (Installer 'wt' 'Microsoft.WindowsTerminal' 'Windows Terminal') { Ok "Windows Terminal" } else { Avert "Windows Terminal absent : la souris et les onglets ne marcheront pas" "winget install Microsoft.WindowsTerminal" }
 if (Installer 'rg' 'BurntSushi.ripgrep.MSVC' 'ripgrep') { Ok "ripgrep" } else { Avert "ripgrep absent : /cherche indisponible" "winget install BurntSushi.ripgrep.MSVC" }
-if (-not (Present 'claude')) {
-    Write-Host "  ...  Installation de Claude Code" -ForegroundColor Gray
-    npm install -g @anthropic-ai/claude-code --no-audit --no-fund | Out-Host
-    RelirePath
-}
-if (Present 'claude') { Ok "Claude Code $((claude --version) -split ' ' | Select-Object -First 1)   (connexion au premier lancement de : claude)" }
-else { Avert "Claude Code absent : les sessions Claude ne marcheront pas" "irm https://claude.ai/install.ps1 | iex" }
+# Les fournisseurs sont choisis et préparés dans l’application.
 # Lourds et pas indispensables : seulement signalés
 if (Present 'code') { Ok "VS Code" } else { Avert "VS Code absent : les boutons VS Code ne feront rien (optionnel)" "winget install Microsoft.VisualStudioCode" }
 if (Present 'docker') { Ok "Docker" } else { Avert "Docker absent : la section Docker restera vide (optionnel)" $null }
@@ -151,7 +148,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "code $LASTEXITCODE" }
     Ok "Bun $(bun --version) et la nouvelle interface"
 } catch {
-    Avert "Nouvelle interface indisponible ($_) : Claudetopia utilisera l'ancienne" "winget install Oven-sh.Bun   puis relance l'installation"
+    Avert "Nouvelle interface indisponible ($_) : Agentopia utilisera l'ancienne" "winget install Oven-sh.Bun   puis relance l'installation"
 }
 
 # --- 4. Node 24 pour la souris (sans toucher au Node du système) ---
@@ -162,9 +159,9 @@ if ($majeure -ge 24) {
     try {
         $v24 = (npx -y node@24 --version | Select-Object -Last 1)
         if (-not $v24) { throw "pas de version" }
-        Ok "Node $v24 telecharge pour Claudetopia (le Node du systeme ne change pas)"
+        Ok "Node $v24 telecharge pour Agentopia (le Node du systeme ne change pas)"
     } catch {
-        Avert "Impossible de preparer Node 24 : Claudetopia marchera, mais sans la souris" "verifie ta connexion Internet puis relance l'installation"
+        Avert "Impossible de preparer Node 24 : Agentopia marchera, mais sans la souris" "verifie ta connexion Internet puis relance l'installation"
     }
 }
 
@@ -172,38 +169,38 @@ if ($majeure -ge 24) {
 Titre "Raccourci"
 try {
     $bureau = [Environment]::GetFolderPath('Desktop')
-    $lien = Join-Path $bureau 'Claudetopia.lnk'
-    $lanceur = Join-Path $racine 'Claudetopia.bat'
+    $lien = Join-Path $bureau 'Agentopia.lnk'
+    $lanceur = Join-Path $racine 'Agentopia.bat'
     # Ancien nom du logiciel
     Remove-Item (Join-Path $bureau 'CLI Perso.lnk') -ErrorAction SilentlyContinue
     $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lien)
     $wt = Get-Command wt -ErrorAction SilentlyContinue
     if ($wt) {
         $s.TargetPath = $wt.Source
-        $s.Arguments = "-d `"$racine`" --title `"Claudetopia`" cmd /k `"$lanceur`""
+        $s.Arguments = "-d `"$racine`" --title `"Agentopia`" cmd /k `"$lanceur`""
         $s.IconLocation = "$($wt.Source),0"
     } else {
         $s.TargetPath = Join-Path $env:SystemRoot 'System32\cmd.exe'
         $s.Arguments = "/k `"$lanceur`""
     }
     $s.WorkingDirectory = $racine
-    $s.Description = 'Claudetopia : sessions et equipes Claude, projets, Git, Docker, SSH'
+    $s.Description = 'Agentopia : sessions et equipes multi-agents, projets, Git, Docker, SSH'
     $s.Save()
-    Ok "Raccourci Claudetopia cree sur le bureau"
+    Ok "Raccourci Agentopia cree sur le bureau"
 } catch {
-    Avert "Impossible de creer le raccourci ($_)" "lance plutot Claudetopia.bat, ou /raccourci depuis Claudetopia"
+    Avert "Impossible de creer le raccourci ($_)" "lance plutot Agentopia.bat, ou /raccourci depuis Agentopia"
 }
 
-# --- Résumé, puis Claudetopia qui scanne le poste ---
+# --- Résumé, puis Agentopia qui scanne le poste ---
 Titre "Termine"
 if ($problemes.Count -eq 0) {
-    Write-Host "  Tout est pret." -ForegroundColor Green
+    Write-Host "  Agentopia est installe. La preparation des agents continue dans l’application." -ForegroundColor Green
 } else {
     Write-Host "  Installe, mais $($problemes.Count) point(s) a corriger (voir ci-dessus)." -ForegroundColor Yellow
 }
-Write-Host "  Claudetopia s'ouvre et scanne le poste : projets, serveurs SSH et outils." -ForegroundColor Gray
+Write-Host "  Agentopia s'ouvre et scanne le poste : projets, serveurs SSH et outils." -ForegroundColor Gray
 Write-Host "  Ensuite : /diagnostic verifie tout, /config regle comptes et interface, /maj met a jour." -ForegroundColor Gray
-# CLAUDETOPIA_SCAN : Claudetopia lance /scan au démarrage (le premier lancement passe par /bienvenue, qui le propose)
-$commande = "set CLAUDETOPIA_SCAN=1&& `"$(Join-Path $racine 'Claudetopia.bat')`""
-if (Present 'wt') { Start-Process wt -ArgumentList "-d `"$racine`" --title `"Claudetopia`" cmd /k `"$commande`"" }
+# CLAUDETOPIA_SCAN : Agentopia lance /scan au démarrage (le premier lancement passe par /bienvenue, qui le propose)
+$commande = "set CLAUDETOPIA_SCAN=1&& `"$(Join-Path $racine 'Agentopia.bat')`""
+if (Present 'wt') { Start-Process wt -ArgumentList "-d `"$racine`" --title `"Agentopia`" cmd /k `"$commande`"" }
 else { Start-Process cmd -ArgumentList "/k `"$commande`"" }

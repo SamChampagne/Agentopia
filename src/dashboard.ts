@@ -1,7 +1,8 @@
 import chalk from 'chalk';
 import * as os from 'os';
 import { spawnSync } from 'child_process';
-import { Projet, derniereSessionClaude, derniereActiviteGit, etatGit, depuis } from './projets.js';
+import { Projet, derniereActiviteGit, etatGit, depuis } from './projets.js';
+import { activiteAgents, derniereSessionProjet } from './activiteAgents.js';
 import { c, couleurProjet, banniere } from './theme.js';
 import { tableau, titre, largeurVisible } from './affichage.js';
 import { chargerConfig } from './config.js';
@@ -9,11 +10,12 @@ import { surPath } from './chemins.js';
 
 const GH_DISPO = !!surPath('gh');
 
-// Projets triés par dernière activité (session Claude ou action git)
+// Projets triés par dernière activité (tous les agents suivis ici, ou action git).
 export function projetsRecents(projets: Projet[], max: number): { projet: Projet; date: Date }[] {
+    const activite = activiteAgents();
     return projets
         .map((projet) => {
-            const dates = [derniereSessionClaude(projet.chemin), derniereActiviteGit(projet.chemin)]
+            const dates = [derniereSessionProjet(projet.chemin, activite), derniereActiviteGit(projet.chemin)]
                 .filter((d): d is Date => !!d);
             return { projet, date: new Date(Math.max(0, ...dates.map((d) => d.getTime()))) };
         })
@@ -56,7 +58,7 @@ export function entete(marge: number, largeur: number): string {
     const decalage = marge + Math.max(0, Math.floor((largeur - largeurBan) / 2));
     const date = new Date().toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' });
     const salut = `${c.accent('✻')} Bonjour ${chalk.bold(prenom())} ${c.discret(`· ${date}`)}`;
-    const aide = c.discret('/ commandes · Entrée menu · ! shell · texte libre = Claude');
+    const aide = c.discret('/ commandes · Entrée menu · ! shell · texte libre = nouvelle conversation');
     return ['', ...ban.map((l) => centrer(l, decalage)), '',
         centrer(salut, marge + Math.max(0, Math.floor((largeur - largeurVisible(salut)) / 2))),
         centrer(aide, marge + Math.max(0, Math.floor((largeur - largeurVisible(aide)) / 2)))].join('\n');

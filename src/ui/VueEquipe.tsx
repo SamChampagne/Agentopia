@@ -91,7 +91,7 @@ export function boutonsEquipe(e: Equipe, t?: Tache) {
     const ouvrirAgent = t?.agentId ? [{ label: '↵ Voir l\'agent', action: 'agent' }] : [];
     switch (e.etat) {
         case 'planification': return [{ label: '− Abandonner', action: 'ranger' }, fermer];
-        case 'plan': return [...(estDeConfiance(e.projet) ? [] : [{ label: '▭ Accepter le dossier', action: 'confiance' }]), { label: '▶ Lancer l\'équipe', action: 'lancer' }, { label: '↻ Refaire le plan', action: 'replan' }, { label: '− Retirer la tâche', action: 'retirer' }, { label: '− Abandonner', action: 'ranger' }, fermer];
+        case 'plan': return [...(e.mixte || estDeConfiance(e.projet) ? [] : [{ label: '▭ Accepter le dossier', action: 'confiance' }]), { label: '▶ Lancer l\'équipe', action: 'lancer' }, ...(e.mixte ? [] : [{ label: '↻ Refaire le plan', action: 'replan' }]), { label: '− Retirer la tâche', action: 'retirer' }, { label: '− Abandonner', action: 'ranger' }, fermer];
         case 'en cours': return [...ouvrirAgent, { label: '■ Arrêter', action: 'arreter' }, fermer];
         case 'erreur': return [{ label: '↻ Relancer', action: 'lancer' }, ...ouvrirAgent, ...revue, { label: '⇄ Intégrer ce qui est fait', action: 'integrer' }, { label: '↻ Refaire le plan', action: 'replan' }, { label: '− Ranger', action: 'ranger' }, fermer];
         case 'prete': return [{ label: '⇄ Intégrer', action: 'integrer' }, ...revue, ...ouvrirAgent, { label: '✓ Ranger l\'équipe', action: 'ranger' }, fermer];

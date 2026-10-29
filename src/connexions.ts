@@ -11,8 +11,10 @@ import { lireHotes, clesDisponibles } from './sshConfig.js';
 import { lireAcces } from './ssh.js';
 import { lireDonnees } from './ui/donnees.js';
 import { surPath } from './chemins.js';
+import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
+import { disponibilite } from './providers/config.js';
 
-// Tout ce que Claudetopia peut connecter, avec son état et l'action qui le règle en un clic.
+// Tout ce que Agentopia peut connecter, avec son état et l'action qui le règle en un clic.
 // Les vérifications tournent en parallèle ; les plus lentes (API, versions) sont mises en cache.
 
 export type Etat = 'ok' | 'avert' | 'manque' | 'neutre' | 'verification';
@@ -96,14 +98,20 @@ export async function etatConnexions(): Promise<Element[]> {
     versionClaude ??= claudeOk ? sortie(CLAUDE, ['--version']).then((r) => r.texte.split(' ')[0] ?? '') : Promise.resolve('');
 
     const elements: Element[] = [];
-    // Claude
+    // Configuration locale seulement : la présence du CLI/de la clé ne valide pas le compte.
+    for (const f of Object.keys(FOURNISSEURS) as Fournisseur[]) {
+        const etat = disponibilite(f);
+        elements.push({ groupe: 'FOURNISSEURS IA', nom: FOURNISSEURS[f].nom, etat: 'neutre', detail: etat.texte,
+            action: etat.pret ? 'vérifier la connexion' : 'configurer', commande: `/fournisseurs ${f}` });
+    }
+    // Intégration native Claude CLI : indépendante des fournisseurs intégrés.
     elements.push(claudeOk
-        ? { groupe: 'CLAUDE', nom: 'Claude Code', etat: 'ok', detail: `installé ${await versionClaude}`, action: 'mettre à jour', commande: '/installer-claude' }
-        : { groupe: 'CLAUDE', nom: 'Claude Code', etat: 'manque', detail: 'pas installé : aucune session possible', action: 'installer', commande: '/installer-claude' });
+        ? { groupe: 'OUTILS CLAUDE CLI', nom: 'Claude Code', etat: 'ok', detail: `installé ${await versionClaude}`, action: 'mettre à jour', commande: '/installer-claude' }
+        : { groupe: 'OUTILS CLAUDE CLI', nom: 'Claude Code', etat: 'neutre', detail: 'absent : sessions natives et maître Claude indisponibles', action: 'installer', commande: '/installer-claude' });
     if (claudeOk) {
         elements.push(compte.connecte
-            ? { groupe: 'CLAUDE', nom: 'Compte Claude', etat: 'ok', detail: `${compte.email ?? ''} ${compte.methode ? `(${compte.methode})` : ''}`.trim(), action: 'changer de compte', commande: '/compte claude' }
-            : { groupe: 'CLAUDE', nom: 'Compte Claude', etat: 'manque', detail: 'pas connecté', action: 'se connecter', commande: '/connexion-claude' });
+            ? { groupe: 'OUTILS CLAUDE CLI', nom: 'Compte Claude CLI', etat: 'ok', detail: `${compte.email ?? ''} ${compte.methode ? `(${compte.methode})` : ''}`.trim(), action: 'changer de compte', commande: '/compte claude' }
+            : { groupe: 'OUTILS CLAUDE CLI', nom: 'Compte Claude CLI', etat: 'neutre', detail: 'pas connecté (CLI uniquement)', action: 'se connecter', commande: '/connexion-claude' });
     }
 
     // Git et comptes en ligne

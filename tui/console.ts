@@ -1,7 +1,7 @@
 // Windows : la console ne transmet les clics et la molette (séquences VT) que si son entrée est en mode « VT ».
 // OpenTUI ne règle pas ce mode lui-même (il compte sur le mode brut du runtime) : on s'en assure ici.
 // On retire aussi la « sélection rapide » de la console classique, qui garde les clics pour elle.
-// Le mode d'origine est remis en quittant (sinon la fenêtre le garderait après Claudetopia).
+// Le mode d'origine est remis en quittant (sinon la fenêtre le garderait après Agentopia).
 import { dlopen, FFIType, ptr } from 'bun:ffi';
 
 const VT_ENTREE = 0x0200, SELECTION_RAPIDE = 0x0040, DRAPEAUX_ETENDUS = 0x0080;

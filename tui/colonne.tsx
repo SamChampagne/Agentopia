@@ -64,16 +64,14 @@ function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu, l
     // 3e ligne : ta dernière demande à cette session, sinon depuis quand elle est là
     const demande = a?.dernierUser ? `❯ ${une(a.dernierUser)}` : `depuis ${ilYa(a?.date ?? s.debut)}${s.arrierePlan ? ' · arrière-plan' : ' · onglet'}`;
     const bg = active ? fond.panneauActif : survole ? fond.selection : fond.panneau;
-    // Le bord pulse pendant que Claude travaille ; il clignote doucement quand une session t'attend
-    const pulse = !pause && (s.statut === 'travaille' || s.statut === 'bloquee') && tic % 2 === 1;
-    const barre = active ? theme.accent : pulse ? (s.statut === 'travaille' ? '#166534' : '#7c2d12') : couleur;
-    const repondable = !pause && s.statut === 'bloquee' && s.arrierePlan && s.question && !/permission/i.test(s.question);
+    const barre = active ? theme.accent : couleur;
+    const repondable = !s.integree && !pause && s.statut === 'bloquee' && s.arrierePlan && s.question && !/permission/i.test(s.question);
     const ctx = a?.contexte ? jaugeContexte(a.contexte, 6) : undefined;
     return (
         <box height={pause ? 4 : 5} flexShrink={0} onMouseDown={(e: any) => (droit(e) ? menu() : choisir())} onMouseOver={() => survoler(true)} onMouseOut={() => survoler(false)}>
             <box height={1} backgroundColor={bg} flexDirection="row">
                 <text fg={barre}>▌ </text>
-                <text flexGrow={1} truncate><span fg={couleurProjet(s.nom)}>● </span><span fg={fond.texte} attributes={GRAS}>{s.nom}</span></text>
+                <text flexGrow={1} truncate><span fg={couleurProjet(s.nom)}>● </span><span fg={fond.texte} attributes={GRAS}>{s.nom}</span><span fg={theme.secondaire}>{s.fournisseur ? ` · ${s.fournisseur}` : ''}</span></text>
                 <text fg={couleur}>{`${icone} ${etat} `}</text>
             </box>
             <box height={1} backgroundColor={bg} flexDirection="row">
@@ -88,7 +86,7 @@ function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu, l
                 <box height={1} backgroundColor={bg} flexDirection="row">
                     <text fg={barre}>▌ </text>
                     <text>{'  '}</text>
-                    {repondable ? <Reponses s={s} largeur={largeur} lancer={lancer} /> : s.statut === 'terminee' ? (
+                    {s.permission ? <text fg="#fb923c" onMouseDown={(e: any) => { e?.stopPropagation?.(); lancer(`/autorisation ${s.id}`); }}>! Répondre à l’agent</text> : repondable ? <Reponses s={s} largeur={largeur} lancer={lancer} /> : s.statut === 'terminee' ? (
                         <text fg={theme.accent} attributes={survole ? GRAS : 0} onMouseDown={(e: any) => {
                             e?.stopPropagation?.();
                             lancer(`/continuer ${s.sessionId}`);
@@ -141,9 +139,7 @@ export function Entete({ titre, droite = '', clic }: { titre: string; droite?: s
 function Maitre({ etat, actif, tic, basculer, claude }: any) {
     const dernier = etat.historique.at(-1);
     const lignes: { t: string; c?: string }[] = [];
-    if (claude === 'absent') lignes.push({ t: '! Claude Code n’est pas installé', c: '#fb923c' }, { t: '▸ /installer-claude', c: theme.accent });
-    else if (claude === 'deconnecte') lignes.push({ t: '! Pas connecté à Claude', c: '#fb923c' }, { t: '▸ /connexion-claude', c: theme.accent });
-    else if (!dernier) lignes.push(actif ? { t: 'Écris ta demande en bas ↓', c: VIOLET } : { t: 'ex. « ferme les sessions finies »', c: fond.eteint });
+    if (!dernier) lignes.push(actif ? { t: 'Écris ta demande en bas ↓', c: VIOLET } : { t: 'ex. « organise une équipe pour ce projet »', c: fond.eteint });
     else {
         lignes.push({ t: `» ${dernier.question}`, c: 'gray' });
         if (etat.enCours) lignes.push({ t: `${ANIM[tic % ANIM.length]} réfléchit…`, c: VIOLET });
@@ -151,11 +147,11 @@ function Maitre({ etat, actif, tic, basculer, claude }: any) {
         if (dernier.reponse) lignes.push({ t: dernier.reponse });
         dernier.commandes?.forEach((x: string) => lignes.push({ t: `▸ ${x.replace(/ --oui$/, '')}`, c: theme.secondaire }));
     }
-    const droite = etat.enCours ? ANIM[tic % ANIM.length] : actif ? '● à l’écoute' : etat.pret ? 'Alt+M' : etat.enVeille ? 'en veille' : etat.erreur ? '!' : 'démarre…';
+    const droite = etat.enCours ? ANIM[tic % ANIM.length] : actif ? '● à l’écoute' : etat.pret ? 'Alt+M' : etat.enVeille ? 'en veille' : etat.erreur ? '!' : 'à la demande';
     return (
         <box flexShrink={0} flexDirection="column" maxHeight={8} onMouseDown={basculer}>
             <box height={1} backgroundColor={fond.entete} flexDirection="row">
-                <text fg={VIOLET} attributes={GRAS} flexGrow={1}>{actif ? ' ◈ MAÎTRE' : ' ◇ MAÎTRE'}</text>
+                <text fg={VIOLET} attributes={GRAS} flexGrow={1}>{` ${actif ? '◈' : '◇'} MAÎTRE · ${etat.fournisseur}`}</text>
                 <text fg={actif ? VIOLET : 'gray'}>{`${droite} `}</text>
             </box>
             {lignes.map((l, i) => <text key={i} fg={l.c} wrapMode="word">{` ${l.t}`}</text>)}

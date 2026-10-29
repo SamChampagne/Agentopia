@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 
-// Modifier ~/.ssh/config depuis Claudetopia : ajouter, modifier, supprimer un serveur.
+// Modifier ~/.ssh/config depuis Agentopia : ajouter, modifier, supprimer un serveur.
 // Seul le bloc « Host <alias> » concerné est réécrit ; le reste du fichier (commentaires, Host *, Match…)
 // est gardé tel quel. Une copie de sauvegarde est faite avant la première modification.
 

@@ -19,7 +19,7 @@ const ressembleAUnJeton = (t: string) => t.length >= 20 && t.length <= 400 && !/
 function installerAvecWinget(nom: string, id: string): void {
     const script = `Write-Host 'Installation de ${nom}…' -ForegroundColor Cyan; `
         + `winget install -e --id ${id} --accept-source-agreements --accept-package-agreements; `
-        + `Write-Host ''; Write-Host 'Terminé : ferme cette fenêtre. Relance Claudetopia pour qu''il voie ${nom}.' -ForegroundColor Green`;
+        + `Write-Host ''; Write-Host 'Terminé : ferme cette fenêtre. Relance Agentopia pour qu''il voie ${nom}.' -ForegroundColor Green`;
     spawn('cmd.exe', ['/c', 'start', '""', 'powershell', '-NoExit', '-NoProfile', '-Command', script], { detached: true, stdio: 'ignore', windowsVerbatimArguments: false }).unref();
 }
 

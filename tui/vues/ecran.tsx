@@ -20,6 +20,7 @@ export function VueEcran({ fermer, config }: { fermer: () => void; config: any }
     const d = disposition();
     const changer = (i: number, sens: number) => {
         const r = toutes[i];
+        if (!r || 'section' in r) return;
         const n = r.valeurs.length;
         changerDisposition(r.valeurs[(r.actuelle(d) + sens + n) % n].appliquer(), config);
         setV((v) => v + 1);
@@ -58,7 +59,7 @@ export function VueEcran({ fermer, config }: { fermer: () => void; config: any }
                         );
                     })}
                     <text> </text>
-                    <text fg="gray" wrapMode="word">{r?.aide}</text>
+                    <text fg="gray" wrapMode="word">{r && !('section' in r) ? r.aide : ''}</text>
                 </box>
                 <box flexDirection="column" marginLeft={2} border borderStyle="rounded" borderColor={fond.bordure} paddingLeft={1} paddingRight={1}>
                     <text fg={theme.primaire} attributes={GRAS}>APERÇU</text>

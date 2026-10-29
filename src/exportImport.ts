@@ -20,7 +20,7 @@ interface Export {
 }
 
 // Réglages copiés tels quels (les chemins et les secrets sont traités à part)
-const REGLAGES: (keyof Config)[] = ['banniere', 'prenom', 'theme', 'couleurs', 'notifications', 'prompts', 'lancement', 'equipe', 'maitre',
+const REGLAGES: (keyof Config)[] = ['banniere', 'prenom', 'theme', 'couleurs', 'notifications', 'prompts', 'lancement', 'fournisseurDefaut', 'equipe', 'maitre',
     'fetchAuto', 'sectionsMasquees', 'sectionsRepliees','cartesDetaillees', 'budgetJour', 'largeurLaterale', 'dockerDistant'];
 
 const nomDe = (chemin: string) => path.basename(chemin.replace(/[\\/]+$/, ''));
@@ -60,7 +60,7 @@ export function commandesExport(config: Config): Commande[] {
                 } catch {
                     return console.log(c.erreur(`✕ Fichier illisible : ${fichier}`));
                 }
-                if (d.format !== 'claudetopia-export') return console.log(c.erreur('✕ Ce n\'est pas un export Claudetopia'));
+                if (d.format !== 'claudetopia-export') return console.log(c.erreur('✕ Ce n\'est pas un export Agentopia'));
                 const resume = `${Object.keys(d.config.prompts ?? {}).length} prompts, ${(d.config.planifications ?? []).length} tâche(s) planifiée(s), ${d.ssh.length} serveur(s) SSH, ${(d.config.sftp ?? []).length} connexion(s) SFTP`;
                 if (!await confirmer(`Importer la configuration de ${d.poste || 'l\'autre poste'} (${new Date(d.date).toLocaleDateString('fr-CA')}) : ${resume} ?`)) return;
 
@@ -111,7 +111,7 @@ export function commandesExport(config: Config): Commande[] {
                 }
                 console.log(c.succes(`✓ Configuration importée · ${racines.length + extras.length} dossier(s) de projets, ${ajoutes} serveur(s) SSH ajoutés`));
                 notes.forEach((n) => console.log(c.alerte(`! ${n}`)));
-                console.log(c.discret('Comptes et jetons : /connexions · relance Claudetopia pour appliquer le thème et la mise en page'));
+                console.log(c.discret('Comptes et jetons : /connexions · relance Agentopia pour appliquer le thème et la mise en page'));
             },
         },
     ];

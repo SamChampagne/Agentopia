@@ -14,7 +14,7 @@ const IGNORES = new Set([
 // Fichiers qui font d'un dossier un projet
 const MARQUEURS: Record<string, string> = {
     'package.json': 'Node', 'composer.json': 'PHP', 'pyproject.toml': 'Python', 'requirements.txt': 'Python',
-    'pom.xml': 'Java', 'build.gradle': 'Java', 'go.mod': 'Go', 'Cargo.toml': 'Rust', 'CLAUDE.md': 'Claude',
+    'pom.xml': 'Java', 'build.gradle': 'Java', 'go.mod': 'Go', 'Cargo.toml': 'Rust', 'CLAUDE.md': 'Instructions', 'AGENTS.md': 'Instructions',
 };
 const PROFONDEUR_MAX = 7;
 // Sous-dossiers de librairies embarquées : un composer.json là-dedans n'est pas un projet
@@ -101,14 +101,14 @@ export async function scanner(surProgres: (vus: number, trouves: number) => void
         if (estProjet) {
             const worktree = git && entrees.find((e) => e.name === '.git')!.isFile();
             projets.push({
-                chemin: dossier, nom: path.basename(dossier), git, worktree, types: [...new Set(types.filter((t) => t !== 'Claude'))],
+                chemin: dossier, nom: path.basename(dossier), git, worktree, types: [...new Set(types.filter((t) => t !== 'Instructions'))],
                 remote: git && !worktree ? lireRemote(dossier) : undefined,
                 activite: activite(dossier, git),
                 sessionsClaude: fs.existsSync(dossierSessions(dossier)),
             });
             // Projet non-git avec un vrai type (Node, PHP…) : ses sous-dossiers sont du code, on s'arrête.
             // Un dépôt git ou un dossier avec seulement un CLAUDE.md peut contenir d'autres dépôts : on continue.
-            if (!git && types.some((t) => t !== 'Claude')) return;
+            if (!git && types.some((t) => t !== 'Instructions')) return;
         }
         if (profondeur >= PROFONDEUR_MAX) return;
         for (const e of entrees) {
@@ -211,6 +211,7 @@ export interface Outil {
 
 export function outils(): Outil[] {
     const liste: Omit<Outil, 'present'>[] = [
+        { nom: 'Codex', commande: 'codex', installer: 'Config → Préparer le poste', role: 'sessions, équipes et maître' },
         { nom: 'Claude Code', commande: 'claude', installer: 'npm install -g @anthropic-ai/claude-code', role: 'sessions, /ask, /commit, /revue' },
         { nom: 'Git', commande: 'git', installer: 'winget install Git.Git', role: 'branches, status, worktrees' },
         { nom: 'Windows Terminal', commande: 'wt', installer: 'winget install Microsoft.WindowsTerminal', role: 'onglets par projet' },

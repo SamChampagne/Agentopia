@@ -1,4 +1,7 @@
-// Claudetopia sous OpenTUI : même style que l'interface Ink, avec les mêmes données et les mêmes commandes.
+import { proposerPlan } from '../dist/conseiller.js';
+import { nomAgentDefaut } from '../dist/providers/types.js';
+import { preparationAReprendre } from '../dist/preparation.js';
+// Agentopia sous OpenTUI : même style que l'interface Ink, avec les mêmes données et les mêmes commandes.
 // Lancer : bun tui/app.tsx   (Ctrl+C pour quitter)
 import * as fs from 'fs';
 import * as path from 'path';
@@ -16,6 +19,9 @@ import { activerEntreeVT, restaurerConsole } from './console.ts';
 import { Garde } from './garde.tsx';
 import { disposition } from '../dist/ui/disposition.js';
 import { Barre } from './barre.tsx';
+import { useBrouillon } from './brouillons.ts';
+import { destinationBrouillon } from '../dist/ui/brouillons.js';
+import { contexteSaisie } from '../dist/ui/contexteSaisie.js';
 import { Journal } from './journal.tsx';
 import { QuelleTouche } from './quelleTouche.tsx';
 import { Accueil, Mascotte } from './accueil.tsx';
@@ -134,7 +140,9 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         if (cle) {
             setDetailEtat(undefined);
             setVueZone(undefined);
+            setModeMaitre(false);
         }
+        setRecherche(false);
         setSelectionEtat(cle);
     };
     const ouvrirDetail = (dt?: any) => {
@@ -159,9 +167,13 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     const [notice, setNotice] = useState<string>();
     const [occupe, setOccupe] = useState(false);
     const [journalOuvert, setJournalOuvert] = useState(false);
-    const [valeur, setValeurEtat] = useState('');
+    const [modeMaitre, setModeMaitre] = useState(false);
+    const [recherche, setRecherche] = useState(false);
+    const destination = destinationBrouillon(selection, modeMaitre, recherche);
+    const { texte: valeur, images, setTexte: setValeurEtat, setImages, carnet } = useBrouillon(destination);
     // Valeur réelle de la barre, à jour à chaque frappe : le clavier la lit (l'état React peut avoir une frappe de retard)
     const valeurRef = useRef('');
+    valeurRef.current = valeur;
     const setValeur = (v: string) => {
         valeurRef.current = v;
         setValeurEtat(v);
@@ -172,7 +184,6 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     const [survolHaut, setSurvolHaut] = useState<string>();
     const [projets] = useState(() => getProjets());
     const [quelleTouche, setQuelleTouche] = useState<string>();
-    const [modeMaitre, setModeMaitre] = useState(false);
     const ctrlC = useRef(0);
     // La vue affichée (la commande qui l'a ouverte) : gardée pour la rouvrir au prochain lancement
     const [vueActive, setVueActive] = useState<string>();
@@ -191,13 +202,12 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         if (oui) minuterieFige.current = setTimeout(() => setFige(false), 500);
     };
     // Ctrl+F : chercher dans la conversation ouverte (Entrée = occurrence suivante, en remontant le temps)
-    const [recherche, setRecherche] = useState(false);
     const [occurrence, setOccurrence] = useState(0);
     const [trouvees, setTrouvees] = useState(0);
     // Images et fichiers joints (Alt+V, ou glissés dans la fenêtre) : envoyés avec le texte
-    const [images, setImages] = useState<string[]>([]);
     // Largeur de la colonne (0 = automatique) : Alt+←/→ ou glisser sa bordure, gardée dans la config
     const [largeurCol, setLargeurCol] = useState<number>(() => chargerConfig().largeurLaterale || 0);
+    useEffect(() => { setCle((k) => k + 1); setIndexSugg(0); posHistorique.current = -1; }, [destination]);
     const glisse = useRef(false);
 
     // Une seule horloge : 800 ms si quelque chose s'anime, sinon 1 s (comme l'interface Ink)
@@ -240,22 +250,19 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         }
         // Une commande ordinaire affiche son résultat dans le journal : on referme la conversation ouverte
         if (!cmd?.cache) setSelection(undefined);
-        if (images.length) {
-            texte = joindreImages(texte, images);
-            setImages([]);
-        }
         if (!silencieux) console.log(`\n${c.accent('❯')} ${ligne.trim() || c.discret('(menu)')}`);
         commandeCourante.current = texte.split(' ')[0] === '/ssh' && texte.split(' ')[1] === 'vue' ? texte : texte.split(' ').slice(0, 2).join(' ');
         setOccupe(true);
         try {
             await (silencieux ? executerLigne(texte) : avecRetrait(() => executerLigne(texte)));
+            return true;
         } catch (err) {
             if (err instanceof Annule || (err as Error)?.name === 'Annule') {
                 if (!silencieux) console.log(c.discret('Annulé'));
             } else console.log(c.erreur(`✗ ${(err as Error).message}`));
+            return false;
         } finally {
-            rafraichirProjets();
-            rafraichirAgents();
+            if (!process.env.CLAUDETOPIA_TEST_UI) { rafraichirProjets(); rafraichirAgents(); }
             setOccupe(false);
             if (!changement.current) figer(false);
             // Un résultat trop long pour « Dernières sorties » s'ouvre en entier (Échap ramène au cockpit)
@@ -297,6 +304,14 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
 
     function soumettre(v: string) {
         if (recherche) return setOccurrence((o) => o + 1);
+        if (session?.fournisseur === 'perplexity' && images.length && !/^[/!]/.test(v.trim())) {
+            bus.emit('notice', 'Perplexity reçoit du texte et des liens web. Retire les pièces jointes locales avant l’envoi.');
+            return;
+        }
+        if (session?.integree && v.trim() && !/^[/!]/.test(v.trim()) && (occupe || ['travaille', 'bloquee'].includes(session.statut))) {
+            bus.emit('notice', session.permission ? 'Réponds à la demande de l’agent · ton brouillon est conservé' : 'L’agent travaille encore · ton brouillon est conservé');
+            return;
+        }
         const s = suggestions[sugg];
         if (s) {
             if (s.executer) {
@@ -306,17 +321,28 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             return;
         }
         // Entrée sur une ligne vide avec une session d'arrière-plan ouverte : on la rejoint
+        if (!v.trim() && session?.integree) return void (session.permission && lancer(`/autorisation ${session.id}`, true));
         if (!v.trim() && session?.arrierePlan) return void lancer(`/rejoindre ${session.id}`, true);
+        const ancien = { texte: v, images: [...images] };
+        const estMessage = !/^[/!]/.test(v.trim());
+        const message = estMessage ? joindreImages(v.trim(), images) : v;
         remplacer('');
+        if (estMessage) setImages([]);
         posHistorique.current = -1;
+        const envoyer = async (ligne: string, silencieux = false) => {
+            if (await lancer(ligne, silencieux) === false) {
+                carnet.restaurer(destination, ancien);
+                bus.emit('notice', 'Envoi non effectué · brouillon restauré dans sa conversation.');
+            }
+        };
         // Mode maître : le texte est une demande au maître (les commandes / et ! restent des commandes)
         if (modeMaitre && v.trim() && !/^[/!]/.test(v.trim())) return void parlerAuMaitre(v.trim());
         // Une conversation est ouverte et ce n'est ni une commande ni du shell : le texte lui est envoyé
         if (session && v.trim() && !/^[/!]/.test(v.trim())) {
             console.log(`\n${c.accent('❯')} ${v.trim()} ${c.discret(`→ ${session.nom}`)}`);
-            return void lancer(`/envoyer ${session.sessionId} ${v.trim()}`, true);
+            return void envoyer(`/envoyer ${session.sessionId} ${message}`, true);
         }
-        void lancer(v);
+        void envoyer(message);
     }
 
     // Un fichier glissé dans la fenêtre : son chemin est collé dans la barre, il devient une pièce jointe
@@ -377,6 +403,10 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         console.log(`\n${c.violet('◈')} ${texte}`);
         if (e.erreur) return console.log(c.erreur(`  ✕ ${e.erreur}`));
         console.log(`  ${e.reponse}`);
+        if (e.plan) {
+            try { await proposerPlan(e.plan); } catch (err) { if ((err as Error).name !== 'Annule') console.log(c.erreur((err as Error).message)); }
+            return;
+        }
         const commandes: string[] = e.commandes ?? [];
         const destructrices = commandes.filter((x) => DESTRUCTRICES.has(x.split(/\s+/)[0]));
         if (destructrices.length && !(await confirmer(`◈ Le maître va ${destructrices.map(decrire).join(', ')} : d'accord ?`))) {
@@ -387,23 +417,22 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             await lancerRef.current(avecOui, true);
         }
     }
-    // Claude prêt : le maître se prépare en fond (comme l'interface Ink)
+    // Préparation visuelle seulement, aucun appel à un modèle au démarrage.
     useEffect(() => {
-        const surClaude = (etat: string) => {
-            if (etat === 'pret') setTimeout(() => void prechauffer(getProjets().map((p: any) => p.nom)), 3000);
-        };
-        etatClaude.on('maj', surClaude);
-        const t = setTimeout(() => void verifierClaude(), 300);
-        return () => {
-            etatClaude.off('maj', surClaude);
-            clearTimeout(t);
-        };
+        if (process.env.CLAUDETOPIA_TEST_UI) return;
+        void prechauffer(getProjets().map((p: any) => p.nom));
     }, []);
 
     // ─── Reprendre là où on en était : la conversation ouverte ou la vue affichée ───
+    const repris = useRef(false);
+    const [etatInitial] = useState<{ session?: string; vue?: string }>(() => {
+        if (sansReprise()) return {};
+        try { return JSON.parse(fs.readFileSync(CHEMINS.etat, 'utf-8')); } catch { return {}; }
+    });
     useEffect(() => {
         if (sansReprise()) return;
         const t = setTimeout(() => {
+            if (!repris.current && !commandeInitiale && !auDemarrage) return;
             try {
                 fs.writeFileSync(CHEMINS.etat, JSON.stringify({ session: selection, vue: demande?.type === 'vue' ? vueActive : undefined }), 'utf-8');
             } catch {
@@ -412,18 +441,12 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         }, 400);
         return () => clearTimeout(t);
     }, [selection, demande, vueActive]);
-    const repris = useRef(false);
     useEffect(() => {
         if (repris.current || commandeInitiale || auDemarrage || sansReprise()) return;
         // On attend que les sessions soient lues (ou 4 s), puis on rouvre une seule fois
         if (!d.agents.length && Date.now() - debutApp < 4000) return;
         repris.current = true;
-        let etat: { session?: string; vue?: string } = {};
-        try {
-            etat = JSON.parse(fs.readFileSync(CHEMINS.etat, 'utf-8'));
-        } catch {
-            return;
-        }
+        const etat = etatInitial;
         if (etat.session && d.agents.some((a: any) => a.cle === etat.session)) setSelection(etat.session);
         else if (etat.vue) void lancer(etat.vue, true);
     });
@@ -435,11 +458,12 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         // Git Bash, « /status » → « C:/Program Files/Git/status ») partirait sinon à Claude comme une nouvelle session
         const inconnue = commandeInitiale && !trouverCommande(commandeInitiale.trim().split(' ')[0]);
         if (inconnue) {
-            console.log(c.erreur(`✗ « ${commandeInitiale} » n'est pas une commande Claudetopia : rien n'est lancé`));
+            console.log(c.erreur(`✗ « ${commandeInitiale} » n'est pas une commande Agentopia : rien n'est lancé`));
             setTimeout(quitter, 1500);
         }
         else if (commandeInitiale) void lancerRef.current(commandeInitiale, false, true);
         else if (auDemarrage) void lancerRef.current(auDemarrage);
+        if (process.env.CLAUDETOPIA_TEST_UI) return;
         const t = setTimeout(async () => {
             const { etatConnexions } = await import('../dist/connexions.js');
             const aRegler = (await etatConnexions()).filter((x: any) => x.etat === 'manque' || x.etat === 'avert');
@@ -560,13 +584,13 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         }
         if (recherche && k.name === 'escape') {
             setRecherche(false);
-            return remplacer('');
+            return;
         }
         if (occupe) return;
         if (k.ctrl && k.name === 'f' && session) {
             setRecherche(true);
             setOccurrence(0);
-            return remplacer('');
+            return;
         }
         // Alt+V : l'image du presse-papiers devient une pièce jointe
         if (alt && k.name === 'v') {
@@ -623,6 +647,8 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     });
 
     function indication(): { texte: string; couleur: string } {
+        const contexte = contexteSaisie(demande, vueActive, quelleTouche !== undefined);
+        if (contexte) return { texte: contexte, couleur: theme.secondaire };
         if (tache) return { texte: `${SPINNER[tic % SPINNER.length]} ${tache}…`, couleur: theme.accent };
         if (notice) return { texte: notice, couleur: theme.secondaire };
         if (occupe) return { texte: 'commande en cours…', couleur: 'gray' };
@@ -630,7 +656,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         if (recherche) {
             return { texte: `⌕ chercher dans la conversation : ${t.length < 2 ? 'tape au moins 2 lettres' : trouvees ? `${(occurrence % trouvees) + 1}/${trouvees} · Entrée = suivante` : 'aucun résultat'} · Échap fermer`, couleur: theme.secondaire };
         }
-        if (images.length && !t.startsWith('/')) return { texte: `📎 ${images.length} pièce(s) jointe(s) envoyée(s) avec le texte`, couleur: theme.accent };
+        if (images.length && !t.startsWith('/')) return { texte: `${session ? `${session.fournisseur ?? 'Claude'} · ${session.nom} · ${session.titre || session.id}` : 'Nouvelle conversation'} · 📎 ${images.length} pièce(s) jointe(s)`, couleur: theme.accent };
         if (t.startsWith('/')) return { texte: 'commande du CLI', couleur: 'gray' };
         if (modeMaitre) {
             return etatMaitre().enCours
@@ -639,6 +665,11 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         }
         if (t.startsWith('!')) return { texte: `commande PowerShell dans ${path.basename(process.cwd())}`, couleur: theme.accent };
         if (session) {
+            if (session.integree) {
+                if (session.permission) return { texte: `${session.fournisseur} attend ta décision · Entrée vide ou « Répondre à l’agent » · brouillon conservé`, couleur: '#fb923c' };
+                if (session.statut === 'travaille') return { texte: `${session.fournisseur} travaille · prépare ton prochain message, il restera en brouillon · Interrompre pour arrêter`, couleur: theme.secondaire };
+                return { texte: `↳ ${session.fournisseur} · ${session.nom} · ${session.titre || session.id} · Entrée pour envoyer${session.erreur ? ' · dernier tour interrompu ou en erreur' : ''}`, couleur: couleurProjet(session.nom) };
+            }
             if (!session.arrierePlan) return { texte: `${session.nom} tourne dans un onglet : écris-y, ou « ⑂ Continuer ici » pour lui écrire d'ici`, couleur: '#facc15' };
             if (session.statut === 'travaille') return { texte: `${session.nom} travaille : attends qu'il ait fini pour lui écrire, ou Entrée pour le rejoindre`, couleur: '#facc15' };
             if (session.statut === 'bloquee' && session.question && !/permission/i.test(session.question)) {
@@ -647,7 +678,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             if (session.statut === 'bloquee') return { texte: `${session.nom} attend une permission : Entrée pour le rejoindre (Alt+J : à côté)`, couleur: '#fb923c' };
             return { texte: `↳ envoyé à la conversation ${session.nom} (${session.titre || session.id})${t ? '' : ' · Entrée vide = la rejoindre'}`, couleur: couleurProjet(session.nom) };
         }
-        return { texte: `↳ nouvelle session Claude dans ${path.basename(process.cwd())} · Ctrl+K pour tout le reste`, couleur: fond.discret };
+        return { texte: `↳ nouvelle conversation · ${nomAgentDefaut(config.fournisseurDefaut)} · ${path.basename(process.cwd())} · Ctrl+K pour tout le reste`, couleur: fond.discret };
     }
 
     const colonneVisible = !pleinEcran && !focus && disp.laterale !== 'cachee';
@@ -687,7 +718,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         zone = (
             <box flexGrow={1} flexDirection="column" paddingLeft={1}
                 onMouseDown={(e: any) => {
-                    if (droit(e)) return void ouvrirMenu({ titre: 'Claudetopia', articles: general(parler) });
+                    if (droit(e)) return void ouvrirMenu({ titre: 'Agentopia', articles: general(parler) });
                     const cible = cockpit.cible(e.x - debutZone - 1, e.y - haut);
                     if (cible === JOURNAL) setJournalOuvert(true);
                     else if (cible) setSelection(cible);
@@ -717,8 +748,8 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
 
     return (
         <box width={width} height={height} flexDirection="column" backgroundColor="#0c0c0c" onMouseMove={activite} onMouseDown={activite}>
-            {!focus && <box height={1} flexShrink={0} flexDirection="row" onMouseDown={(e: any) => droit(e) && ouvrirMenu({ titre: 'Claudetopia', articles: general(parler) })}>
-                <Ansi texte={degrade(' ✻ ' + (chargerConfig().banniere || 'CLAUDETOPIA').toUpperCase() + ' ')} />
+            {!focus && <box height={1} flexShrink={0} flexDirection="row" onMouseDown={(e: any) => droit(e) && ouvrirMenu({ titre: 'Agentopia', articles: general(parler) })}>
+                <Ansi texte={degrade(' ✻ ' + (chargerConfig().banniere || 'AGENTOPIA').toUpperCase() + ' ')} />
                 {BOUTONS.map((b) => (
                     <text key={b.action} onMouseOver={() => setSurvolHaut(b.action)} onMouseOut={() => setSurvolHaut(undefined)}
                         onMouseDown={() => void ouvrirDepuisClic(b.action)}
@@ -757,7 +788,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
                 {disp.laterale !== 'droite' && zone}
             </box>
             {quelleTouche !== undefined && <QuelleTouche chemin={quelleTouche} choisir={toucheQT} />}
-            <Barre valeur={valeur} cle={cle} setValeur={surSaisie} soumettre={soumettre} suggestions={recherche ? [] : suggestions} indexSugg={sugg}
+            <Barre key={destination} valeur={valeur} cle={cle} setValeur={surSaisie} soumettre={soumettre} suggestions={recherche ? [] : suggestions} indexSugg={sugg}
                 choisirSugg={(i) => (suggestions[i]?.executer ? (remplacer(''), void lancer(suggestions[i].texte)) : remplacer(suggestions[i].texte))}
                 indication={indication()} actif={!demande && quelleTouche === undefined} maitre={modeMaitre} />
         </box>
@@ -768,7 +799,7 @@ if (import.meta.main) {
     // « sp commit saniplan » : exécute la commande dans l'interface puis quitte
     const commandeInitiale = process.argv.slice(2).join(' ').trim() || undefined;
     // Première fois sur ce poste : l'assistant demande l'essentiel ; juste après l'installation (CLAUDETOPIA_SCAN) : le scan du poste
-    const auDemarrage = premierLancement ? '/bienvenue' : process.env.CLAUDETOPIA_SCAN ? '/scan' : undefined;
+    const auDemarrage = premierLancement || preparationAReprendre() ? '/preparer' : process.env.CLAUDETOPIA_SCAN ? '/scan' : undefined;
     demarrerCollecte();
     if (!commandeInitiale) demarrerNotifications();
     const { remplacerAncienRaccourci, prechargerBureau } = await import('../dist/configCommandes.js');

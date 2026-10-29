@@ -218,9 +218,9 @@ export function BarreHaut({ boutons, largeur, droite, vueActive, survol }: { bou
 }
 
 // Nom affiché en haut à gauche (personnalisable dans Configuration)
-let titreBarre = (chargerConfig().banniere || 'CLAUDETOPIA').toUpperCase();
+let titreBarre = (chargerConfig().banniere || 'AGENTOPIA').toUpperCase();
 export function definirTitre(t: string): void {
-    titreBarre = (t || 'CLAUDETOPIA').toUpperCase();
+    titreBarre = (t || 'AGENTOPIA').toUpperCase();
 }
 // Largeur du titre : les boutons de la barre du haut commencent juste après
 export const largeurTitre = () => stringWidth(` ✻ ${titreBarre} `);   // même largeur avec le dégradé (couleurs seulement)

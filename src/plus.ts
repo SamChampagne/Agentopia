@@ -1,3 +1,4 @@
+import { citerArgument } from './ligneCommande.js';
 import type { Commande } from './commandes.js';
 import { Config } from './config.js';
 import { afficherVue } from './ui/bus.js';
@@ -15,8 +16,8 @@ async function vue<P extends object>(module: Promise<Record<string, unknown>>, n
 // ─── Palette (Ctrl+K) : tout ce qu'on peut faire, une recherche floue ────────
 
 const ACTIONS_PROJET: [string, string][] = [
-    ['✻ Session Claude', '/claude'], ['✓ Commit', '/commit'], ['⌕ Revue du diff', '/revue'], ['⇣ Pull', '/pull'],
-    ['◧ VS Code', '/code'], ['❯ Terminal', '/terminal defaut'], ['◆ Équipe', '/equipe nouvelle'], ['▤ Explorateur', '/ouvrir'], ['≡ Toutes les actions', '/actions'],
+    ['✻ Nouvelle conversation', '/session'], ['✓ Commit (Claude CLI)', '/commit'], ['⌕ Revue du diff (Claude CLI)', '/revue'], ['⇣ Pull', '/pull'],
+    ['◧ VS Code', '/code'], ['❯ Terminal', '/terminal defaut'], ['◆ Équipe mixte', '/equipe-mixte'], ['◆ Équipe Claude CLI', '/equipe nouvelle'], ['▤ Explorateur', '/ouvrir'], ['≡ Toutes les actions', '/actions'],
 ];
 
 async function palette(): Promise<void> {
@@ -31,7 +32,7 @@ async function palette(): Promise<void> {
         ...COMMANDES.filter((c) => !c.cache).map((c) => ({ label: `/${c.nom}`, valeur: `/${c.nom}`, description: c.description })),
         ...d.serveurs.map((s) => ({ label: `⇄ ${s.nom}`, valeur: `/ssh ${s.nom}`, description: `se connecter · ${s.hote}` })),
         ...d.serveurs.filter((s) => s.configure).map((s) => ({ label: `⇅ Fichiers ${s.nom}`, valeur: `/sftp ${s.nom}`, description: 'SFTP' })),
-        ...getProjets().flatMap((p) => ACTIONS_PROJET.map(([action, cmd]) => ({ label: `${action} · ${p.nom}`, valeur: `${cmd} ${p.chemin}`, description: p.racine }))),
+        ...getProjets().flatMap((p) => ACTIONS_PROJET.map(([action, cmd]) => ({ label: `${action} · ${p.nom}`, valeur: `${cmd} ${citerArgument(p.chemin)}`, description: p.racine }))),
     ];
     const commande = await choisir('⌘ Que veux-tu faire ? (plusieurs mots : « proj com » → Commit · mon-projet)', choix, true);
     await executerLigne(commande);
@@ -87,7 +88,7 @@ export function commandesPlus(config: Config): Commande[] {
                 await sauver();
                 const { decrireJours } = await import('./planificateur.js');
                 console.log(c.succes(`◴ « ${nom} » : ${decrireJours(jours)} à ${heure} · /planifications pour gérer`));
-                console.log(c.discret('Elle tourne pendant que Claudetopia est ouvert ; si l\'heure est passée pendant qu\'il était fermé, elle part au lancement suivant (le même jour).'));
+                console.log(c.discret('Elle tourne pendant que Agentopia est ouvert ; si l\'heure est passée pendant qu\'il était fermé, elle part au lancement suivant (le même jour).'));
             },
         },
         {
@@ -164,13 +165,13 @@ export function commandesPlus(config: Config): Commande[] {
             },
         },
         {
-            nom: 'copier-code', args: '<session>', groupe: 'Claude', cache: true,
-            description: 'Copier le dernier bloc de code de Claude (sinon sa dernière réponse)',
+            nom: 'copier-code', args: '<session>', groupe: 'Agents', cache: true,
+            description: 'Copier le dernier bloc de code de l’agent (sinon sa dernière réponse)',
             executer: ({ args }) => copierDe(args[0], 'code'),
         },
         {
-            nom: 'copier-reponse', args: '<session>', groupe: 'Claude', cache: true,
-            description: 'Copier la dernière réponse de Claude',
+            nom: 'copier-reponse', args: '<session>', groupe: 'Agents', cache: true,
+            description: 'Copier la dernière réponse de l’agent',
             executer: ({ args }) => copierDe(args[0], 'reponse'),
         },
         {
@@ -179,7 +180,7 @@ export function commandesPlus(config: Config): Commande[] {
             executer: palette,
         },
         {
-            nom: 'equipe-diff', args: '<équipe> <tâche>', groupe: 'Claude', cache: true,
+            nom: 'equipe-diff', args: '<équipe> <tâche>', groupe: 'Agents', cache: true,
             description: 'Ce que la branche d\'une tâche d\'équipe change (avant de fusionner)',
             executer: async ({ args }) => {
                 const { diffTache, equipeDe } = await import('./equipe.js');
@@ -252,7 +253,7 @@ export function commandesPlus(config: Config): Commande[] {
             },
         },
         {
-            nom: 'questions', alias: ['attente', 'todo'], groupe: 'Claude',
+            nom: 'questions', alias: ['attente', 'todo'], groupe: 'Agents',
             description: 'Ce que les sessions attendent de toi : leurs questions, la réponse proposée, répondre en un clic',
             executer: () => vue(import('./ui/VueQuestions.js'), 'VueQuestions'),
         },

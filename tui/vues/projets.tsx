@@ -1,3 +1,4 @@
+import { citerArgument } from '../../dist/ligneCommande.js';
 import { useState } from 'react';
 import { useKeyboard } from '@opentui/react';
 import { GRAS, couper } from '../style.ts';
@@ -7,7 +8,8 @@ import { bus } from '../../dist/ui/bus.js';
 import { ilYa } from '../../dist/ui/Panneau.js';
 import { etatLisible } from '../../dist/ui/VueProjets.js';
 import { getProjets } from '../../dist/commandes.js';
-import { correspond, derniereSessionClaude } from '../../dist/projets.js';
+import { correspond } from '../../dist/projets.js';
+import { activiteAgents, derniereSessionProjet } from '../../dist/activiteAgents.js';
 import { depotDe } from '../../dist/synchro.js';
 import { theme, couleurProjet, fond } from '../../dist/theme.js';
 
@@ -20,6 +22,7 @@ export function VueProjets({ fermer, filtreInitial = '' }: { fermer: () => void;
     const [choix, setChoix] = useState<string>();
     const [survol, setSurvol] = useState<string>();
     const projets = getProjets().filter((p: any) => !filtre || correspond(p.nom, filtre));
+    const activite = activiteAgents();
     const parRacine = new Map<string, any[]>();
     projets.forEach((p: any) => parRacine.set(p.racine, [...(parRacine.get(p.racine) ?? []), p]));
     const liste = [...parRacine.values()].flat();
@@ -28,7 +31,7 @@ export function VueProjets({ fermer, filtreInitial = '' }: { fermer: () => void;
     const ouvrir = (p?: any) => {
         if (!p) return;
         fermer();
-        bus.emit('lancer', `/actions ${p.chemin}`);
+        bus.emit('lancer', `/actions ${citerArgument(p.chemin)}`);
     };
     const deplacer = (pas: number) => {
         const i = liste.indexOf(courant);
@@ -48,7 +51,7 @@ export function VueProjets({ fermer, filtreInitial = '' }: { fermer: () => void;
     return (
         <box flexGrow={1} flexDirection="column" paddingLeft={1}>
             <Titre texte="PROJETS" droite={filtre ? `filtre : « ${filtre} » · ${projets.length} projet(s) · Échap efface` : `${projets.length} projets · tape pour filtrer · clic = actions`} />
-            <text fg="gray">{'   ' + colonne('Projet', 28) + colonne('Branche', 28) + colonne('État git', 26) + colonne('Claude', 14) + 'Hébergé sur'}</text>
+            <text fg="gray">{'   ' + colonne('Projet', 28) + colonne('Branche', 28) + colonne('État git', 26) + colonne('Agents', 14) + 'Hébergé sur'}</text>
             <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {[...parRacine].map(([racine, ps]) => (
                     <box key={racine} flexDirection="column" flexShrink={0}>
@@ -57,7 +60,7 @@ export function VueProjets({ fermer, filtreInitial = '' }: { fermer: () => void;
                             const actif = p === courant;
                             const d = depotDe(p.chemin);
                             const etat = etatLisible(d);
-                            const session = derniereSessionClaude(p.chemin);
+                            const session = derniereSessionProjet(p.chemin, activite);
                             return (
                                 <box key={p.chemin} height={1} backgroundColor={actif ? fond.selection : survol === p.chemin ? fond.panneau : undefined}
                                     onMouseOver={() => setSurvol(p.chemin)} onMouseOut={() => setSurvol(undefined)} onMouseDown={() => ouvrir(p)}>

@@ -1,3 +1,4 @@
+import { citerArgument } from '../../dist/ligneCommande.js';
 import { useEffect, useState } from 'react';
 import { useKeyboard } from '@opentui/react';
 import { GRAS, couper } from '../style.ts';
@@ -34,7 +35,7 @@ export function VueRecents({ fermer }: { fermer: () => void }) {
         const l = lignes[i];
         if (!l) return;
         fermer();
-        bus.emit('lancer', `/actions ${l.projet.chemin}`);
+        bus.emit('lancer', `/actions ${citerArgument(l.projet.chemin)}`);
     };
     useKeyboard((k) => {
         if (k.name === 'escape' || k.sequence === 'q') return fermer();

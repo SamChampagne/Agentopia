@@ -2,12 +2,18 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-// Fichiers de Claudetopia dans le dossier utilisateur.
+// Fichiers d’Agentopia dans le dossier utilisateur. Les chemins historiques
+// .claudetopia* restent stables pour conserver réglages, clés et conversations.
 // L'ancien nom (CLI Perso) utilisait ~/.cli-perso* : ils sont renommés au premier lancement.
 
-export const NOM = 'Claudetopia';
+export const NOM = 'Agentopia';
+export function nomBanniere(valeur?: string): string {
+    return !valeur || /^(claudetopia|cli perso)$/i.test(valeur.trim()) ? NOM.toUpperCase() : valeur;
+}
 
-const fichier = (suffixe: string) => path.join(os.homedir(), `.claudetopia${suffixe}`);
+const fichier = (suffixe: string) => process.env.CLAUDETOPIA_DATA_DIR
+    ? path.join(process.env.CLAUDETOPIA_DATA_DIR, `claudetopia${suffixe}`)
+    : path.join(os.homedir(), `.claudetopia${suffixe}`);
 
 export const CHEMINS = {
     config: fichier('.json'),
@@ -20,6 +26,9 @@ export const CHEMINS = {
     maitre: fichier('-maitre'),
     sftpEmpreintes: fichier('-sftp-empreintes.json'),
     etat: fichier('-etat.json'),
+    brouillons: fichier('-brouillons'),
+    preparation: fichier('-preparation.json'),
+    historiqueNatif: fichier('-historique-natif.json'),
     planifications: fichier('-planifications.json'),   // dernier lancement de chaque tâche planifiée   // où on en était : conversation ouverte, vue affichée (reprise au lancement)   // empreintes des serveurs SFTP déjà vus          // dossier de travail du maître (ses sessions n'ont pas de carte)
 };
 
@@ -34,6 +43,7 @@ const ANCIENS: [string, string][] = [
 
 // Renvoie vrai si des fichiers de l'ancien nom ont été repris
 export function migrerAnciensFichiers(): boolean {
+    if (process.env.CLAUDETOPIA_DATA_DIR) return false;
     let migre = false;
     for (const [ancien, nouveau] of ANCIENS) {
         const source = path.join(os.homedir(), ancien);
@@ -66,12 +76,19 @@ export const ANCIENS_REPRIS = migrerAnciensFichiers();
 // Programme trouvé dans le PATH, sans lancer « where » (chaque processus fige l'interface quelques ms sous Windows).
 // Chaque dossier du PATH est listé une fois (relisté après 30 s : un outil installé entre-temps est vu).
 let contenus: { date: number; dossiers: [string, Set<string>][] } | undefined;
+export function oublierPath(): void { contenus = undefined; }
 const norme = (f: string) => (process.platform === 'win32' ? f.toLowerCase() : f);   // Windows ignore la casse
 export function surPath(cmd: string): string | undefined {
     if (!contenus || Date.now() - contenus.date > 30_000) {
         contenus = {
             date: Date.now(),
-            dossiers: (process.env.PATH ?? '').split(path.delimiter).filter(Boolean).map((d): [string, Set<string>] => {
+            dossiers: [...new Set([...(process.env.PATH ?? '').split(path.delimiter),
+                ...(process.platform === 'win32' ? [path.join(os.homedir(), '.local', 'bin'), path.join(os.homedir(), '.bun', 'bin'),
+                    path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Programs', 'OpenAI', 'Codex', 'bin'),
+                    path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'npm'),
+                    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git', 'cmd'),
+                    path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Programs', 'Git', 'cmd')] : []),
+            ])].filter(Boolean).map((d): [string, Set<string>] => {
                 try {
                     return [d, new Set(fs.readdirSync(d).map(norme))];
                 } catch {
@@ -84,7 +101,13 @@ export function surPath(cmd: string): string | undefined {
     const extensions = process.platform === 'win32' ? [...(process.env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').toLowerCase().split(';').filter(Boolean), ''] : [''];
     for (const [dossier, fichiers] of contenus.dossiers) {
         const e = extensions.find((x) => fichiers.has(norme(cmd + x)));
-        if (e !== undefined) return path.join(dossier, cmd + e);
+        if (e !== undefined) {
+            // Un outil installé pendant cette session doit aussi être visible des
+            // sous-processus qui utilisent son nom (Git notamment), sans redémarrage.
+            const actuels = (process.env.PATH ?? '').split(path.delimiter);
+            if (!actuels.some((d) => norme(d) === norme(dossier))) process.env.PATH = [...actuels, dossier].filter(Boolean).join(path.delimiter);
+            return path.join(dossier, cmd + e);
+        }
     }
     return undefined;
 }

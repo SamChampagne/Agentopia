@@ -10,7 +10,7 @@ export function Barre({ valeur, cle, setValeur, soumettre, suggestions, indexSug
 }) {
     return (
         <box flexShrink={0} flexDirection="column">
-            {suggestions.slice(0, 8).map((s, i) => (
+            {(actif ? suggestions : []).slice(0, 8).map((s, i) => (
                 <box key={s.texte} height={1} flexDirection="row" paddingLeft={1} backgroundColor={i === indexSugg ? fond.selection : undefined}
                     onMouseDown={() => choisirSugg(i)}>
                     <text fg={i === indexSugg ? theme.accent : theme.secondaire} attributes={i === indexSugg ? GRAS : 0}>{`${i === indexSugg ? '❯' : ' '} ${s.label}`}</text>
@@ -19,10 +19,11 @@ export function Barre({ valeur, cle, setValeur, soumettre, suggestions, indexSug
             ))}
             <text fg={indication.couleur} truncate paddingLeft={1}>{` ${indication.texte}`}</text>
             <box height={3} border borderStyle="rounded" borderColor={maitre ? '#a78bfa' : actif ? fond.bordure : fond.discret} flexDirection="row" paddingLeft={1}>
-                <text fg={maitre ? '#a78bfa' : theme.primaire}>{maitre ? '◈ ' : '❯ '}</text>
+                <text fg={!actif ? fond.discret : maitre ? '#a78bfa' : theme.primaire}>{!actif ? '· ' : maitre ? '◈ ' : '❯ '}</text>
                 {/* key : changer la valeur depuis le code (historique, suggestion) recrée le champ avec ce texte */}
-                <input key={cle} flexGrow={1} focused={actif} value={valeur} onInput={setValeur} onSubmit={soumettre}
-                    placeholder="Tape / pour les commandes, une question pour Claude, ou Entrée pour le menu" />
+                {actif ? <input key={cle} flexGrow={1} focused value={valeur} onInput={setValeur} onSubmit={(v: unknown) => { if (typeof v === 'string') soumettre(v); }}
+                    placeholder="Message à la session ouverte · /session pour en créer une · / pour les commandes" />
+                    : <text fg={fond.discret} flexGrow={1} truncate>{valeur ? `Brouillon conservé : ${valeur}` : 'Barre en pause : le clavier est utilisé dans la vue au-dessus.'}</text>}
             </box>
         </box>
     );

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useKeyboard, usePaste } from '@opentui/react';
 import { GRAS } from './style.ts';
 import { morceauxAnsi } from './ansi.tsx';
@@ -12,6 +12,7 @@ const imprimable = (k: any) => !k.ctrl && !k.meta && k.sequence?.length === 1 &&
 const sansCouleur = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
 
 export function Choix({ d, hauteur }: { d: any; hauteur: number }) {
+    const detail = useRef<any>();
     const [filtre, setFiltre] = useState('');
     const [index, setIndex] = useState(0);
     const [coches, setCoches] = useState<Set<number>>(() => new Set(d.choix.flatMap((c: any, i: number) => (c.coche ? [i] : []))));
@@ -29,6 +30,7 @@ export function Choix({ d, hauteur }: { d: any; hauteur: number }) {
         if (visibles[pos]) d.resoudre(visibles[pos].c.valeur);
     };
     useKeyboard((k) => {
+        if (d.detail && (k.name === 'pageup' || k.name === 'pagedown')) return detail.current?.scrollBy(k.name === 'pageup' ? -5 : 5);
         if (k.name === 'escape') return d.resoudre(undefined);
         if (k.name === 'up') return setIndex(Math.max(0, courant - 1));
         if (k.name === 'down') return setIndex(Math.min(visibles.length - 1, courant + 1));
@@ -42,11 +44,16 @@ export function Choix({ d, hauteur }: { d: any; hauteur: number }) {
             }
         }
     });
-    const place = Math.max(3, hauteur - 4 - (d.recherche ? 1 : 0));
+    const hauteurDetail = d.detail ? Math.max(3, Math.floor((hauteur - 7) / 2)) : 0;
+    const place = Math.max(3, hauteur - 4 - (d.recherche ? 1 : 0) - (d.detail ? hauteurDetail + 1 : 0));
     const debut = Math.max(0, Math.min(courant - Math.floor(place / 2), visibles.length - place));
     return (
         <box flexGrow={1} flexDirection="column" border borderStyle="rounded" borderColor={theme.primaire} paddingLeft={1} paddingRight={1}>
             <text fg={theme.primaire} attributes={GRAS}>{d.message}</text>
+            {d.detail && <>
+                <scrollbox ref={detail} height={hauteurDetail} scrollY><text wrapMode="word" selectable>{d.detail}</text></scrollbox>
+                <text fg={fond.discret}>Détail de l’action · molette ou Page ↑/↓ pour tout lire</text>
+            </>}
             {d.recherche && <text><span fg={theme.accent}>⌕ </span><span>{filtre}</span><span fg={fond.discret}>{filtre ? '' : 'tape pour filtrer'}</span></text>}
             {visibles.slice(debut, debut + place).map(({ c, i }, k) => {
                 const pos = debut + k;
@@ -104,7 +111,7 @@ export function VueNonMigree({ d }: { d: any }) {
     return (
         <box flexGrow={1} flexDirection="column" paddingLeft={2} paddingTop={1} onMouseDown={() => d.resoudre()}>
             <text fg="#facc15" attributes={GRAS}>Cette vue n’est pas encore passée à la nouvelle interface</text>
-            <text fg={fond.discret}>Elle viendra dans une prochaine étape ; en attendant, l’interface actuelle (Claudetopia) l’affiche.</text>
+            <text fg={fond.discret}>Elle viendra dans une prochaine étape ; en attendant, l’interface actuelle (Agentopia) l’affiche.</text>
             <text> </text>
             <text fg={fond.discret}>Échap, Entrée ou clic pour revenir</text>
         </box>

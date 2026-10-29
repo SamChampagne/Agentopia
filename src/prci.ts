@@ -8,7 +8,7 @@ import { bus } from './ui/bus.js';
 import { c } from './theme.js';
 
 // De GitHub à une session Claude : corriger les commentaires d'une revue de PR, réparer un pipeline en échec.
-// Claudetopia lit lui-même les commentaires et les échecs (avec ton jeton) et les donne à Claude dans la consigne.
+// Agentopia lit lui-même les commentaires et les échecs (avec ton jeton) et les donne à Claude dans la consigne.
 
 const entetes = (cle: string) => ({ Authorization: `Bearer ${cle}`, Accept: 'application/vnd.github+json' });
 

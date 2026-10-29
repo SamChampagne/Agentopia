@@ -83,9 +83,9 @@ function Pouls({ d, largeur, hauteur, tic }: { d: any; largeur: number; hauteur:
             toile.point(x, y, crete ? theme.accent : melange(NOIR, theme.primaire, 0.25 + 0.5 * (1 - y / toile.hauteurPx)), crete ? 2 : 1);
         }
     }
-    // Le « maintenant » pulse au bout de la courbe
+    // Le point « maintenant » reste fixe ; seules les données évoluent.
     const yFin = Math.round((1 - valeur(toile.largeurPx - 1)) * (toile.hauteurPx - 1));
-    for (let dy = -1; dy <= 1; dy++) toile.point(toile.largeurPx - 1 - (tic % 2), yFin + dy, '#ffffff', 3);
+    for (let dy = -1; dy <= 1; dy++) toile.point(toile.largeurPx - 1, yFin + dy, '#ffffff', 3);
     const parMinute = total[minutes - 1];
     return (
         <box flexDirection="column" flexShrink={0}>
@@ -133,26 +133,26 @@ function Activite({ horaires, largeur, hauteur, couleur, vif }: { horaires?: num
 
 // Une session en carte : son état, sa courbe d'activité, son contexte, ce qu'elle fait ;
 // au survol ou à la sélection (flèches), ses actions apparaissent en bas
-function CarteSession({ s, a, cout, largeur, tic, choisie, survolee, agir, survoler }: {
+export function CarteSession({ s, a, cout, largeur, tic, choisie, survolee, agir, survoler }: {
     s: any; a: any; cout?: number; largeur: number; tic: number; choisie: boolean; survolee: boolean; agir: (action: string) => void; survoler: (oui: boolean) => void;
 }) {
     const [bouton, setBouton] = useState<string>();
     const st = STATUTS[s.statut] ?? STATUTS.terminee;
     const projet = couleurProjet(s.nom);
     const travaille = s.statut === 'travaille', bloquee = s.statut === 'bloquee';
-    // Le bord : accent si choisie, pulse aux couleurs du projet si elle travaille, orange qui clignote si elle t'attend
-    const bord = choisie || survolee ? theme.accent : bloquee ? (tic % 2 ? ORANGE : '#7c2d12') : travaille ? (tic % 2 ? projet : melange(NOIR, projet, 0.5)) : melange(NOIR, projet, 0.4);
+    // Couleurs stables : le statut reste lisible sans faire clignoter les cartes.
+    const bord = choisie || survolee ? theme.accent : bloquee ? ORANGE : travaille ? melange(NOIR, projet, 0.65) : melange(NOIR, projet, 0.4);
     const iw = largeur - 4;
     const action = s.question ? `? ${une(s.question)}` : a?.outil ? `▸ ${une(a.outil)}` : une(a?.dernierTexte ?? s.titre ?? 'pas encore d’activité');
     const ctx = a?.contexte;
     const limite = ctx ? (ctx > 200_000 ? 1_000_000 : 200_000) : 0;
     const part = ctx ? Math.min(1, ctx / limite) : 0;
     const lc = Math.max(4, Math.min(12, iw - 24));
-    const repondable = bloquee && s.arrierePlan && s.question && !/permission/i.test(s.question);
+    const repondable = !s.integree && bloquee && s.arrierePlan && s.question && !/permission/i.test(s.question);
     const boutons = [
         { cle: 'ouvrir', t: ' ↵ Ouvrir ' },
         ...(repondable ? [{ cle: 'repondre', t: ' ✎ Répondre ' }] : []),
-        ...(s.arrierePlan ? [{ cle: 'cote', t: ' ⫿ À côté ' }] : []),
+        ...(s.arrierePlan && !s.integree ? [{ cle: 'cote', t: ' ⫿ À côté ' }] : []),
         { cle: 'changements', t: ' ± Diff ' },
     ];
     const depuis = a?.date ? Math.round((Date.now() - a.date.getTime()) / 60_000) : undefined;
@@ -166,7 +166,7 @@ function CarteSession({ s, a, cout, largeur, tic, choisie, survolee, agir, survo
                 <text flexShrink={0} fg={st.c} attributes={bloquee ? GRAS : 0}>{` ${st.t}`}</text>
             </box>
             <text fg={fond.eteint} wrapMode="none">{couper(`${s.titre || s.id || ''} · ${s.arrierePlan ? 'arrière-plan' : 'onglet'}${cout ? ` · ${dollars(cout)}` : ''}`, iw)}</text>
-            <Activite horaires={a?.horaires} largeur={iw} hauteur={2} couleur={projet} vif={travaille && tic % 2 === 0} />
+            <Activite horaires={a?.horaires} largeur={iw} hauteur={2} couleur={projet} vif={travaille} />
             <text wrapMode="none">
                 <span fg="gray">ctx </span>
                 <span fg={part > 0.8 ? ROUGE : part > 0.5 ? JAUNE : VERT}>{'▰'.repeat(Math.round(part * lc))}</span>
@@ -269,19 +269,19 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
     const noms = (liste: any[], couleur: (s: any) => string) => liste.slice(0, 3).map((s: any) => [{ t: '● ', c: couleurProjet(s.nom) }, { t: couper(s.titre || s.nom, 24), c: couleur(s) }]);
     const coutsTries = Object.entries(d.cout.parSession as Record<string, number>).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const tuiles = [
-        <Tuile key="t" titre="AU TRAVAIL" n={String(travaillent)} sous={travaillent ? `${ANIM[tic % ANIM.length]} Claude écrit en ce moment` : 'tout est calme'} couleur={VERT} vif={travaillent > 0} largeur={lt}
+        <Tuile key="t" titre="AU TRAVAIL" n={String(travaillent)} sous={travaillent ? 'Agents en cours de travail' : 'tout est calme'} couleur={VERT} vif={travaillent > 0} largeur={lt}
             extra={noms(sessions.filter((s: any) => s.statut === 'travaille'), () => '#cbd5e1')} />,
         <Tuile key="a" titre="T’ATTENDENT" n={String(attendent)} sous={bloquees ? `! ${bloquees} bloquée${bloquees > 1 ? 's' : ''}, à toi de jouer` : attendent ? 'ont fini, à toi de répondre' : 'personne ne t’attend'}
-            couleur={bloquees ? ORANGE : JAUNE} vif={!!bloquees && tic % 2 === 0} largeur={lt}
+            couleur={bloquees ? ORANGE : JAUNE} vif={!!bloquees} largeur={lt}
             extra={noms(sessions.filter((s: any) => s.statut === 'bloquee' || s.statut === 'attend'), (s) => (s.statut === 'bloquee' ? ORANGE : '#cbd5e1'))} />,
-        <Tuile key="c" titre="COÛT DU JOUR" n={`${entier},${centimes}`} suite="$" sous={`${(d.cout.jetons / 1000).toFixed(0)} k jetons (équiv. API)`} couleur={theme.accent} largeur={lt}
+        <Tuile key="c" titre="COÛT CLAUDE CLI" n={`${entier},${centimes}`} suite="$" sous="Sessions intégrées non incluses" couleur={theme.accent} largeur={lt}
             extra={coutsTries.map(([id, cout]) => {
                 const s = d.agents.find((a: any) => a.sessionId === id);
                 return [{ t: `${dollars(cout).padStart(8)} `, c: 'gray' }, { t: couper(s ? s.nom : 'session fermée', 18), c: s ? couleurProjet(s.nom) : fond.discret }];
             })} />,
         <Tuile key="s" titre="SERVEURS" n={`${repondent}/${serveurs.length}`}
             sous={testes < serveurs.length && !muets ? 'test en cours…' : muets ? `${muets} ne répond${muets > 1 ? 'ent' : ''} pas` : 'tous répondent'}
-            couleur={muets ? ROUGE : theme.secondaire} vif={muets > 0 && tic % 2 === 0} largeur={lt}
+            couleur={muets ? ROUGE : theme.secondaire} vif={muets > 0} largeur={lt}
             extra={[serveurs.slice(0, 8).map((s: any) => {
                 const ok = d.joignables.get(s);
                 return { t: ok === undefined ? '○ ' : '● ', c: ok === undefined ? 'gray' : ok ? VERT : ROUGE };
@@ -318,7 +318,7 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
         return (
             <box key={s.nom} flexDirection="column" flexShrink={0} backgroundColor={survol === cle ? fond.selection : undefined} {...survoler(cle)} onMouseDown={() => ouvrirDetail({ type: 'serveur', cle: s.nom })}>
                 <text truncate>
-                    <span fg={ok === undefined ? 'gray' : ok ? VERT : ROUGE}>{ok === false && tic % 2 ? ' ◌ ' : ' ● '}</span>
+                    <span fg={ok === undefined ? 'gray' : ok ? VERT : ROUGE}>{' ● '}</span>
                     <span fg={fond.texte} attributes={GRAS}>{couper(s.nom, 22)}</span>
                     <span fg={fond.discret}>{`  ${s.ip ?? s.hote}${m?.depuis ? ` · ${m.depuis}` : ''}`}</span>
                     {connecte > 0 && <span fg={theme.accent}>{`  ⇄ ${connecte}`}</span>}
@@ -374,7 +374,7 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
     return (
         <box flexGrow={1} flexDirection="column" paddingLeft={1}>
             <box height={1} flexDirection="row" paddingRight={1}>
-                <text flexGrow={1}><span fg={theme.accent} attributes={GRAS}>{`${tic % 2 ? '◉' : '○'} VUE GLOBALE `}</span><span fg={fond.discret}>en direct · clic pour ouvrir · Échap pour revenir</span></text>
+                <text flexGrow={1}><span fg={theme.accent} attributes={GRAS}>◉ VUE GLOBALE </span><span fg={fond.discret}>en direct · clic pour ouvrir · Échap pour revenir</span></text>
                 <text fg="gray">{new Date().toTimeString().slice(0, 8)}</text>
             </box>
             <box flexDirection="row" flexShrink={0}>{tuiles}</box>

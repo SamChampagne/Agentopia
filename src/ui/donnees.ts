@@ -139,6 +139,8 @@ function signalerChangements(avant: Map<string, string>): void {
             if (notifier) toast(`⚠ ${a.nom} attend ${a.question ? 'ta réponse' : 'ta permission'}`, a.question || a.titre || 'Clique pour ouvrir la session', `claudetopia:session/${a.id ?? a.sessionId}`, 'alerte');
             else jouerSon('alerte');
             bus.emit('notice', `! ${a.nom} attend ta permission · clique sa carte`);
+        } else if (a.integree && a.issue && a.issue !== 'success') {
+            if (notifier) toast(`! ${a.nom} : tour interrompu`, a.erreur || 'Ouvre la conversation pour voir le détail', `claudetopia:session/${a.id}`, 'alerte');
         } else if (duree >= 15_000 && !membres.has(a.id ?? '')) {
             const minutes = Math.round(duree / 60_000);
             if (notifier) toast(`✓ ${a.nom} a fini`, `${a.titre || 'Claude t\'attend'}${minutes ? ` · ${minutes} min de travail` : ''} · clic pour ouvrir`, `claudetopia:session/${a.id ?? a.sessionId}`);

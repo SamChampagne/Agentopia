@@ -1,4 +1,6 @@
 import { commandesAssistant } from './assistantCommandes.js';
+import { commandesSessions } from './sessionsCommandes.js';
+import { estIntegree } from './sessionsIntegrees.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -10,6 +12,7 @@ import { lancerClaude, reprendreDerniere, choisirSession, nouvelleBranche, netto
 import { recents, projetsRecents, puce } from './dashboard.js';
 import { instantane, sessionsActives, fermerArbre, formatRam } from './systeme.js';
 import { serveursDev } from './serveurs.js';
+import { lireArgument, argumentsCommande, suggestionsCommande } from './ligneCommande.js';
 import { calculerUsage, formatTokens, nomDossierClaude } from './usage.js';
 import { demarrerSurveillance, toast, jouerSon } from './notifications.js';
 import { demanderClaude, parLignes } from './claude.js';
@@ -43,6 +46,7 @@ import { CLAUDE } from './claude.js';
 
 // Ouvre "claude attach" dans une fenêtre à part (ou à côté, dans la même fenêtre) : l'interface reste affichée ici
 export async function rejoindre(id: string, aCote = false): Promise<void> {
+    if (estIntegree(id)) { bus.emit('selectionner', id); return; }
     const s = lireDonnees().agents.find((x) => x.id === id);
     const dossier = s?.cwd ?? process.cwd();
     const titre = `🤖 ${s?.nom ?? path.basename(dossier)}`;
@@ -55,7 +59,7 @@ export async function rejoindre(id: string, aCote = false): Promise<void> {
 // Vues de la nouvelle interface (grille, fichiers chauds) : c'est elle qui les affiche
 function ouvrirZone(zone: string): void {
     if (bus.listenerCount('zone')) bus.emit('zone', zone);
-    else console.log(c.alerte('Cette vue existe seulement dans la nouvelle interface (Claudetopia sous Bun)'));
+    else console.log(c.alerte('Cette vue existe seulement dans la nouvelle interface (Agentopia sous Bun)'));
 }
 
 // Ce que la session a modifié : les fichiers qu'elle a édités et qui diffèrent encore de git
@@ -118,7 +122,7 @@ export interface Commande {
     alias?: string[];
     args?: string;          // aide sur les arguments
     projet?: boolean;       // 1er argument = projet (autocomplété, demandé si absent)
-    groupe: 'Claude' | 'Projets' | 'Git' | 'Système' | 'Config';
+    groupe: 'Agents' | 'Claude' | 'Projets' | 'Git' | 'Système' | 'Config';
     description: string;
     cache?: boolean;        // commande interne (boutons, clics) : pas dans l'aide ni l'historique
     executer: (ctx: Contexte) => Promise<void> | void;
@@ -221,9 +225,9 @@ async function afficherUsage(): Promise<void> {
 }
 
 function afficherAide(): void {
-    const groupes = ['Claude', 'Projets', 'Git', 'Système', 'Config'] as const;
+    const groupes = ['Agents', 'Claude', 'Projets', 'Git', 'Système', 'Config'] as const;
     for (const g of groupes) {
-        console.log(titre(g));
+        console.log(titre(g === 'Claude' ? 'Outils Claude CLI' : g));
         console.log(tableau(COMMANDES.filter((cmd) => cmd.groupe === g).map((cmd) => [
             c.accent(`/${cmd.nom}`) + (cmd.args ? c.discret(` ${cmd.args}`) : ''),
             cmd.description,
@@ -242,7 +246,7 @@ function afficherAide(): void {
         [c.accent('⇅ SFTP'), 'vue SSH → Fichiers, ou /sftp : parcourir un serveur · /ssh-ajouter, /sftp-ajouter pour configurer'],
         [c.accent('Alt+M'), 'parler au maître : il gère tes sessions (fermer, relancer, écrire, créer, résumer) · aussi clic sur sa zone à gauche'],
         [c.accent('Alt+T'), 'ouvrir un terminal : PowerShell, cmd, Git Bash, WSL (aussi « ❯ Terminal » à gauche)'],
-        [c.accent('texte libre'), 'conversation ouverte : envoyé à Claude · sinon : nouvelle session Claude ici'],
+        [c.accent('texte libre'), 'conversation ouverte : envoyé à son agent · sinon : agent par défaut ou choix du fournisseur'],
         [c.accent('Entrée (vide)'), 'conversation ouverte : la rejoindre dans une nouvelle fenêtre · sinon : menu projet'],
         [c.accent('Alt+Tab'), 'depuis une session rejointe : revenir au CLI (elle continue)'],
         [c.accent('Alt+J'), 'conversation ouverte : la rejoindre à côté, dans la même fenêtre Windows Terminal'],
@@ -265,12 +269,14 @@ function afficherAide(): void {
 async function menu(projetChoisi?: Projet): Promise<void> {
     const projet = projetChoisi ?? await demanderProjet('Projet');
     const action = await choisir(projet.nom, [
-        { label: '✻ Nouvelle session Claude', valeur: 'claude' },
+        { label: '✻ Nouvelle conversation', valeur: 'session' },
+        { label: '◆ Équipe avec plusieurs fournisseurs', valeur: 'equipe-mixte' },
         { label: '▭ Claude dans un onglet', valeur: 'onglet' },
-        { label: "◆ Équipe d'agents (plan + tâches en parallèle)", valeur: 'equipe-projet' },
+        { label: '◆ Équipe Claude CLI (plan automatique)', valeur: 'equipe-projet' },
         { label: '★ Claude avec un prompt favori', valeur: 'favori' },
-        { label: '↺ Reprendre une session', valeur: 'sessions' },
-        { label: '» Continuer la dernière session', valeur: 'reprendre' },
+        { label: '↺ Historique des agents intégrés', valeur: 'historique-agents' },
+        { label: '↺ Reprendre une session Claude CLI', valeur: 'sessions' },
+        { label: '» Continuer la dernière session Claude CLI', valeur: 'reprendre' },
         { label: '⌕ Revue du diff par Claude', valeur: 'revue' },
         { label: '✓ Commit avec message IA', valeur: 'commit' },
         { label: '⎇ Nouvelle branche (worktree)', valeur: 'branche' },
@@ -291,7 +297,7 @@ async function menu(projetChoisi?: Projet): Promise<void> {
 export const COMMANDES: Commande[] = [
     // Claude
     {
-        nom: 'claude', alias: ['nouvelle'], projet: true, args: '[projet] [prompt|@favori]', groupe: 'Claude',
+        nom: 'claude-cli', projet: true, args: '[projet] [prompt|@favori]', groupe: 'Claude',
         description: 'Nouvelle session Claude (arrière-plan : visible et joignable ici)',
         executer: async ({ projet, apresProjet }) => {
             let prompt = developperPrompts(apresProjet);
@@ -313,21 +319,22 @@ export const COMMANDES: Commande[] = [
         executer: ({ projet, apresProjet }) => lancerClaude(projet!, developperPrompts(apresProjet) || undefined, 'onglet'),
     },
     {
-        nom: 'envoyer', args: '<sessionId> <texte>', groupe: 'Claude', cache: true,
+        nom: 'envoyer', args: '<sessionId> <texte>', groupe: 'Agents', cache: true,
         description: "Envoyer un message à une session d'arrière-plan",
-        executer: async ({ args }) => {
+        executer: async ({ args, reste }) => {
             const s = lireDonnees().agents.find((a) => a.sessionId === args[0]);
-            const texte = args.slice(1).join(' ');
-            if (!s) return void bus.emit('notice', '✕ Session introuvable');
+            const texte = reste ? reste.slice(lireArgument(reste)!.fin).trim() : args.slice(1).join(' ');
+            if (!s) throw new Error('Session introuvable ; message non envoyé.');
             const res = await tache(`Envoi à ${s.nom}`, () => envoyerMessage(s, developperPrompts(texte)));
-            bus.emit('notice', res.ok ? `✓ ${res.message} à ${s.nom} · Claude répond dans la conversation` : `✕ ${res.message}`);
+            bus.emit('notice', res.ok ? `✓ ${res.message} à ${s.nom} · réponse dans la conversation` : `✕ ${res.message}`);
+            if (!res.ok) throw new Error(res.message);
             // La conversation peut revenir sous un nouvel id : on la rouvre dès qu'elle réapparaît
             if (res.id) bus.emit('selectionner', res.id);
             console.log(res.ok ? c.succes(`→ ${s.nom} : ${texte.slice(0, 80)}`) : c.erreur(res.message));
         },
     },
     {
-        nom: 'favori-session', args: '<sessionId>', groupe: 'Claude', cache: true,
+        nom: 'favori-session', args: '<sessionId>', groupe: 'Agents', cache: true,
         description: 'Envoyer un prompt favori à une session',
         executer: async ({ args }) => {
             const nom = await choisir('Prompt favori à envoyer', Object.entries(config.prompts).map(([n, texte]) => ({
@@ -337,22 +344,22 @@ export const COMMANDES: Commande[] = [
         },
     },
     {
-        nom: 'rejoindre', args: '<id>', groupe: 'Claude', cache: true,
+        nom: 'rejoindre', args: '<id>', groupe: 'Agents', cache: true,
         description: "Entrer dans une session d'arrière-plan",
         executer: async ({ args }) => rejoindre(args[0]),
     },
     {
-        nom: 'rejoindre-cote', args: '<id>', groupe: 'Claude', cache: true,
+        nom: 'rejoindre-cote', args: '<id>', groupe: 'Agents', cache: true,
         description: "Ouvrir une session d'arrière-plan à côté, dans la même fenêtre",
         executer: async ({ args }) => rejoindre(args[0], true),
     },
     {
-        nom: 'grille', groupe: 'Claude',
+        nom: 'grille', groupe: 'Agents',
         description: 'Plusieurs conversations à la fois, en direct (Alt+G)',
         executer: () => ouvrirZone('grille'),
     },
     {
-        nom: 'chauds', alias: ['fichiers'], groupe: 'Claude',
+        nom: 'chauds', alias: ['fichiers'], groupe: 'Agents',
         description: 'Les fichiers que tes sessions modifient en ce moment, et les conflits (Alt+H)',
         executer: () => ouvrirZone('chauds'),
     },
@@ -362,18 +369,19 @@ export const COMMANDES: Commande[] = [
         executer: () => ouvrirZone('globe'),
     },
     {
-        nom: 'repondre', args: '<sessionId> [réponse]', groupe: 'Claude', cache: true,
+        nom: 'repondre', args: '<sessionId> [réponse]', groupe: 'Agents', cache: true,
         description: 'Répondre à la question d\'une session bloquée',
         executer: async ({ args }) => {
             const s = lireDonnees().agents.find((a) => a.sessionId === args[0]);
             if (!s) return void bus.emit('notice', '✕ Session introuvable');
+            if (s.permission) return trouverCommande('autorisation')!.executer({ args, reste: '', apresProjet: '' });
             const texte = args.slice(1).join(' ') || await saisir(`Réponse à ${s.nom} : ${s.question ?? ''}`.slice(0, 200), s.suggestion ?? '');
             if (!texte.trim()) return;
             await trouverCommande('envoyer')!.executer({ args: [s.sessionId, ...texte.trim().split(' ')], reste: '', apresProjet: '' });
         },
     },
     {
-        nom: 'changements', args: '<sessionId>', groupe: 'Claude', cache: true,
+        nom: 'changements', args: '<sessionId>', groupe: 'Agents', cache: true,
         description: 'Fichiers modifiés par une session et leur diff',
         executer: async ({ args }) => {
             const s = lireDonnees().agents.find((a) => a.sessionId === args[0] || a.id === args[0]);
@@ -382,7 +390,7 @@ export const COMMANDES: Commande[] = [
         },
     },
     {
-        nom: 'arreter', args: '<id>', groupe: 'Claude', cache: true,
+        nom: 'arreter', args: '<id>', groupe: 'Agents', cache: true,
         description: "Arrêter une session d'arrière-plan",
         executer: async ({ args }) => {
             if (!args.includes('--oui') && !await confirmer(`Arrêter la session ${args[0]} ? (la conversation est gardée)`)) return;
@@ -390,11 +398,12 @@ export const COMMANDES: Commande[] = [
         },
     },
     {
-        nom: 'copie', args: '<sessionId>', groupe: 'Claude', cache: true,
+        nom: 'copie', args: '<sessionId>', groupe: 'Agents', cache: true,
         description: "Continuer une session d'onglet ici (copie en arrière-plan)",
         executer: async ({ args }) => {
             const s = lireDonnees().agents.find((a) => a.sessionId === args[0]);
             if (!s) return console.log(c.erreur('Session introuvable'));
+            if (s.integree) return rejoindre(s.id!);
             const { id, sortie } = await tache('Copie de la conversation en arrière-plan', () => lancerArrierePlan(s.cwd, `${s.nom}-suite`, undefined, s.sessionId));
             if (!id) return console.log(c.erreur(sortie));
             console.log(c.succes(`Copie créée (${id}) : la session d'origine reste dans son onglet`));
@@ -402,11 +411,12 @@ export const COMMANDES: Commande[] = [
         },
     },
     {
-        nom: 'continuer', args: '<sessionId>', groupe: 'Claude', cache: true,
+        nom: 'continuer', args: '<sessionId>', groupe: 'Agents', cache: true,
         description: 'Reprendre une session terminée (avec son historique) en arrière-plan',
         executer: async ({ args }) => {
             const s = lireDonnees().agents.find((a) => a.sessionId === args[0]);
             if (!s) return void bus.emit('notice', '✕ Session introuvable');
+            if (s.integree) return rejoindre(s.id!);
             const { id, sortie } = await tache(`Reprise de ${s.nom}`, () => lancerArrierePlan(s.cwd, s.titre || s.nom, undefined, s.sessionId));
             if (!id) return console.log(c.erreur(sortie.split('\n')[0] || 'Échec de la reprise'));
             console.log(c.succes(`${s.nom} reprend (${id}) avec tout son historique · écris-lui dans la barre du bas`));
@@ -415,7 +425,7 @@ export const COMMANDES: Commande[] = [
     },
     {
         nom: 'lancement', args: 'fond|onglet', groupe: 'Config',
-        description: 'Où /claude ouvre les sessions (fond = joignable ici)',
+        description: 'Où /claude-cli ouvre les sessions classiques (fond ou onglet)',
         executer: ({ args }) => {
             if (args[0] === 'fond' || args[0] === 'onglet') {
                 config.lancement = args[0];
@@ -449,8 +459,8 @@ export const COMMANDES: Commande[] = [
         },
     },
     {
-        nom: 'equipe', alias: ['equipes', 'orchestre'], args: '[projet|nouvelle] [-- objectif]', groupe: 'Claude',
-        description: "Équipe d'agents : un plan découpé en tâches, plusieurs Claude en parallèle sur un projet",
+        nom: 'equipe', alias: ['equipes', 'orchestre'], args: '[projet|nouvelle] [-- objectif]', groupe: 'Agents',
+        description: 'Voir les équipes ; création avec Claude CLI (équipe mixte : /equipe-mixte)',
         executer: async ({ args }) => {
             const { VueEquipe } = await import('./ui/VueEquipe.js');
             const { creerEquipe, equipeDe } = await import('./equipe.js');
@@ -489,7 +499,7 @@ export const COMMANDES: Commande[] = [
         executer: ({ projet }) => lancerAvecPrompt(projet!, config.prompts),
     },
     {
-        nom: 'prompts', args: '[add <nom> <texte> | rm <nom>]', groupe: 'Claude',
+        nom: 'prompts', args: '[add <nom> <texte> | rm <nom>]', groupe: 'Agents',
         description: 'Gérer les prompts favoris (@nom)',
         executer: ({ args }) => {
             if (args[0] === 'add' && args[1] && args.length > 2) {
@@ -623,7 +633,7 @@ export const COMMANDES: Commande[] = [
         executer: ({ args }) => COMMANDES.find((x) => x.nom === 'terminal')!.executer({ args: [cle, ...args], reste: [cle, ...args].join(' '), apresProjet: '' }),
     })),
     {
-        nom: 'voir', args: '<id>', groupe: 'Claude', cache: true,
+        nom: 'voir', args: '<id>', groupe: 'Agents', cache: true,
         description: "Ouvrir la conversation d'une session à l'écran",
         executer: ({ args }) => {
             const s = lireDonnees().agents.find((a) => a.id === args[0] || a.sessionId === args[0] || String(a.pid) === args[0]);
@@ -640,7 +650,7 @@ export const COMMANDES: Commande[] = [
             const code = await tache('Installation de Claude Code', () => executer('npm install -g @anthropic-ai/claude-code', os.homedir(), (l) => l.trim() && console.log(c.discret(l))));
             if (code !== 0) return console.log(c.erreur('✗ L\'installation a échoué (voir ci-dessus). Essaie aussi : irm https://claude.ai/install.ps1 | iex'));
             const etat = await tache('Vérification', verifierClaude);
-            if (etat === 'absent') return console.log(c.alerte('Installé, mais introuvable dans le PATH : ferme et relance Claudetopia.'));
+            if (etat === 'absent') return console.log(c.alerte('Installé, mais introuvable dans le PATH : ferme et relance Agentopia.'));
             console.log(c.succes('✓ Claude Code est installé'));
             if (etat === 'deconnecte') await COMMANDES.find((x) => x.nom === 'connexion-claude')!.executer({ args: [], reste: '', apresProjet: '' });
         },
@@ -658,7 +668,7 @@ export const COMMANDES: Commande[] = [
         },
     },
     {
-        nom: 'fermer', args: '<id|pid> [--oui]', groupe: 'Claude', cache: true,
+        nom: 'fermer', args: '<id|pid> [--oui]', groupe: 'Agents', cache: true,
         description: 'Fermer une session : arrière-plan = arrêtée et retirée (reprenable) · onglet = Claude arrêté',
         executer: async ({ args }) => {
             const s = lireDonnees().agents.find((a) => a.id === args[0] || String(a.pid) === args[0] || a.sessionId === args[0]);
@@ -681,7 +691,7 @@ export const COMMANDES: Commande[] = [
         },
     },
     {
-        nom: 'retirer', args: '<id>', groupe: 'Claude', cache: true,
+        nom: 'retirer', args: '<id>', groupe: 'Agents', cache: true,
         description: 'Retirer une session d\'arrière-plan de la liste (la conversation reste reprenable)',
         executer: async ({ args }) => {
             const s = lireDonnees().agents.find((a) => a.id === args[0]);
@@ -806,7 +816,7 @@ export const COMMANDES: Commande[] = [
     // Système
     {
         nom: 'top', groupe: 'Système',
-        description: 'Moniteur live : sessions Claude, CPU/RAM, serveurs, usage',
+        description: 'Moniteur live : agents, CPU/RAM, serveurs, usage',
         executer: async () => {
             const { Moniteur } = await import('./ui/Moniteur.js');
             const React = await import('react');
@@ -881,7 +891,7 @@ export const COMMANDES: Commande[] = [
         nom: 'notifs', args: '[on|off|test]', groupe: 'Système',
         description: 'Notification quand une session t\'attend',
         executer: ({ args }) => {
-            if (args[0] === 'test') return toast('🤖 Claudetopia', 'Les notifications fonctionnent · clic pour ouvrir les questions', 'claudetopia:questions');
+            if (args[0] === 'test') return toast('🤖 Agentopia', 'Les notifications fonctionnent · clic pour ouvrir les questions', 'claudetopia:questions');
             config.notifications = args[0] !== 'off';
             sauverConfig(config);
             demarrerNotifications();
@@ -922,7 +932,7 @@ export const COMMANDES: Commande[] = [
     {
         nom: 'scan', args: '[filtre]', groupe: 'Config',
         description: 'Scanner le poste : projets, doublons, serveurs SSH, outils',
-        executer: ({ reste }) => scan(reste || undefined),
+        executer: async ({ reste }) => { const { preparerPoste } = await import('./preparation.js'); await preparerPoste(config, { rescan: true, filtre: reste || undefined }); },
     },
     {
         nom: 'racine', args: 'add|rm <chemin>', groupe: 'Config',
@@ -936,7 +946,7 @@ export const COMMANDES: Commande[] = [
     },
     {
         nom: 'config', alias: ['configuration', 'reglages'], groupe: 'Config',
-        description: 'Comptes (Claude, Git, jetons), thème, interface, diagnostic',
+        description: 'Fournisseurs IA, comptes Git, thème, interface et diagnostic',
         executer: async () => {
             const { VueConfig } = await import('./ui/VueConfig.js');
             const React = await import('react');
@@ -946,6 +956,7 @@ export const COMMANDES: Commande[] = [
     ...commandesConfig(config),
     ...commandesSsh(config),
     ...commandesConnexions(),
+    ...commandesSessions(config),
     ...commandesPlus(config),
     ...commandesPrCi(),
     ...commandesTicket(getProjets),
@@ -1001,21 +1012,30 @@ export async function executerLigne(ligne: string): Promise<void> {
         if (code !== 0) console.log(c.erreur(`code de sortie ${code}`));
         return;
     }
-    const [premier, ...args] = texte.split(/\s+/);
+    const premier = texte.split(/\s+/, 1)[0];
     const cmd = trouverCommande(premier);
     if (!cmd) {
-        // Pas une commande connue : nouvelle session Claude dans le dossier courant, avec ce texte comme consigne
+        if (premier.startsWith('/')) {
+            const proches = suggestionsCommande(premier, COMMANDES.filter((c) => !c.cache).flatMap((c) => [c.nom, ...(c.alias ?? [])]));
+            throw new Error(`Commande inconnue : ${premier}.${proches.length ? ` Essaie ${proches.join(', ')}.` : ' Ouvre /aide ou Ctrl+K.'} Aucun agent lancé.`);
+        }
+        // Même parcours que /session : choix explicite ou préférence, jamais de Claude implicite.
         const ici = resoudreProjet('.')!;
-        return lancerClaude(ici, developperPrompts(texte), config.lancement);
+        return COMMANDES.find((c) => c.nom === 'session')!.executer({ args: [], reste: texte, projet: ici, apresProjet: developperPrompts(texte) });
     }
     const reste = texte.slice(premier.length).trim();
+    // Le texte libre après un projet/session est conservé tel quel (citations, code, retours à la ligne).
+    const premierArg = lireArgument(reste);
+    const args = cmd.projet || cmd.nom === 'envoyer'
+        ? premierArg ? [premierArg.valeur, ...reste.slice(premierArg.fin).trim().split(/\s+/).filter(Boolean)] : []
+        : argumentsCommande(reste);
     let projet: Projet | undefined;
     let apresProjet = reste;
     if (cmd.projet) {
         if (args[0]) {
             projet = resoudreProjet(args[0]);
             if (!projet) return;
-            apresProjet = args.slice(1).join(' ');
+            apresProjet = reste.slice(premierArg!.fin).trim();
         } else {
             projet = await demanderProjet();
         }

@@ -12,7 +12,7 @@ export interface Choix<T> {
 }
 
 export type Demande =
-    | { type: 'choix'; message: string; choix: Choix<unknown>[]; recherche: boolean; multiple: boolean; resoudre: (v: unknown) => void }
+    | { type: 'choix'; message: string; detail?: string; choix: Choix<unknown>[]; recherche: boolean; multiple: boolean; resoudre: (v: unknown) => void }
     | { type: 'saisie'; message: string; defaut: string; masque?: boolean; resoudre: (v: string | undefined) => void }
     | { type: 'vue'; rendu: (fermer: () => void) => ReactNode; resoudre: () => void };
 
@@ -32,9 +32,9 @@ function demander<T>(construire: (resoudre: (v: T | undefined) => void) => Deman
     });
 }
 
-export function choisir<T>(message: string, choix: Choix<T>[], recherche = choix.length > 8): Promise<T> {
+export function choisir<T>(message: string, choix: Choix<T>[], recherche = choix.length > 8, detail?: string): Promise<T> {
     return demander<T>((resoudre) => ({
-        type: 'choix', message, choix: choix as Choix<unknown>[], recherche, multiple: false,
+        type: 'choix', message, detail, choix: choix as Choix<unknown>[], recherche, multiple: false,
         resoudre: resoudre as (v: unknown) => void,
     }));
 }

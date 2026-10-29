@@ -10,7 +10,7 @@ import { bus, choisir, confirmer, saisir, tache } from './ui/bus.js';
 import { c } from './theme.js';
 
 // Une tâche à partir d'un ticket : lien GitHub (issue) ou Azure DevOps (work item), ou un numéro dans un projet.
-// Claudetopia lit le ticket, crée la branche (worktree à côté du dépôt) et y lance une session avec le ticket en consigne.
+// Agentopia lit le ticket, crée la branche (worktree à côté du dépôt) et y lance une session avec le ticket en consigne.
 
 interface Ticket {
     numero: string;

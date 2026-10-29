@@ -46,6 +46,7 @@ export function VueDocker({ fermer }: { fermer: () => void }) {
             const [programme, args] = commandeInteractive(action, c.id, hote.serveur);
             return void passerLaMain(programme, args);
         }
+        if (action !== 'start' && action !== 'stop' && action !== 'restart') return;
         setMessage(`${action === 'start' ? 'Démarrage' : action === 'stop' ? 'Arrêt' : 'Redémarrage'} de ${c.nom}…`);
         const res = await actionConteneur(action, c.id, hote.serveur);
         setMessage(res.ok ? `✓ ${c.nom} : ${action === 'start' ? 'démarré' : action === 'stop' ? 'arrêté' : 'redémarré'}` : `✕ ${res.sortie.split('\n')[0]}`);

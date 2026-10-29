@@ -14,7 +14,7 @@ const FICHIER = CHEMINS.jetons;
 
 export const AIDE_JETONS: Record<Hebergeur, { page: string; consigne: string }> = {
     'GitHub': {
-        page: 'https://github.com/settings/tokens/new?scopes=repo&description=Claudetopia%20(lecture%20PR)',
+        page: 'https://github.com/settings/tokens/new?scopes=repo&description=Agentopia%20(lecture%20PR)',
         consigne: 'jeton « classic » avec la case repo (ou un fine-grained : Pull requests en lecture)',
     },
     'Azure DevOps': {

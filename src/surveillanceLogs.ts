@@ -10,7 +10,7 @@ import { c } from './theme.js';
 
 // Surveiller les logs d'un conteneur (local ou sur un serveur SSH) : à chaque ligne qui correspond au motif
 // (erreurs 5xx, error, exception…), une notification ; ensuite, Claude peut analyser l'extrait.
-// C'est Claudetopia qui lit les logs (docker logs -f), pas une session Claude : rien ne coûte tant que tout va bien.
+// C'est Agentopia qui lit les logs (docker logs -f), pas une session Claude : rien ne coûte tant que tout va bien.
 
 const MOTIF_DEFAUT = '\\b5\\d\\d\\b|error|exception|fatal|panic|traceback';
 const PAUSE_ALERTES = 60_000;     // une notification par minute au plus, par conteneur

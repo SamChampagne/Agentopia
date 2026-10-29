@@ -1,16 +1,28 @@
-# Claudetopia
+# Agentopia
 
-Poste de pilotage pour travailler avec Claude Code : sessions Claude en direct, **équipes d'agents** sur un projet, projets, Git, Docker, serveurs SSH.
+Poste de pilotage pour travailler avec Claude, Codex, Perplexity et des **équipes d’agents** : conversations, projets, Git, Docker et serveurs SSH.
 
-## Installation en une ligne (n'importe quel poste Windows)
+**Sessions intégrées Claude, Codex et Perplexity** : `+ Session` ou `/session`, configuration via `/fournisseurs`, collaboration via `/equipe-mixte`. [Connexion, utilisation et limites](docs/sessions-multi-agents.md).
+
+Lancer **Agentopia.bat** (ou le raccourci **Agentopia**). L’ancien lanceur `Claudetopia.bat` reste compatible. Les fichiers `.claudetopia*`, les historiques et les clés existants sont conservés ; seule l’ancienne bannière par défaut devient **AGENTOPIA**. Le dépôt GitHub garde pour l’instant son adresse `SamChampagne/ClaudeTopia`.
+
+## Installation Windows
+
+Le paquet **Agentopia-Setup.exe** contient Node 24, Bun et les dépendances de l’interface. Un double-clic installe dans le profil utilisateur, vérifie l’interface et ouvre la préparation guidée. Aucun terminal de compilation n’est nécessaire. **Ce paquet est pour l’instant construit localement ; il n’est pas encore publié dans les Releases GitHub.**
+
+Au premier lancement, choisis les projets et les agents à utiliser. Agentopia détecte les outils présents, propose les installations nécessaires et guide la connexion. Une interruption conserve les choix déjà faits. Le même parcours reste accessible avec **Config → Préparer le poste** ou `/scan`.
+
+`/maj`, `/reparer` et `/retour-version` gèrent les installations Windows : téléchargement vérifié, réparation avec le paquet conservé et retour à la version précédente. Les données personnelles sont séparées du logiciel. [Détails de construction et de validation](docs/distribution-windows.md).
+
+## Installation depuis les sources
 
 Dans PowerShell :
 
 ```powershell
-git clone https://github.com/SamChampagne/ClaudeTopia.git "$HOME\Claudetopia"; & "$HOME\Claudetopia\Installer.bat"
+git clone https://github.com/SamChampagne/ClaudeTopia.git "$HOME\Agentopia"; & "$HOME\Agentopia\Installer.bat"
 ```
 
-Dans Claudetopia, **`/installation`** affiche cette ligne avec la bonne adresse, prête à copier.
+Dans Agentopia, **`/installation`** affiche cette ligne avec la bonne adresse, prête à copier.
 
 Si le dépôt est public, aussi :
 
@@ -21,8 +33,8 @@ irm https://raw.githubusercontent.com/SamChampagne/ClaudeTopia/main/install.ps1 
 Sinon : copier ce dossier sur le poste et double-cliquer sur **Installer.bat**.
 
 L'installateur vérifie les prérequis et dit clairement quoi installer s'il manque quelque chose,
-installe les dépendances, compile, prépare Node 24 (pour la souris) et crée le raccourci **Claudetopia** sur le bureau.
-Pour mettre à jour plus tard : **`/maj`** dans Claudetopia.
+installe les dépendances, compile, prépare Node 24 (pour la souris) et crée le raccourci **Agentopia** sur le bureau.
+Pour mettre à jour plus tard : **`/maj`** dans Agentopia.
 
 Seul **Node.js 18+** est obligatoire (`winget install OpenJS.NodeJS.LTS`). Le reste est conseillé :
 
@@ -44,11 +56,11 @@ et peut être pris directement dans le presse-papiers), clé et serveurs SSH, SF
 
 ## Premier lancement
 
-Claudetopia scanne le poste (projets, doublons, serveurs SSH, outils) et propose les projets à suivre.
+Agentopia scanne les projets, signale les doublons, puis prépare les fournisseurs choisis. Les clés API sont demandées dans une saisie masquée ; Codex propose la connexion dans le navigateur. Le diagnostic de connexion ne génère pas de réponse payante.
 Ensuite :
 
 - **`/diagnostic`** vérifie que tout fonctionne et dit quoi corriger ;
-- **`/config`** (bouton « Config ») : compte Claude, identité Git, jetons GitHub / Azure DevOps / GitLab, thème, nom affiché ;
+- **`/config`** (bouton « Config ») : fournisseurs, agent par défaut, maître, identité Git, connexions et apparence ;
 - **`?`** affiche l'aide et les raccourcis.
 
 ## Équipes d'agents
@@ -69,15 +81,15 @@ mais demandent avant les commandes).
 
 ## Le maître
 
-Sous la liste des sessions, à gauche, **◇ MAÎTRE** est un Claude toujours ouvert qui gère tes sessions à ta place.
+Sous la liste des sessions, à gauche, **◇ MAÎTRE** utilise Codex, Claude, Perplexity ou Claude CLI selon **Config → Agent maître**. En automatique, il privilégie l’agent par défaut disponible.
 Clique sa zone (ou **Alt+M**) puis écris en bas, par exemple :
 « ferme les sessions finies », « où en est mon-projet ? », « lance une session sur mon-api pour écrire les tests »,
 « dis à la session de dev de continuer ».
 
-Il voit l'état à jour (sessions, équipes, projets) et répond par des commandes Claudetopia, exécutées comme si tu les tapais.
+Il voit l'état à jour (sessions, équipes, projets) et répond par des commandes Agentopia, exécutées comme si tu les tapais.
 Avant d'arrêter ou de supprimer une session, il demande **une** confirmation.
-Il démarre en arrière-plan au lancement : il répond ensuite en 2 à 4 secondes.
-Réglages dans `~/.claudetopia.json` : `maitre.modele` (`haiku` par défaut, rapide), `maitre.actif`.
+Il ne lance aucun modèle au démarrage : il attend une demande. Pour une mission collective, il propose un plan avec les agents et les dépendances ; tu peux le lancer, le garder sans démarrer ou l’annuler.
+Réglages dans `~/.claudetopia.json` : `maitre.fournisseur`, `maitre.actif` ; `maitre.modele` concerne le transport Claude CLI.
 
 ## Serveurs SSH et fichiers (SFTP)
 
@@ -85,7 +97,7 @@ Vue **SSH** (bouton en haut) : se connecter, tester l'accès de Claude, **+ Ajou
 (dans `~/.ssh/config`, le reste du fichier est gardé, sauvegarde `config.claudetopia.bak`), **⚿ Installer ma clé**
 (une dernière fois le mot de passe, ensuite connexion sans mot de passe) et **⇅ Fichiers** pour parcourir le serveur.
 
-`/sftp` ouvre aussi des connexions **SFTP** configurées dans Claudetopia (`/sftp-ajouter`), par clé ou par **mot de passe**
+`/sftp` ouvre aussi des connexions **SFTP** configurées dans Agentopia (`/sftp-ajouter`), par clé ou par **mot de passe**
 (chiffré par Windows, seul ton compte peut le relire). Dans la vue Fichiers : ouvrir un fichier dans VS Code, télécharger,
 envoyer, créer un dossier, supprimer. L'empreinte d'un serveur est enregistrée à la 1re connexion : si elle change, la connexion est refusée.
 
@@ -97,7 +109,7 @@ envoyer, créer un dossier, supprimer. L'empreinte d'un serveur est enregistrée
 
 ## Poste modeste (8 Go)
 
-Claudetopia occupe ~110 Mo et ~3 % d'un cœur au repos. Le maître (~250 Mo) s'endort après 30 min sans demande
+Agentopia occupe ~110 Mo et ~3 % d'un cœur au repos. Le maître (~250 Mo) s'endort après 30 min sans demande
 (5 min sous 12 Go de RAM, où il ne démarre d'ailleurs qu'au premier besoin) ; réglable avec `maitre.veille` (minutes, 0 = jamais).
 Si Claude Code n'est pas installé ou pas connecté, la zone du maître le dit : un clic l'installe ou ouvre la connexion.
 
@@ -121,16 +133,16 @@ Si Claude Code n'est pas installé ou pas connecté, la zone du maître le dit :
 | **⎘ Copier** | le dernier bloc de code de Claude (bouton de la conversation, clic droit) |
 | **glisser un fichier** | dans la fenêtre : pièce jointe du message |
 | **`/cout`, `/budget`** | coût du jour en équivalent API (barre du bas), alerte au-delà d'un budget |
-| **`/planifier`** | une session chaque jour à heure fixe (tant que Claudetopia est ouvert) |
+| **`/planifier`** | une session chaque jour à heure fixe (tant que Agentopia est ouvert) |
 | **`/pr-corriger`, `/ci-reparer`** | GitHub : corriger les commentaires d'une PR, réparer un pipeline en échec |
 | **`/surveiller-logs`** | notification à chaque erreur dans les logs d'un conteneur ; analyse par Claude |
 | **`/exporter`, `/importer`** | emporter sa configuration sur un autre poste (sans aucun secret) |
 | **`/mode clair`, `/cartes detaillees`** | terminal à fond blanc, cartes sur 3 lignes |
-| **`/apparence`** | profil Windows Terminal « Claudetopia » : Catppuccin, Tokyo Night, Dracula, Nord ou Gruvbox, police Cascadia Code, transparence acrylique, effet rétro (`/apparence retirer` l'enlève) |
+| **`/apparence`** | profil Windows Terminal « Agentopia » : Catppuccin, Tokyo Night, Dracula, Nord ou Gruvbox, police Cascadia Code, transparence acrylique, effet rétro (`/apparence retirer` l'enlève) |
 | **`/theme`** | couleurs de l'interface, dont les mêmes palettes |
 | **`/notifications-cliquables`** | un clic sur une notification ouvre la session (lien enregistré pour ton compte) |
 
-Au lancement, Claudetopia rouvre la conversation ou la vue où tu en étais.
+Au lancement, Agentopia rouvre la conversation ou la vue où tu en étais.
 Les équipes ont des modèles prêts (audit sécurité, dépendances, tests, mise en prod…) et, avant de fusionner,
 chaque tâche se relit (≠ Voir le diff) et peut être écartée.
 
