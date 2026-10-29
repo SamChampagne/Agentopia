@@ -9,18 +9,14 @@ import { disponibilite } from './providers/config.js';
 import { commencerUsage, sauverUsage } from './utilisation.js';
 import type { Fournisseur, SessionIntegree, ReponsePermission } from './providers/types.js';
 import { prendreVerrou, sousVerrou, processusVivant, demarragePoste } from './verrou.js';
+import { ecrireAtomique } from './stockageAtomique.js';
+export { ecrireAtomique } from './stockageAtomique.js';
 
 export const RACINE_SESSIONS = path.resolve(process.env.CLAUDETOPIA_DATA_DIR || path.join(os.homedir(), '.claudetopia-agents'));
 export const estIntegree = (id: string) => /^ct-[0-9a-f-]{36}$/.test(id);
 export function dossierIntegre(id: string): string {
     if (!estIntegree(id)) throw new Error('Identifiant de session invalide');
     return path.join(RACINE_SESSIONS, id);
-}
-export function ecrireAtomique(fichier: string, valeur: unknown): void {
-    const temporaire = `${fichier}.${randomUUID()}.tmp`;
-    fs.writeFileSync(temporaire, JSON.stringify(valeur), { mode: 0o600 });
-    try { fs.renameSync(temporaire, fichier); }
-    finally { fs.rmSync(temporaire, { force: true }); }
 }
 export function lireIntegree(id: string): SessionIntegree | undefined {
     try { return JSON.parse(fs.readFileSync(path.join(dossierIntegre(id), 'etat.json'), 'utf8')); }

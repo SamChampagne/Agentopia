@@ -12,6 +12,7 @@ const { creerDemandesPermission } = await import('./dist/demandesPermission.js')
 const { presenterPermission } = await import('./dist/presentationPermission.js');
 const { suiteEquipe } = await import('./dist/finEquipe.js');
 const { comparerVersions, choisirRelease, chercherMiseAJour } = await import('./dist/versionsDistribution.js');
+const { remplacerFichier, ecrireAtomique } = await import('./dist/stockageAtomique.js');
 after(() => {
     const rel = path.relative(os.tmpdir(), racine);
     if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) fs.rmSync(racine, { recursive: true, force: true });
@@ -26,6 +27,21 @@ function tempsManuel() {
         } ms = fin; },
     };
 }
+test('écriture Windows : réessayer les refus transitoires sans supprimer le dernier état lisible', () => {
+    const fichier = path.join(racine, 'etat-fixture.json'), temporaire = fichier + '.tmp';
+    ecrireAtomique(fichier, { etat: 'avant' }); fs.writeFileSync(temporaire, '{"etat":"apres"}');
+    let appels = 0; const delais = [];
+    remplacerFichier(temporaire, fichier, { windows: true, patienter: (ms) => delais.push(ms), renommer: (a, b) => {
+        if (++appels <= 3) { assert.equal(JSON.parse(fs.readFileSync(b)).etat, 'avant'); throw Object.assign(new Error('Fichier occupé'), { code: 'EPERM' }); }
+        fs.renameSync(a, b);
+    } });
+    assert.equal(JSON.parse(fs.readFileSync(fichier)).etat, 'apres'); assert.deepEqual(delais, [10, 20, 40]);
+    for (const code of ['EPERM', 'EIO']) {
+        appels = 0;
+        assert.throws(() => remplacerFichier(temporaire, fichier, { windows: true, patienter() {}, renommer() { appels++; throw Object.assign(new Error(code), { code }); } }), new RegExp(code));
+        assert.equal(appels, code === 'EPERM' ? 10 : 1); assert.equal(JSON.parse(fs.readFileSync(fichier)).etat, 'apres');
+    }
+});
 test('limite : des heures de permission ne consomment pas les minutes de travail restantes', () => {
     const temps = tempsManuel(); let expirations = 0;
     const h = new HorlogeTravail(60_000, () => expirations++, temps);

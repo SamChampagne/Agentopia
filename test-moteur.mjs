@@ -19,7 +19,10 @@ const { processusVivant } = await import('./dist/verrou.js');
 const { CHEMINS } = await import('./dist/chemins.js');
 const enfants = [];
 const detaches = [];
-async function attendre(fn) { for (let i = 0; i < 200; i++) { const r = fn(); if (r) return r; await pause(75); } assert.fail(`Délai dépassé : ${JSON.stringify(moteur.etatMoteur())}`); }
+async function attendre(fn) {
+    for (let i = 0; i < 200; i++) { const r = fn(); if (r) return r; await pause(75); }
+    assert.fail(`Délai dépassé : ${JSON.stringify({ moteur: moteur.etatMoteur(), enfants: enfants.map((p) => ({ pid: p.pid, code: p.exitCode, signal: p.signalCode, erreurs: p.erreurs() })) })}`);
+}
 const liste = () => JSON.parse(fs.readFileSync(CHEMINS.equipes, 'utf8'));
 const lancements = () => fs.existsSync(path.join(racine, 'lancements.jsonl')) ? fs.readFileSync(path.join(racine, 'lancements.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
 async function ouvrir(mode) {
@@ -52,8 +55,8 @@ test('moteur indépendant : propriétaire unique, reprise après crash, dépenda
         { titre: 'Relecture', fournisseur: 'perplexity', consigne: 'Relecture', dependances: ['t2'] },
     ]);
     const premier = await ouvrir(); await attendre(() => moteur.etatMoteur().pid === premier.pid && moteur.etatMoteur().actif);
-    const concurrent = await ouvrir(); await attendre(() => concurrent.exitCode !== null);
-    assert.equal(concurrent.exitCode, 0, concurrent.erreurs()); assert.equal(moteur.etatMoteur().pid, premier.pid);
+    const concurrent = await ouvrir(); await attendre(() => concurrent.exitCode !== null || concurrent.signalCode !== null);
+    assert.equal(concurrent.exitCode, 0, `${concurrent.signalCode || ''} ${concurrent.erreurs()}`); assert.equal(moteur.etatMoteur().pid, premier.pid);
     const modification = { attendu: equipes.empreintePlan(equipe), objectif: 'Plan ajusté avant lancement', taches: equipe.taches };
     assert.equal(await equipes.modifierPlan(equipe.id, modification), undefined);
     assert.equal(liste().find((e) => e.id === equipe.id).objectif, modification.objectif);

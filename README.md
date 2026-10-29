@@ -18,7 +18,7 @@ Lancer **Agentopia.bat** (ou le raccourci **Agentopia**). L’ancien lanceur `Cl
 
 ## Installation Windows
 
-Télécharger **[Agentopia-Setup.exe depuis la bêta 1.4](https://github.com/SamChampagne/ClaudeTopia/releases/tag/agentopia-1.4.0-beta.1)**. Le paquet contient Node 24, Bun et les dépendances de l’interface. Un double-clic installe dans le profil utilisateur, vérifie l’interface et ouvre la préparation guidée. Aucun terminal de compilation n’est nécessaire.
+Télécharger **[Agentopia-Setup.exe depuis la bêta 1.4](https://github.com/SamChampagne/ClaudeTopia/releases/tag/agentopia-1.4.0-beta.2)**. Le paquet contient Node 24, Bun et les dépendances de l’interface. Un double-clic installe dans le profil utilisateur, vérifie l’interface et ouvre la préparation guidée. Aucun terminal de compilation n’est nécessaire.
 
 Au premier lancement, choisis les projets et les agents à utiliser. Agentopia détecte les outils présents, propose les installations nécessaires et guide la connexion. Une interruption conserve les choix déjà faits. Le même parcours reste accessible avec **Config → Préparer le poste** ou `/scan`.
 
