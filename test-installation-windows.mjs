@@ -75,7 +75,7 @@ try {
     const manifesteMaj = { ...JSON.parse(fs.readFileSync(path.join(version, 'distribution.json'), 'utf8')), id: nouveauId, version: nouvelleVersion };
     const fichierManifesteMaj = path.join(temporaire, 'manifeste-maj.json'); fs.writeFileSync(fichierManifesteMaj, JSON.stringify(manifesteMaj));
     const ps = (s) => `'${s.replaceAll("'", "''")}'`;
-    const modifierZip = `Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[IO.Compression.ZipFile]::Open(${ps(zipMaj)},[IO.Compression.ZipArchiveMode]::Update); try { $z.GetEntry('distribution.json').Delete(); $s=New-Object IO.StreamWriter($z.CreateEntry('distribution.json').Open()); try { $s.Write([IO.File]::ReadAllText(${ps(fichierManifesteMaj)})) } finally { $s.Dispose() } } finally { $z.Dispose() }`;
+    const modifierZip = `$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem; $z=[IO.Compression.ZipFile]::Open(${ps(zipMaj)},[IO.Compression.ZipArchiveMode]::Update); try { $z.GetEntry('distribution.json').Delete(); $s=New-Object IO.StreamWriter($z.CreateEntry('distribution.json').Open()); try { $s.Write([IO.File]::ReadAllText(${ps(fichierManifesteMaj)})) } finally { $s.Dispose() } } finally { $z.Dispose() }`;
     lancer('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(modifierZip, 'utf16le').toString('base64')]);
     const { maintenirDistribution } = await import('./dist/distribution.js');
     const { bus } = await import('./dist/ui/bus.js');
