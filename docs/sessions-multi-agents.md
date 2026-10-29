@@ -116,3 +116,15 @@ La suite `test:ci` comprend aussi un moteur et des workers dans des processus s�
 Références : [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview), [Codex app-server](https://learn.chatgpt.com/docs/app-server), [Perplexity Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart).
 
 Diagnostics de connexion : [catalogue Claude](https://platform.claude.com/docs/en/api/models/list), [catalogue Perplexity dans son SDK officiel](https://github.com/perplexityai/perplexity-node/blob/main/api.md).
+
+## Récupération après interruption (1.3.1)
+
+Un worker disparu passe en erreur ; **Reprendre** conserve sa conversation, sa branche et ses fichiers. Un verrou abandonné avant l’apparition du worker est récupéré après deux minutes au prochain scan ou envoi. Un worker encore vivant garde l’exclusivité, même pendant le nettoyage final. La détection tient compte du redémarrage du PC pour les nouveaux workers.
+
+La fin tardive d’une demande d’autorisation, après une interruption ou une limite de durée, ne remet plus le tour en « travaille ». Les événements tardifs du fournisseur sont ignorés dès que le tour est terminé.
+
+Les équipes sont vérifiées à la lecture et sauvegardées avant chaque écriture dans `claudetopia-equipes.json.sauvegarde`, à côté de leur fichier habituel (préfixé d’un point dans le profil utilisateur). Cette copie représente la version précédente ; elle peut donc être antérieure aux dernières actions. Un fichier invalide n’est jamais remplacé par une liste vide.
+
+**Équipes → Récupérer les équipes**, ou `/equipes-recuperer`, présente la date et le nombre d’équipes de la sauvegarde. Restaurer met le moteur en pause et demande l’interruption des sessions intégrées ; l’ancien fichier est conservé sous un nom `.recup-…json`. Les conversations et worktrees ne sont pas supprimés. Vérifier leurs résultats avant de reprendre le moteur ou les tâches. Les anciens agents Claude CLI externes ne sont pas arrêtés par cette récupération.
+
+Sans sauvegarde valide, aucune restauration n’est proposée : le fichier original reste intact. Après restauration d’une copie personnelle, **Réessayer la lecture** recharge les données sans redémarrer l’interface.

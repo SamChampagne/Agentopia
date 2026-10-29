@@ -40,6 +40,8 @@ La version 1.3 ajoute l’édition des plans avant lancement, la reprise des int
 
 ## Vérifier sans toucher au profil réel
 
+La version 1.3.1 ajoute la récupération après plantage et les sauvegardes des équipes. Les régressions couvrent un worker réellement arrêté de force, le démarrage concurrent d’un même tour, un fichier d’équipes invalide et la restauration depuis le moteur et l’interface. Les fournisseurs de ces tests restent simulés.
+
 ```powershell
 node test-installation-windows.mjs releases/<identifiant>
 ```

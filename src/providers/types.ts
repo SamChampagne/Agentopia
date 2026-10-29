@@ -15,7 +15,7 @@ export interface ReponsePermission { accepte: boolean; reponses?: Record<string,
 export interface Utilisation { entree?: number; sortie?: number; cache?: number; coutUSD?: number }
 export interface SessionIntegree {
     id: string; fournisseur: Fournisseur; cwd: string; titre: string; modele?: string;
-    creee: number; maj: number; tour: string; pid?: number; threadId?: string;
+    creee: number; maj: number; tour: string; pid?: number; demarragePoste?: number; threadId?: string;
     etat: 'attend' | 'travaille' | 'bloquee' | 'erreur' | 'arretee';
     issue?: 'success' | 'error' | 'cancelled'; resultat?: string; erreur?: string;
     permission?: PermissionAgent; archivee?: boolean;

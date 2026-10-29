@@ -9,7 +9,7 @@ import { ecrireAtomique } from './sessionsIntegrees.js';
 import { processusVivant } from './verrou.js';
 
 export const DOSSIER_MOTEUR = CHEMINS.moteur;
-export const VERSION_MOTEUR = '1.3.0';
+export const VERSION_MOTEUR = '1.3.1';
 export const localAuMoteur = () => process.env.AGENTOPIA_MOTEUR === '1' || process.env.AGENTOPIA_SANS_MOTEUR === '1';
 export const moteurEnPause = () => fs.existsSync(path.join(DOSSIER_MOTEUR, 'pause.json'));
 export function etatMoteur(): { actif: boolean; pause: boolean; pid?: number; erreur?: string; date?: number; version?: string } {
@@ -47,7 +47,7 @@ export async function assurerMoteur(accepterAncien = false): Promise<void> {
     })().finally(() => { demarrage = undefined; });
     return demarrage;
 }
-export type ActionMoteur = 'lancer' | 'arreter' | 'integrer' | 'relancer' | 'reprendre' | 'ecarter' | 'retirer' | 'ranger' | 'tout-arreter' | 'planification' | 'modifier-plan';
+export type ActionMoteur = 'lancer' | 'arreter' | 'integrer' | 'relancer' | 'reprendre' | 'ecarter' | 'retirer' | 'ranger' | 'tout-arreter' | 'planification' | 'modifier-plan' | 'recuperer-equipes';
 export async function commanderMoteur<T>(action: ActionMoteur, id?: string, tache?: string, donnees?: unknown): Promise<T> {
     await assurerMoteur(['tout-arreter', 'arreter', 'ranger'].includes(action));
     const cle = `${Date.now()}-${randomUUID()}`, dossier = path.join(DOSSIER_MOTEUR, 'commandes');

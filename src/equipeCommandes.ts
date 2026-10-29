@@ -1,5 +1,6 @@
 import type { Commande } from './commandes.js';
-import { equipeDe, lancerEquipe, lireEquipes, reprendreTache, rechargerEquipes, peutModifierPlan } from './equipe.js';
+import { equipeDe, lancerEquipe, lireEquipes, reprendreTache, rechargerEquipes, peutModifierPlan, recupererEquipes } from './equipe.js';
+import { sauvegardeEquipes } from './stockageEquipes.js';
 import { editerPlan } from './editionEquipe.js';
 import { choisir, saisir, bus, confirmer } from './ui/bus.js';
 import { guiderConnexion } from './providers/assistantConnexion.js';
@@ -20,6 +21,26 @@ async function lancer(id: string) {
 }
 export function commandesEquipes(): Commande[] {
     return [
+        { nom: 'equipes-recuperer', groupe: 'Agents', description: 'Récupérer les équipes depuis leur sauvegarde sans effacer le fichier abîmé', executer: async () => {
+            try { rechargerEquipes(); bus.emit('notice', 'Le fichier des équipes est lisible · aucune restauration nécessaire'); ensuite('/equipe'); return; }
+            catch { /* Présenter les choix de récupération. */ }
+            let sauvegarde: ReturnType<typeof sauvegardeEquipes> | undefined, detail = '';
+            try {
+                sauvegarde = sauvegardeEquipes();
+                detail = `Sauvegarde du ${new Date(sauvegarde.date).toLocaleString()} · ${sauvegarde.equipes.length} équipe(s). Le fichier abîmé sera conservé à côté de l’original. Le moteur sera mis en pause et les sessions intégrées seront interrompues. Vérifie les conversations avant de reprendre les équipes.`;
+            } catch (e) { detail = (e as Error).message; }
+            const action = await choisir('Récupération des équipes', [
+                { label: 'Réessayer la lecture', valeur: 'relire' },
+                ...(sauvegarde ? [{ label: 'Restaurer la sauvegarde et mettre en pause', valeur: 'restaurer' }] : []),
+                { label: 'Retour', valeur: 'retour' },
+            ], false, detail);
+            if (action === 'relire') rechargerEquipes();
+            if (action === 'restaurer' && sauvegarde) {
+                const copie = await recupererEquipes(sauvegarde.empreinte);
+                bus.emit('notice', `Équipes restaurées · moteur en pause. Vérifie les tâches avant de reprendre.${copie ? ` Original conservé : ${copie}` : ''}`);
+            }
+            ensuite('/equipe');
+        } },
         { nom: 'equipe-lancer', args: '<équipe>', groupe: 'Agents', cache: true, description: 'Vérifier les connexions et lancer le plan', executer: ({ args }) => lancer(args[0]) },
         { nom: 'equipe-bilan', args: '<équipe>', groupe: 'Agents', description: 'Résultats, blocages, vérifications et utilisation d’une équipe', executer: async ({ args }) => {
             if (!args[0] && !lireEquipes().length) { bus.emit('notice', 'Aucune équipe · Équipes → Nouvelle équipe pour créer ton premier plan'); return; }

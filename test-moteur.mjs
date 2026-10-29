@@ -26,7 +26,7 @@ async function ouvrir(mode) {
     enfants.push(p); let erreurs = ''; p.stderr.on('data', (d) => erreurs += d); p.stdout.resume();
     p.erreurs = () => erreurs; await once(p, 'spawn'); return p;
 }
-async function tuer(p) { if (p.exitCode === null && p.signalCode === null) { const fin = once(p, 'exit'); p.kill('SIGKILL'); await fin; } }
+async function tuer(p) { if (p.exitCode === null && p.signalCode === null) { const fin = once(p, 'close'); p.kill('SIGKILL'); await fin; } }
 after(async () => {
     for (const p of enfants) await tuer(p);
     for (const pid of detaches) { try { process.kill(pid, 'SIGKILL'); } catch {} }
@@ -90,9 +90,30 @@ test('moteur indépendant : propriétaire unique, reprise après crash, dépenda
     await tuer(troisieme);
 });
 
+test('fichier abîmé : moteur disponible pour arrêter et récupérer, aucun rejeu automatique', { timeout: 30_000 }, async () => {
+    const { sauvegardeEquipes } = await import('./dist/stockageEquipes.js');
+    const sauvegarde = sauvegardeEquipes(), avant = lancements().length;
+    const abime = '{"interruption'; fs.writeFileSync(CHEMINS.equipes, abime);
+    const p = await ouvrir();
+    try {
+        await attendre(() => moteur.etatMoteur().pid === p.pid && moteur.etatMoteur().erreur);
+        await assert.rejects(moteur.commanderMoteur('lancer', sauvegarde.equipes[0].id), /illisible ou invalide/);
+        await moteur.pauseGlobale();
+        const copie = await equipes.recupererEquipes(sauvegarde.empreinte);
+        assert.equal(fs.readFileSync(copie, 'utf8'), abime);
+        assert.deepEqual(liste(), sauvegarde.equipes);
+        assert.equal(moteur.moteurEnPause(), true);
+        await attendre(() => !moteur.etatMoteur().erreur);
+        await pause(250); assert.equal(lancements().length, avant);
+    } finally { await tuer(p); }
+});
+
 test('mise à niveau : préserver le moteur occupé, remplacer automatiquement le moteur ancien au repos', { timeout: 30_000 }, async () => {
     const ancien = await ouvrir('ancien');
-    await attendre(() => moteur.etatMoteur().pid === ancien.pid && moteur.etatMoteur().actif);
+    await attendre(() => {
+        if (ancien.exitCode !== null) assert.fail(`Le moteur fixture s’est fermé : ${ancien.erreurs()}`);
+        return moteur.etatMoteur().pid === ancien.pid && moteur.etatMoteur().actif;
+    });
     fs.writeFileSync(CHEMINS.equipes, JSON.stringify([{ id: 'fixture-occupee', etat: 'en cours' }]));
     await assert.rejects(moteur.assurerMoteur(), /encore au travail/);
     assert.equal(moteur.etatMoteur().pid, ancien.pid); assert.equal(ancien.exitCode, null);

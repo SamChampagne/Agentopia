@@ -41,6 +41,20 @@ try {
     assert.equal(modele.nom, 'Modèle à préserver');
     const fichierModele = path.join(donnees, 'claudetopia-modeles-equipes', `${modele.id}.json`);
     const modeleAvant = fs.readFileSync(fichierModele, 'utf8');
+    console.log('Sauvegarde et récupération des équipes avec le runtime embarqué…');
+    const scriptRecuperation = `import fs from 'node:fs'; import assert from 'node:assert/strict';
+        process.env.AGENTOPIA_SANS_MOTEUR='1';
+        const s=await import(${JSON.stringify(pathToFileURL(path.join(version, 'dist', 'stockageEquipes.js')).href)});
+        const q=await import(${JSON.stringify(pathToFileURL(path.join(version, 'dist', 'equipe.js')).href)});
+        const {CHEMINS}=await import(${JSON.stringify(pathToFileURL(path.join(version, 'dist', 'chemins.js')).href)});
+        s.ecrireStockageEquipes([{id:'preserver',projet:process.cwd(),nomProjet:'Fixture',objectif:'Données à préserver',etat:'plan',creee:Date.now(),taches:[]}]);
+        fs.writeFileSync(CHEMINS.equipes,'fichier abîmé fixture');
+        assert.throws(()=>q.rechargerEquipes());
+        const copie=await q.recupererEquipes(s.sauvegardeEquipes().empreinte);
+        assert.equal(q.lireEquipes()[0].id,'preserver'); assert.equal(fs.readFileSync(copie,'utf8'),'fichier abîmé fixture');
+        console.log(JSON.stringify([CHEMINS.equipes,s.SAUVEGARDE_EQUIPES,copie]));`;
+    const fichiersEquipes = JSON.parse(lancer(path.join(version, 'runtime', 'node.exe'), ['--input-type=module', '-e', scriptRecuperation]));
+    const equipesAvant = fichiersEquipes.map((f) => fs.readFileSync(f, 'utf8'));
     console.log('Moteur embarqué : survit à son lanceur et reste unique entre deux ouvertures…');
     const scriptMoteur = `const m = await import(${JSON.stringify(pathToFileURL(path.join(version, 'dist', 'moteurClient.js')).href)}); await m.assurerMoteur(); console.log(JSON.stringify(m.etatMoteur()));`;
     const demarrerMoteur = () => JSON.parse(lancer(path.join(version, 'runtime', 'node.exe'), ['--input-type=module', '-e', scriptMoteur], {
@@ -68,6 +82,7 @@ try {
     assert.equal(activation().active, initiale);
     assert.equal(fs.readFileSync(temoin, 'utf8'), '{"message":"à conserver"}');
     assert.equal(fs.readFileSync(fichierModele, 'utf8'), modeleAvant);
+    assert.deepEqual(fichiersEquipes.map((f) => fs.readFileSync(f, 'utf8')), equipesAvant);
     console.log('✓ Setup, runtimes inclus, interface, moteur détaché unique, réparation, retour arrière, contrôle d’intégrité et données préservées');
 } finally {
     if (moteurPid) { try { process.kill(moteurPid, 'SIGKILL'); } catch {} }

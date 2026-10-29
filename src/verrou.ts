@@ -3,10 +3,11 @@ import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { uptime } from 'node:os';
 
-const demarragePoste = () => Date.now() - uptime() * 1000;
+export const demarragePoste = () => Date.now() - uptime() * 1000;
 
-export function processusVivant(pid: number): boolean {
+export function processusVivant(pid: number, demarrage?: number): boolean {
     if (!Number.isInteger(pid) || pid <= 0) return false;
+    if (demarrage && Math.abs(demarrage - demarragePoste()) >= 10_000) return false;
     try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code !== 'ESRCH'; }
 }
 // mkdir est atomique entre fenêtres. Un processus vivant conserve toujours son verrou.
@@ -16,7 +17,7 @@ export function prendreVerrou(dossier: string): (() => void) | undefined {
     const perime = () => {
         try {
             const p = JSON.parse(fs.readFileSync(proprietaire, 'utf8'));
-            return !processusVivant(p.pid) || (!!p.demarragePoste && Math.abs(p.demarragePoste - demarragePoste()) >= 10_000);
+            return !processusVivant(p.pid, p.demarragePoste);
         } catch {
             try { return Date.now() - fs.statSync(dossier).birthtimeMs >= 30_000; } catch { return false; }
         }

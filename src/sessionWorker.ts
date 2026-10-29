@@ -3,8 +3,8 @@ import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as pause } from 'node:timers/promises';
-import { ajouterMessage, dossierIntegre, lireIntegree, sauverIntegree } from './sessionsIntegrees.js';
-import type { ContexteAgent, PermissionAgent, ReponsePermission } from './providers/types.js';
+import { ajouterMessage, dossierIntegre, sauverIntegree, prendreExecution, terminerExecution } from './sessionsIntegrees.js';
+import type { ContexteAgent, PermissionAgent, ReponsePermission, SessionIntegree } from './providers/types.js';
 import { executerClaude } from './providers/claude.js';
 import { executerCodex } from './providers/codex.js';
 import { executerPerplexity } from './providers/perplexity.js';
@@ -13,13 +13,19 @@ import { sauverUsage, normaliserUsage } from './utilisation.js';
 import { spawnSync } from 'node:child_process';
 
 export async function travailler(id: string, tour: string, executer?: (c: ContexteAgent) => Promise<string>): Promise<void> {
-    const s = lireIntegree(id);
-    if (!s || s.tour !== tour || s.etat !== 'travaille') return;
+    const execution = prendreExecution(id, tour);
+    if (!execution) return;
+    try { await executerTour(execution.session, executer); }
+    finally { execution.liberer(); }
+}
+async function executerTour(s: SessionIntegree, executer?: (c: ContexteAgent) => Promise<string>): Promise<void> {
+    const { id, tour } = s;
     const dossier = dossierIntegre(id), fichier = (nom: string) => path.join(dossier, nom);
     const controller = new AbortController();
+    let termine = false;
     s.pid = process.pid;
     s.bilan = { commandes: [] };
-    const sauver = () => sauverIntegree(s);
+    const sauver = () => { if (!termine) sauverIntegree(s); };
     sauver();
     let filePermission = Promise.resolve();
     const demander = async (p: Omit<PermissionAgent, 'id'>): Promise<ReponsePermission> => {
@@ -41,7 +47,12 @@ export async function travailler(id: string, tour: string, executer?: (c: Contex
                 await pause(250, undefined, { signal: controller.signal });
             }
             throw new Error('Tour interrompu');
-        } finally { s.permission = undefined; s.etat = 'travaille'; sauver(); liberer(); }
+        } finally {
+            // Le transport peut terminer avant que sa promesse de permission se ferme.
+            // Une réponse tardive ne doit jamais ressusciter le tour ni écraser le suivant.
+            if (!termine) { s.permission = undefined; s.etat = 'travaille'; sauver(); }
+            liberer();
+        }
     };
     const pouls = setInterval(() => {
         try {
@@ -69,12 +80,13 @@ export async function travailler(id: string, tour: string, executer?: (c: Contex
         ajouterMessage(id, 'user', r.prompt);
         const contexte: ContexteAgent = { session: s, prompt: r.prompt, historique: historique.slice(-20), signal: controller.signal,
             evenement: (e) => {
+                if (termine) return;
                 ajouterMessage(id, e.role, e.texte, e.fichier);
                 if (e.commande) s.bilan!.commandes.push({ commande: e.commande.slice(0, 1000), codeSortie: e.codeSortie });
                 if (s.bilan!.commandes.length > 50) s.bilan!.commandes.shift();
             }, permission: demander,
-            utilisation: (usage) => { s.utilisation = normaliserUsage(usage); if (s.recuUsage) sauverUsage(s.recuUsage, s.utilisation); },
-            thread: (threadId) => { s.threadId = threadId; sauver(); },
+            utilisation: (usage) => { if (termine) return; s.utilisation = normaliserUsage(usage); if (s.recuUsage) sauverUsage(s.recuUsage, s.utilisation); },
+            thread: (threadId) => { if (termine) return; s.threadId = threadId; sauver(); },
         };
         const adaptateur = executer || ({ claude: executerClaude, codex: executerCodex, perplexity: executerPerplexity }[s.fournisseur]);
         s.resultat = await adaptateur(contexte);
@@ -90,20 +102,16 @@ export async function travailler(id: string, tour: string, executer?: (c: Contex
         s.erreur = s.erreur.replace(/(?:sk-|pplx-)[\w-]+/g, '[clé masquée]').slice(0, 3000);
         ajouterMessage(id, 'assistant', `⚠ ${s.erreur}`);
     } finally {
+        termine = true; controller.abort();
         clearInterval(pouls); clearTimeout(limite);
         process.off('SIGTERM', arreter); process.off('SIGINT', arreter);
-        s.permission = undefined; s.pid = undefined;
+        s.permission = undefined; s.pid = undefined; s.demarragePoste = undefined;
         if (s.fournisseur !== 'perplexity') {
             const r = spawnSync('git', ['status', '--short'], { cwd: s.cwd, windowsHide: true, encoding: 'utf8', timeout: 5000 });
             if (r.status === 0) s.bilan!.fichiers = r.stdout.trim() || 'Dossier propre (les changements peuvent déjà être commités).';
         }
-        try {
-            try { if (s.recuUsage) sauverUsage(s.recuUsage, s.utilisation ?? {}, s.issue ?? 'error'); }
-            finally { sauver(); }
-        } finally {
-            fs.rmSync(fichier('requete.json'), { force: true });
-            fs.rmSync(fichier('verrou'), { force: true });
-        }
+        try { if (s.recuUsage) sauverUsage(s.recuUsage, s.utilisation ?? {}, s.issue ?? 'error'); }
+        finally { terminerExecution(s); }
     }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

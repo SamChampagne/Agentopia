@@ -26,6 +26,7 @@ export async function executerMoteur(options: { envoyer?: typeof envoyerIntegree
         lancer: equipes.lancerEquipe, arreter: equipes.arreterEquipe,
         integrer: (id) => equipes.integrer(id, options.envoyer ?? envoyerIntegree), relancer: equipes.relancerTache,
         'modifier-plan': (id, _tache, donnees) => equipes.modifierPlan(id, donnees),
+        'recuperer-equipes': (_id, _tache, donnees) => equipes.recupererEquipes(donnees?.empreinte),
         reprendre: (id, tache) => equipes.reprendreTache(id, tache, options.envoyer ?? envoyerIntegree),
         ecarter: equipes.basculerEcart, retirer: equipes.retirerTache, ranger: equipes.terminerEquipe,
         planification: (id) => {
@@ -34,9 +35,9 @@ export async function executerMoteur(options: { envoyer?: typeof envoyerIntegree
             return lancerPlanification(p);
         },
         'tout-arreter': async () => {
-            for (const e of equipes.lireEquipes()) if (['en cours', 'integration'].includes(e.etat)) await equipes.arreterEquipe(e.id);
             for (const s of listerIntegrees()) interrompreIntegree(s.id);
             if (!options.envoyer) for (const s of await listerAgents()) if (!s.integree && s.arrierePlan && s.id) await arreterArrierePlan(s.id);
+            if (!equipes.erreurStockageEquipes()) for (const e of equipes.lireEquipes()) if (['en cours', 'integration'].includes(e.etat)) await equipes.arreterEquipe(e.id);
         },
     };
     try {
@@ -47,7 +48,7 @@ export async function executerMoteur(options: { envoyer?: typeof envoyerIntegree
         }
         while (!arrete && !options.signal?.aborted) {
             try {
-                equipes.rechargerEquipes();
+                try { equipes.rechargerEquipes(); } catch { /* La file doit rester disponible pour récupérer ou arrêter. */ }
                 for (const f of fs.readdirSync(commandes).filter((n) => n.endsWith('.json')).sort()) {
                     const fichier = path.join(commandes, f), enCours = fichier.replace(/\.json$/, '.en-cours');
                     fs.renameSync(fichier, enCours);
@@ -55,6 +56,7 @@ export async function executerMoteur(options: { envoyer?: typeof envoyerIntegree
                     try {
                         const c = JSON.parse(fs.readFileSync(enCours, 'utf8'));
                         if (!Object.hasOwn(actions, c.action)) throw new Error('Commande moteur inconnue');
+                        if (equipes.erreurStockageEquipes() && !['recuperer-equipes', 'tout-arreter'].includes(c.action)) throw new Error(equipes.erreurStockageEquipes());
                         if (Date.now() - c.creee > 120_000) throw new Error('Demande expirée ; relance-la depuis l’équipe');
                         if (moteurEnPause() && ['lancer', 'integrer', 'relancer', 'reprendre', 'planification'].includes(c.action)) throw new Error('Tout est en pause · Reprendre le moteur avant de lancer une tâche');
                         resultat = await actions[c.action as ActionMoteur](c.id, c.tache, c.donnees);
@@ -62,6 +64,7 @@ export async function executerMoteur(options: { envoyer?: typeof envoyerIntegree
                     ecrireAtomique(fichier.replace(/\.json$/, '.reponse'), { resultat, erreur: echec });
                     fs.rmSync(enCours, { force: true });
                 }
+                if (equipes.erreurStockageEquipes()) throw new Error(equipes.erreurStockageEquipes());
                 if (!moteurEnPause()) {
                     listerIntegrees(); // détecter les workers disparus avant de suivre leur tâche
                     const natives = equipes.lireEquipes().some((e) => !e.mixte && ['en cours', 'integration'].includes(e.etat)) ? await listerAgents() : [];

@@ -17,6 +17,8 @@ import { RACINE_SESSIONS, creerIntegree, envoyerIntegree, lireIntegree, ecrireAt
 import { commanderMoteur, localAuMoteur, moteurEnPause } from './moteurClient.js';
 import { sousVerrou } from './verrou.js';
 import { validerDefinitions, type DefinitionTache } from './modelesEquipes.js';
+import { lireStockageEquipes, ecrireStockageEquipes, restaurerStockageEquipes, sauvegardeEquipes } from './stockageEquipes.js';
+import { listerIntegrees, interrompreIntegree } from './sessionsIntegrees.js';
 
 // Équipe d'agents sur un projet :
 //   1. un chef d'équipe (claude -p, lecture seule) découpe l'objectif en tâches, chacune avec un rôle métier
@@ -99,31 +101,41 @@ export interface Equipe {
 }
 
 export const equipes = new EventEmitter();
-let liste: Equipe[] = charger();
+let erreurLecture: string | undefined;
+let liste: Equipe[] = [];
+try { liste = charger(); } catch { /* L'interface doit permettre la récupération dès le démarrage. */ }
 let empreintes = new Map(liste.map((e) => [e.id, JSON.stringify(e)]));
-export function rechargerEquipes(): void { liste = charger(); empreintes = new Map(liste.map((e) => [e.id, JSON.stringify(e)])); }
+export const erreurStockageEquipes = () => erreurLecture;
+export function rechargerEquipes(): void {
+    try { liste = charger(); empreintes = new Map(liste.map((e) => [e.id, JSON.stringify(e)])); }
+    finally { equipes.emit('maj'); }
+}
 
 function charger(): Equipe[] {
     try {
-        return JSON.parse(fs.readFileSync(CHEMINS.equipes, 'utf-8'));
-    } catch {
-        return [];
+        const lues = lireStockageEquipes(); erreurLecture = undefined; return lues;
+    } catch (e) {
+        erreurLecture = (e as Error).message; throw e;
     }
 }
 
 let ecrit = '';
 function sauver(): void {
-    sousVerrou(`${CHEMINS.equipes}.verrou`, () => {
+    try { sousVerrou(`${CHEMINS.equipes}.verrou`, () => {
         // L'interface peut créer un plan pendant que le moteur suit une autre équipe.
         // Écrire seulement nos équipes modifiées conserve celles ajoutées ailleurs.
         const disque = new Map(charger().map((e) => [e.id, e]));
         for (const e of liste) if (JSON.stringify(e) !== empreintes.get(e.id)) disque.set(e.id, e);
         const locales = new Map(liste.map((e) => [e.id, e]));
-        liste = [...disque.values()].map((e) => JSON.stringify(e) === JSON.stringify(locales.get(e.id)) ? locales.get(e.id)! : e);
-        ecrit = JSON.stringify(liste, null, 2);
-        ecrireAtomique(CHEMINS.equipes, liste);
+        const fusion = [...disque.values()].map((e) => JSON.stringify(e) === JSON.stringify(locales.get(e.id)) ? locales.get(e.id)! : e);
+        ecrireStockageEquipes(fusion);
+        liste = fusion; ecrit = JSON.stringify(liste);
         empreintes = new Map(liste.map((e) => [e.id, JSON.stringify(e)]));
-    });
+    }); } catch (e) {
+        // Une commande échouée ne doit pas réapparaître lors de la prochaine sauvegarde.
+        liste = [...empreintes.values()].map((v) => JSON.parse(v));
+        equipes.emit('maj'); throw e;
+    }
     equipes.emit('maj');
 }
 
@@ -132,25 +144,39 @@ let surveillance: fs.FSWatcher | undefined;
 export function suivreFichierEquipes(): void {
     if (surveillance) return;
     try {
-        if (!fs.existsSync(CHEMINS.equipes)) fs.writeFileSync(CHEMINS.equipes, '[]', 'utf-8');
         surveillance = fs.watch(path.dirname(CHEMINS.equipes), (_event, nom) => {
             if (nom && String(nom) !== path.basename(CHEMINS.equipes)) return;
             let contenu = '';
             try {
                 contenu = fs.readFileSync(CHEMINS.equipes, 'utf-8');
-                if (contenu === ecrit) return;
-                liste = JSON.parse(contenu);
-                empreintes = new Map(liste.map((e) => [e.id, JSON.stringify(e)]));
+                if (contenu === ecrit && !erreurLecture) return;
+                rechargerEquipes();
                 ecrit = contenu;
-                equipes.emit('maj');
             } catch {
-                // écriture en cours : le prochain événement relira
+                try { rechargerEquipes(); } catch { /* Garde le dernier état lisible et affiche l'erreur. */ }
             }
         });
         surveillance.on('error', () => undefined);
+        surveillance.unref();
     } catch {
         // pas de surveillance : chaque fenêtre garde son état
     }
+}
+
+export async function recupererEquipes(empreinte: string): Promise<string | undefined> {
+    if (!localAuMoteur()) return commanderMoteur('recuperer-equipes', undefined, undefined, { empreinte });
+    return sousVerrou(`${CHEMINS.equipes}.verrou`, () => {
+        let lisible = false;
+        try { charger(); lisible = true; } catch { /* Une réparation reste nécessaire. */ }
+        if (lisible) throw new Error('Le fichier des équipes est de nouveau lisible. Aucune restauration effectuée.');
+        if (sauvegardeEquipes().empreinte !== empreinte) throw new Error('La sauvegarde a changé. Consulte-la de nouveau avant de restaurer.');
+        // Une sauvegarde peut être antérieure à une tâche déjà exécutée : aucune reprise automatique.
+        fs.mkdirSync(CHEMINS.moteur, { recursive: true });
+        ecrireAtomique(path.join(CHEMINS.moteur, 'pause.json'), { date: Date.now() });
+        for (const s of listerIntegrees(true)) interrompreIntegree(s.id);
+        const copie = restaurerStockageEquipes(empreinte);
+        rechargerEquipes(); return copie;
+    });
 }
 
 export const lireEquipes = (): Equipe[] => liste.filter((e) => !e.archivee);

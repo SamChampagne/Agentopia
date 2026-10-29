@@ -39,7 +39,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
         const e = lignes[i];
         if (e) return ouvrir(e.id);
         fermer();
-        bus.emit('lancer', '/equipe nouvelle');
+        bus.emit('lancer', d.erreurEquipes ? '/equipes-recuperer' : '/equipe nouvelle');
     };
     useClicsVue((_, y) => {
         const i = y - 4;
@@ -55,7 +55,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
         <Box flexDirection="column" width={largeur} height={hauteur} paddingLeft={1}>
             <Titre texte="ÉQUIPES D'AGENTS" droite="clic = ouvrir · Échap fermer" />
             <Box height={2} flexShrink={0}>
-                <Text color="gray" wrap="wrap">Choisis un parcours ou un modèle, puis les agents réalisent les tâches selon leurs dépendances. Chaque agent de code a sa branche. Tu relis le résultat avant l’intégration.</Text>
+                <Text color={d.erreurEquipes ? '#facc15' : 'gray'} wrap="wrap">{d.erreurEquipes || 'Choisis un parcours ou un modèle, puis les agents réalisent les tâches selon leurs dépendances. Chaque agent de code a sa branche. Tu relis le résultat avant l’intégration.'}</Text>
             </Box>
             <Separateur largeur={largeur - 2} />
             {lignes.slice(0, hauteur - 4).map((e, i) => {
@@ -72,7 +72,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
                                     <Text color={etat!.couleur}>{ajuste(etat!.texte, 24)}</Text>
                                     <Text color="gray">{ajuste(`${avancement(e).faites}/${avancement(e).total}`, 6)}{e.objectif}</Text>
                                 </>
-                            ) : <Text color={theme.accent} bold>+ Nouvelle équipe sur un projet…</Text>}
+                            ) : <Text color={theme.accent} bold>{d.erreurEquipes ? '↻ Récupérer les équipes…' : '+ Nouvelle équipe sur un projet…'}</Text>}
                         </Text>
                     </Box>
                 );

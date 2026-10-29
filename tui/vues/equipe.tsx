@@ -25,7 +25,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
         const e = lignes[i];
         if (e) return ouvrir(e.id);
         fermer();
-        bus.emit('lancer', '/equipe nouvelle');
+        bus.emit('lancer', d.erreurEquipes ? '/equipes-recuperer' : '/equipe nouvelle');
     };
     useKeyboard((k) => {
         if (k.name === 'escape' || k.sequence === 'q') return fermer();
@@ -36,8 +36,8 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
     return (
         <box flexGrow={1} flexDirection="column" paddingLeft={1}>
             <Titre texte="ÉQUIPES D'AGENTS" droite="clic = ouvrir · Échap fermer" />
-            <text fg="gray" wrapMode="word">Choisis un parcours ou un modèle. Le moteur poursuit les tâches même après fermeture de la fenêtre, tant que le PC reste allumé. L’intégration se lance après ta revue.</text>
-            <text fg={theme.accent} onMouseDown={() => { fermer(); bus.emit('lancer', '/equipe nouvelle'); }}>+ Parcours guidé ou modèle réutilisable · commande /equipe nouvelle</text>
+            <text fg={d.erreurEquipes ? '#facc15' : 'gray'} wrapMode="word">{d.erreurEquipes || 'Choisis un parcours ou un modèle. Le moteur poursuit les tâches même après fermeture de la fenêtre, tant que le PC reste allumé. L’intégration se lance après ta revue.'}</text>
+            <text fg={theme.accent} onMouseDown={() => choisir(0)}>{d.erreurEquipes ? '↻ Récupérer les équipes · commande /equipes-recuperer' : '+ Parcours guidé ou modèle réutilisable · commande /equipe nouvelle'}</text>
             <text> </text>
             <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {lignes.map((e: any, i) => {
@@ -54,7 +54,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
                                     <span attributes={actif ? GRAS : 0}>{colonne(e.nomProjet, 18)}</span>
                                     <span fg={etat!.couleur}>{colonne(etat!.texte, 24)}</span>
                                     <span fg="gray">{colonne(`${av!.faites}/${av!.total}`, 6)}{e.objectif}</span>
-                                </> : <span fg={theme.accent} attributes={GRAS}>+ Nouvelle équipe sur un projet…</span>}
+                                </> : <span fg={theme.accent} attributes={GRAS}>{d.erreurEquipes ? '↻ Récupérer les équipes…' : '+ Nouvelle équipe sur un projet…'}</span>}
                             </text>
                         </box>
                     );

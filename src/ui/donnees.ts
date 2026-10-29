@@ -13,7 +13,7 @@ import { bus } from './bus.js';
 import { mettreAJourCout, dollars } from '../cout.js';
 import { fichiersChauds } from '../modifications.js';
 import { assurerMoteur, moteurEnPause } from '../moteurClient.js';
-import { Equipe, equipes, lireEquipes, agentsDesEquipes, suivreFichierEquipes } from '../equipe.js';
+import { Equipe, equipes, lireEquipes, agentsDesEquipes, suivreFichierEquipes, erreurStockageEquipes } from '../equipe.js';
 import {
     Serveur, UsageProjet, ConnexionActive, Acces, inventaire, usageParServeur, joignable, connexionsActives, lireAcces,
 } from '../ssh.js';
@@ -33,12 +33,14 @@ export interface Donnees {
     activites: Map<string, Activite>;       // ce qui se passe dans chacune (fin du transcript)
     docker: Hote[];                         // local d'abord, puis les serveurs surveillés
     equipes: Equipe[];                      // équipes d'agents (une carte chacune)
+    erreurEquipes?: string;
     cout: { total: number; jetons: number; parSession: Record<string, number> };   // équivalent API du jour ($)
 }
 
 const donnees: Donnees = {
     cout: { total: 0, jetons: 0, parSession: {} },
     equipes: lireEquipes(),
+    erreurEquipes: erreurStockageEquipes(),
     agents: [],
     activites: new Map(),
     docker: [],
@@ -232,6 +234,7 @@ export function demarrerCollecte(): void {
     suivreFichierEquipes();
     equipes.on('maj', () => {
         donnees.equipes = lireEquipes();
+        donnees.erreurEquipes = erreurStockageEquipes();
         publier();
     });
     // Les « il y a 3 min » avancent même quand rien d'autre ne bouge
