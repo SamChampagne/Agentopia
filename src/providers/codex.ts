@@ -95,7 +95,7 @@ export async function executerCodex(c: ContexteAgent, transport?: ChildProcessWi
     });
     try {
         if (c.signal.aborted) throw new Error('Tour interrompu');
-        await requete('initialize', { clientInfo: { name: 'agentopia', title: 'Agentopia', version: '1.4.0-beta.2' }, capabilities: { experimentalApi: true } });
+        await requete('initialize', { clientInfo: { name: 'agentopia', title: 'Agentopia', version: '1.4.0-beta.3' }, capabilities: { experimentalApi: true } });
         envoyer({ method: 'initialized' });
         const params = { cwd: c.session.cwd, model: c.session.modele,
             approvalPolicy: c.conseil || c.session.lectureSeule ? 'never' : 'on-request', sandbox: c.conseil || c.session.lectureSeule ? 'read-only' : 'workspace-write', approvalsReviewer: 'user',

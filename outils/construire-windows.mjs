@@ -15,7 +15,10 @@ if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Con
 const node = process.env.AGENTOPIA_BUILD_NODE || process.execPath;
 const nodeVersion = executer(node, ['--version']);
 if (Number(nodeVersion.slice(1).split('.')[0]) < 24) throw new Error('Node 24 ou supérieur est requis pour le paquet Windows. Définis AGENTOPIA_BUILD_NODE vers ce binaire.');
-const bun = executer('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '(Get-Command bun.exe).Source']);
+// npm installe un lanceur bun.cmd ; une installation native expose bun.exe.
+// Demander son propre chemin au runtime couvre les deux installations.
+const bun = process.env.AGENTOPIA_BUILD_BUN || executer('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "$ErrorActionPreference='Stop'; & bun -p process.execPath; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"]);
+if (!bun || !fs.existsSync(bun)) throw new Error('Binaire Bun introuvable. Installe Bun ou définis AGENTOPIA_BUILD_BUN.');
 const bunVersion = executer(bun, ['--version']);
 executer('npm', ['run', 'build']);
 executer(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tui', '--noEmit']);
