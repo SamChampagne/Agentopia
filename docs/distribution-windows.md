@@ -34,6 +34,8 @@ Résultats dans `releases/<identifiant>/` : `Agentopia-Setup.exe`, `Agentopia-Wi
 
 Le tag local `agentopia-1.0.0-baseline` conserve le point de départ avant le moteur indépendant et les missions de la version 1.1. La validation CI est définie dans `.github/workflows/validation.yml` ; elle s’exécutera sur GitHub après envoi de la branche. Le paquet embarque le moteur et ses workers dans `dist/`. Aucun service système n’est installé et aucune tâche planifiée n’est créée par l’installeur.
 
+La version 1.2 ajoute les équipes guidées, les modèles réutilisables, le bilan commun et la reprise dans la même branche. Fermer les anciennes fenêtres puis relancer Agentopia après installation. Le moteur précédent est remplacé au repos ; s’il travaille encore, laisser finir ou utiliser la pause globale avant de reprendre le moteur depuis Config. Les modèles restent dans le profil utilisateur lors d’une réparation ou d’un retour de version.
+
 ## Vérifier sans toucher au profil réel
 
 ```powershell

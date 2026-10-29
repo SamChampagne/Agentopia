@@ -64,7 +64,7 @@ export function commandesMissions(config?: Config): Commande[] {
         } },
         { nom: 'moteur', groupe: 'Config', description: 'État et commandes du moteur en arrière-plan', executer: async () => {
             const e = etatMoteur();
-            const action = await choisir(`Moteur : ${e.pause ? 'en pause' : e.actif ? 'actif' : 'arrêté'}${e.erreur ? ` · ${e.erreur}` : ''}`, [
+            const action = await choisir(`Moteur : ${e.pause ? 'en pause' : e.actif ? 'actif' : 'arrêté'}${e.version ? ` · ${e.version}` : ''}${e.erreur ? ` · ${e.erreur}` : ''}`, [
                 { label: e.pause ? 'Reprendre le moteur' : 'Démarrer / vérifier le moteur', valeur: 'reprendre' },
                 { label: 'Tout mettre en pause', valeur: 'pause' }, { label: 'Retour', valeur: 'retour' },
             ], false, 'Les équipes continuent quand tu fermes la fenêtre. Après un redémarrage du PC, ouvrir Agentopia redémarre le moteur. Les permissions attendent toujours ta réponse.');

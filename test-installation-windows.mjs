@@ -33,12 +33,21 @@ try {
     assert.match(sortie, /moteurs, dépendances et interface vérifiés/);
     assert.match(lancer(path.join(version, 'runtime', 'node.exe'), ['--version']), /^v(?:2[4-9]|[3-9]\d)\./);
     assert.ok(lancer(path.join(version, 'runtime', 'bun.exe'), ['--version']).trim());
+    console.log('Modèle créé et relu avec le runtime embarqué…');
+    const scriptModele = `const m = await import(${JSON.stringify(pathToFileURL(path.join(version, 'dist', 'modelesEquipes.js')).href)});
+        const e = { mixte:true, taches:[{id:'t1',titre:'Vérifier',fournisseur:'codex',consigne:'Relire le diff',dependances:[]}] };
+        const modele=m.enregistrerModeleEquipe(e,'Modèle à préserver'); console.log(JSON.stringify(m.lireModelesEquipes().find(x=>x.id===modele.id)));`;
+    const modele = JSON.parse(lancer(path.join(version, 'runtime', 'node.exe'), ['--input-type=module', '-e', scriptModele]));
+    assert.equal(modele.nom, 'Modèle à préserver');
+    const fichierModele = path.join(donnees, 'claudetopia-modeles-equipes', `${modele.id}.json`);
+    const modeleAvant = fs.readFileSync(fichierModele, 'utf8');
     console.log('Moteur embarqué : survit à son lanceur et reste unique entre deux ouvertures…');
     const scriptMoteur = `const m = await import(${JSON.stringify(pathToFileURL(path.join(version, 'dist', 'moteurClient.js')).href)}); await m.assurerMoteur(); console.log(JSON.stringify(m.etatMoteur()));`;
     const demarrerMoteur = () => JSON.parse(lancer(path.join(version, 'runtime', 'node.exe'), ['--input-type=module', '-e', scriptMoteur], {
         env: { ...env, CLAUDETOPIA_TEST_UI: '0', AGENTOPIA_SANS_MOTEUR: '', AGENTOPIA_MOTEUR: '', PATH: `${path.join(version, 'runtime')};${env.PATH}` },
     }));
     const premierMoteur = demarrerMoteur(); moteurPid = premierMoteur.pid;
+    assert.equal(premierMoteur.version, JSON.parse(fs.readFileSync(path.join(version, 'package.json'), 'utf8')).version);
     assert.equal(premierMoteur.actif, true); assert.ok(moteurPid);
     assert.equal(demarrerMoteur().pid, moteurPid);
     process.kill(moteurPid, 'SIGKILL'); moteurPid = undefined;
@@ -58,6 +67,7 @@ try {
     await assert.rejects(installerArchive(archive, '0'.repeat(64), { destination, raccourci: false }), /incomplet ou modifié/);
     assert.equal(activation().active, initiale);
     assert.equal(fs.readFileSync(temoin, 'utf8'), '{"message":"à conserver"}');
+    assert.equal(fs.readFileSync(fichierModele, 'utf8'), modeleAvant);
     console.log('✓ Setup, runtimes inclus, interface, moteur détaché unique, réparation, retour arrière, contrôle d’intégrité et données préservées');
 } finally {
     if (moteurPid) { try { process.kill(moteurPid, 'SIGKILL'); } catch {} }

@@ -36,8 +36,8 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
     return (
         <box flexGrow={1} flexDirection="column" paddingLeft={1}>
             <Titre texte="ÉQUIPES D'AGENTS" droite="clic = ouvrir · Échap fermer" />
-            <text fg="gray" wrapMode="word">Les agents travaillent sur leurs branches et partagent leurs résultats selon les dépendances. Garde Agentopia ouvert pour lancer les tâches suivantes. L’intégration se lance après revue.</text>
-            <text fg={theme.accent} onMouseDown={() => { fermer(); bus.emit('lancer', '/equipe-mixte'); }}>+ Équipe Claude / Codex / Perplexity · commande /equipe-mixte</text>
+            <text fg="gray" wrapMode="word">Choisis un parcours ou un modèle. Le moteur poursuit les tâches même après fermeture de la fenêtre, tant que le PC reste allumé. L’intégration se lance après ta revue.</text>
+            <text fg={theme.accent} onMouseDown={() => { fermer(); bus.emit('lancer', '/equipe nouvelle'); }}>+ Parcours guidé ou modèle réutilisable · commande /equipe nouvelle</text>
             <text> </text>
             <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {lignes.map((e: any, i) => {
@@ -87,6 +87,11 @@ function CorpsEquipe({ e, fermer, retour }: { e: any; fermer: () => void; retour
         setMessage('');
         if (action !== aConfirmer) setAConfirmer(undefined);
         if (action === 'fermer') return quitter();
+        if (action === 'actions-equipe' || (action === 'lancer' && e.mixte)) {
+            fermer();
+            const commande = action === 'actions-equipe' || e.taches.some((t: any) => ['erreur', 'arretee'].includes(t.etat)) ? 'equipe-actions' : 'equipe-lancer';
+            return void bus.emit('lancer', `/${commande} ${e.id}`);
+        }
         if (action === 'agent') return ouvrirSession(courante?.agentId);
         if (action === 'integrateur') return ouvrirSession(e.integrateur?.agentId);
         if (action === 'diff' && courante) {
@@ -114,13 +119,13 @@ function CorpsEquipe({ e, fermer, retour }: { e: any; fermer: () => void; retour
         if (action === 'arreter') {
             setMessage('Arrêt des agents…');
             await arreterEquipe(e.id);
-            return setMessage('Agents arrêtés · « Relancer » reprend les tâches non finies');
+            return setMessage(e.mixte ? 'Agents arrêtés · Débloquer → Reprendre conserve le travail en cours' : 'Agents arrêtés · Relancer redémarre les tâches non finies');
         }
         if (action === 'integrer') {
             const modifs = modifsLocales(e);
-            if (modifs && aConfirmer !== 'integrer') {
+            if (modifs) {
                 setAConfirmer('integrer');
-                return setMessage(`! ${e.nomProjet} a ${modifs} fichier(s) modifié(s) non commité(s) : la fusion peut les gêner · reclique pour intégrer quand même`);
+                return setMessage(`! ${e.nomProjet} a ${modifs} fichier(s) non commité(s) : commite-les ou range-les avant d’intégrer`);
             }
             setAConfirmer(undefined);
             setMessage('Démarrage de l\'intégrateur…');
@@ -143,6 +148,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: any; fermer: () => void; retour
         if (k.name === 'down') setChoix(taches[Math.min(taches.length - 1, index + 1)]?.id);
         if (k.name === 'return') ouvrirSession(courante?.agentId);
         if (k.sequence === 'l' && (e.etat === 'plan' || e.etat === 'erreur')) void agir('lancer');
+        if (k.sequence === 'a') void agir('actions-equipe');
     });
 
     const etat = etatEquipe(e, t0);

@@ -17,17 +17,19 @@ const equipes = await import('./dist/equipe.js');
 const sessions = await import('./dist/sessionsIntegrees.js');
 const { CHEMINS } = await import('./dist/chemins.js');
 const enfants = [];
+const detaches = [];
 async function attendre(fn) { for (let i = 0; i < 200; i++) { const r = fn(); if (r) return r; await pause(75); } assert.fail(`Délai dépassé : ${JSON.stringify(moteur.etatMoteur())}`); }
 const liste = () => JSON.parse(fs.readFileSync(CHEMINS.equipes, 'utf8'));
 const lancements = () => fs.existsSync(path.join(racine, 'lancements.jsonl')) ? fs.readFileSync(path.join(racine, 'lancements.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
-async function ouvrir() {
-    const p = spawn(process.execPath, ['fixtures/moteur.mjs'], { env: process.env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+async function ouvrir(mode) {
+    const p = spawn(process.execPath, ['fixtures/moteur.mjs', ...(mode ? [mode] : [])], { env: process.env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     enfants.push(p); let erreurs = ''; p.stderr.on('data', (d) => erreurs += d); p.stdout.resume();
     p.erreurs = () => erreurs; await once(p, 'spawn'); return p;
 }
 async function tuer(p) { if (p.exitCode === null && p.signalCode === null) { const fin = once(p, 'exit'); p.kill('SIGKILL'); await fin; } }
 after(async () => {
     for (const p of enfants) await tuer(p);
+    for (const pid of detaches) { try { process.kill(pid, 'SIGKILL'); } catch {} }
     for (const s of sessions.listerIntegrees()) if (s.pid) { try { process.kill(s.pid, 'SIGKILL'); } catch {} }
     await pause(200);
     const rel = path.relative(os.tmpdir(), racine);
@@ -72,4 +74,29 @@ test('moteur indépendant : propriétaire unique, reprise après crash, dépenda
     assert.equal(lancements().length, 4);
     await moteur.reprendreMoteur(); assert.equal(moteur.moteurEnPause(), false);
     await pause(300); assert.equal(lancements().length, 4, 'La reprise du moteur ne relance pas les équipes arrêtées');
+    const idReprise = lancements()[3].id;
+    assert.equal(await moteur.commanderMoteur('reprendre', autre.id, 't1'), undefined);
+    await attendre(() => lancements().length === 5);
+    assert.equal(lancements()[4].id, idReprise, 'La reprise conserve la conversation');
+    assert.match(await moteur.commanderMoteur('reprendre', autre.id, 't1'), /arrêtée ou en erreur/);
+    fs.writeFileSync(path.join(racine, `${idReprise}.liberer`), '');
+    await attendre(() => liste().find((e) => e.id === autre.id)?.etat === 'prete');
+    assert.equal(lancements().length, 5);
+    await tuer(troisieme);
+});
+
+test('mise à niveau : préserver le moteur occupé, remplacer automatiquement le moteur ancien au repos', { timeout: 30_000 }, async () => {
+    const ancien = await ouvrir('ancien');
+    await attendre(() => moteur.etatMoteur().pid === ancien.pid && moteur.etatMoteur().actif);
+    fs.writeFileSync(CHEMINS.equipes, JSON.stringify([{ id: 'fixture-occupee', etat: 'en cours' }]));
+    await assert.rejects(moteur.assurerMoteur(), /encore au travail/);
+    assert.equal(moteur.etatMoteur().pid, ancien.pid); assert.equal(ancien.exitCode, null);
+    fs.writeFileSync(CHEMINS.equipes, '[]');
+    const commande = path.join(moteur.DOSSIER_MOTEUR, 'commandes', 'fixture-en-attente.json');
+    fs.writeFileSync(commande, '{}');
+    await assert.rejects(moteur.assurerMoteur(), /encore au travail/); fs.rmSync(commande);
+    await moteur.assurerMoteur();
+    const actuel = moteur.etatMoteur(); detaches.push(actuel.pid);
+    assert.equal(actuel.version, moteur.VERSION_MOTEUR); assert.equal(actuel.actif, true); assert.notEqual(actuel.pid, ancien.pid);
+    await moteur.assurerMoteur(); assert.equal(moteur.etatMoteur().pid, actuel.pid);
 });

@@ -118,6 +118,7 @@ export function lignesConfig({ config, git, jetons, raccourci }: EtatConfig, cla
         { type: 'reglage', label: 'Prénom', valeur: config.prenom || '(non défini)', commande: '/prenom', aide: 'modifier' },
         { type: 'reglage', label: 'Colonne de gauche', valeur: config.largeurLaterale ? `${config.largeurLaterale} colonnes` : 'automatique', commande: '/largeur', aide: 'changer (ou glisse la ligne)' },
         { type: 'section', texte: 'AGENTS ET SESSIONS' },
+        { type: 'reglage', label: 'Modèles d’équipe', valeur: 'réutiliser les missions, agents et dépendances', commande: '/modeles-equipes', aide: 'voir et gérer' },
         { type: 'reglage', label: 'Moteur des équipes', valeur: 'continuer le travail en arrière-plan · pause globale', commande: '/moteur', aide: 'voir et contrôler' },
         { type: 'reglage', label: 'Utilisation des agents', valeur: 'tours, jetons et coûts disponibles du jour', commande: '/utilisation', aide: 'voir le détail' },
         { type: 'reglage', label: 'Limites des agents', valeur: `${config.limitesAgents?.toursJour || 'illimité'} tours/jour · ${config.limitesAgents?.dureeMinutes ?? 60} min/tour`, commande: '/limites-agents', aide: 'régler' },

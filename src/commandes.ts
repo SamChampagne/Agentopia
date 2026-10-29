@@ -1,6 +1,7 @@
 import { commandesAssistant } from './assistantCommandes.js';
 import { commandesSessions } from './sessionsCommandes.js';
 import { commandesMissions } from './missions.js';
+import { commandesEquipes } from './equipeCommandes.js';
 import { estIntegree } from './sessionsIntegrees.js';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -271,9 +272,8 @@ async function menu(projetChoisi?: Projet): Promise<void> {
     const projet = projetChoisi ?? await demanderProjet('Projet');
     const action = await choisir(projet.nom, [
         { label: '✻ Nouvelle conversation', valeur: 'session' },
-        { label: '◆ Équipe avec plusieurs fournisseurs', valeur: 'equipe-mixte' },
         { label: '▭ Claude dans un onglet', valeur: 'onglet' },
-        { label: '◆ Équipe Claude CLI (plan automatique)', valeur: 'equipe-projet' },
+        { label: '◆ Équipe guidée ou modèle réutilisable', valeur: 'equipe-projet' },
         { label: '★ Claude avec un prompt favori', valeur: 'favori' },
         { label: '↺ Historique des agents intégrés', valeur: 'historique-agents' },
         { label: '↺ Reprendre une session Claude CLI', valeur: 'sessions' },
@@ -462,7 +462,23 @@ export const COMMANDES: Commande[] = [
     },
     {
         nom: 'equipe', alias: ['equipes', 'orchestre'], args: '[projet|nouvelle] [-- objectif]', groupe: 'Agents',
-        description: 'Voir les équipes ; création avec Claude CLI (équipe mixte : /equipe-mixte)',
+        description: 'Voir les équipes ou créer un plan guidé avec les fournisseurs choisis',
+        executer: async ({ args }) => {
+            const { VueEquipe } = await import('./ui/VueEquipe.js');
+            const { equipeDe } = await import('./equipe.js');
+            const React = await import('react');
+            if (!args.length || equipeDe(args[0])) return afficherVue((fermer) => React.createElement(VueEquipe, { fermer, id: args[0] }));
+            const separation = args.indexOf('--');
+            const avant = separation >= 0 ? args.slice(0, separation) : args;
+            const objectif = separation >= 0 ? developperPrompts(args.slice(separation + 1).join(' ')) : '';
+            const cle = avant[0] === 'nouvelle' ? avant[1] : avant[0];
+            const projet = cle ? resoudreProjet(cle) : await demanderProjet('Équipe sur quel projet ?');
+            if (projet) await COMMANDES.find((c) => c.nom === 'equipe-mixte')!.executer({ args: [], reste: objectif, apresProjet: objectif, projet });
+        },
+    },
+    {
+        nom: 'equipe-cli', args: '[projet|nouvelle] [-- objectif]', groupe: 'Claude',
+        description: 'Ancien parcours : plan automatique et équipe Claude CLI',
         executer: async ({ args }) => {
             const { VueEquipe } = await import('./ui/VueEquipe.js');
             const { creerEquipe, equipeDe } = await import('./equipe.js');
@@ -960,6 +976,7 @@ export const COMMANDES: Commande[] = [
     ...commandesConnexions(),
     ...commandesSessions(config),
     ...commandesMissions(config),
+    ...commandesEquipes(),
     ...commandesPlus(config),
     ...commandesPrCi(),
     ...commandesTicket(getProjets),

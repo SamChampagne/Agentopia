@@ -17,7 +17,7 @@ async function vue<P extends object>(module: Promise<Record<string, unknown>>, n
 
 const ACTIONS_PROJET: [string, string][] = [
     ['✦ Mission guidée', '/mission'], ['✻ Nouvelle conversation', '/session'], ['✓ Commit avec un agent', '/commit'], ['⌕ Revue du diff', '/revue'], ['⇣ Pull', '/pull'],
-    ['◧ VS Code', '/code'], ['❯ Terminal', '/terminal defaut'], ['◆ Équipe mixte', '/equipe-mixte'], ['◆ Équipe Claude CLI', '/equipe nouvelle'], ['▤ Explorateur', '/ouvrir'], ['≡ Toutes les actions', '/actions'],
+    ['◧ VS Code', '/code'], ['❯ Terminal', '/terminal defaut'], ['◆ Équipe guidée', '/equipe nouvelle'], ['▤ Explorateur', '/ouvrir'], ['≡ Toutes les actions', '/actions'],
 ];
 
 async function palette(): Promise<void> {

@@ -9,9 +9,9 @@ import type { Fournisseur, Utilisation } from './providers/types.js';
 
 export interface RecuUsage extends Utilisation { id: string; session: string; fournisseur: Fournisseur; date: number; etat: 'en cours' | 'success' | 'error' | 'cancelled' }
 const jour = (date: number) => new Date(date).toLocaleDateString('en-CA');
-export function lireUsage(date = Date.now()): RecuUsage[] {
+export function lireUsage(date: number | null = Date.now()): RecuUsage[] {
     try { return fs.readdirSync(CHEMINS.utilisation).filter((f) => f.endsWith('.json')).flatMap((f) => {
-        try { const r = JSON.parse(fs.readFileSync(path.join(CHEMINS.utilisation, f), 'utf8')); return jour(r.date) === jour(date) ? [r] : []; } catch { return []; }
+        try { const r = JSON.parse(fs.readFileSync(path.join(CHEMINS.utilisation, f), 'utf8')); return date === null || jour(r.date) === jour(date) ? [r] : []; } catch { return []; }
     }); } catch { return []; }
 }
 export function commencerUsage(session: string, fournisseur: Fournisseur): string {

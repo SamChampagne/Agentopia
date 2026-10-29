@@ -1,13 +1,13 @@
 import type { Commande, Contexte } from './commandes.js';
 import { sauverConfig, type Config } from './config.js';
-import { bus, choisir, choisirPlusieurs, saisir } from './ui/bus.js';
+import { bus, choisir, saisir } from './ui/bus.js';
 import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
 import { disponibilite } from './providers/config.js';
 import { guiderConnexion } from './providers/assistantConnexion.js';
 import { creerIntegree, envoyerIntegree, lireIntegree, listerIntegrees, restaurerIntegree, repondrePermission, interrompreIntegree } from './sessionsIntegrees.js';
 
 export async function choisirFournisseur(message = 'Avec quel agent ?', codeSeulement = false): Promise<Fournisseur> {
-    return choisir(message, (Object.keys(FOURNISSEURS) as Fournisseur[]).filter((f) => !codeSeulement || f !== 'perplexity').map((f) => ({
+    return choisir(message, (Object.keys(FOURNISSEURS) as Fournisseur[]).filter((f) => !codeSeulement || FOURNISSEURS[f].code).map((f) => ({
         label: FOURNISSEURS[f].nom, valeur: f, description: `${FOURNISSEURS[f].capacite} · ${disponibilite(f).texte}`,
     })), false);
 }
@@ -74,37 +74,10 @@ export function commandesSessions(config: Config): Commande[] {
                 bus.emit('selectionner', r.id);
             }
         } },
-        { nom: 'equipe-mixte', projet: true, args: '[projet]', groupe: 'Agents', description: 'Équipe Claude, Codex et Perplexity avec dépendances et worktrees', executer: async ({ projet }) => {
-            const objectif = (await saisir(`Objectif de l’équipe sur ${projet!.nom}`)).trim();
-            if (!objectif) return;
-            const format = await choisir('Composition de l’équipe', [
-                { label: 'Recherche → développement → revue', valeur: 'trio', description: 'Perplexity recherche, un agent code, un autre vérifie et corrige.' },
-                { label: 'Définir les tâches et les dépendances', valeur: 'libre', description: 'De 1 à 8 tâches. Les tâches indépendantes peuvent tourner en parallèle.' },
-            ], false);
-            const definitions: { titre: string; fournisseur: Fournisseur; consigne: string; dependances: string[] }[] = [];
-            if (format === 'trio') {
-                const developpeur = await choisirFournisseur('Qui développe ?', true);
-                const relecteur = await choisirFournisseur('Qui vérifie et corrige ?', true);
-                definitions.push(
-                    { titre: 'Recherche et sources', fournisseur: 'perplexity', consigne: 'Recherche les éléments techniques actuels utiles à cet objectif. Cite les sources primaires et explicite les hypothèses.', dependances: [] },
-                    { titre: 'Développement', fournisseur: developpeur, consigne: 'Réalise l’objectif dans le projet en t’appuyant sur les recherches lorsque pertinentes. Vérifie le comportement et ajoute les tests utiles.', dependances: ['t1'] },
-                    { titre: 'Revue et vérification', fournisseur: relecteur, consigne: 'Relis le travail de développement. Exécute les vérifications du projet, corrige les problèmes démontrés et rapporte les limites restantes.', dependances: ['t1', 't2'] },
-                );
-            } else {
-                do {
-                    const n = definitions.length + 1;
-                    const fournisseur = await choisirFournisseur(`Agent de la tâche t${n}`);
-                    const titre = (await saisir(`Titre de t${n}`)).trim();
-                    const consigne = (await saisir('Mission précise et critères de réussite')).trim();
-                    if (!titre || !consigne) throw new Error('Chaque tâche demande un titre et une mission');
-                    const dependances = definitions.length ? await choisirPlusieurs('Attend quelles tâches ? (aucune = parallèle)', definitions.map((d, i) => ({
-                        label: `t${i + 1} · ${d.titre}`, valeur: `t${i + 1}`,
-                    }))) : [];
-                    definitions.push({ titre, fournisseur, consigne, dependances });
-                } while (definitions.length < 8 && await choisir('Plan', [{ label: 'Terminer le plan', valeur: false }, { label: 'Ajouter une tâche', valeur: true }], false));
-            }
-            const { creerEquipeMixte } = await import('./equipe.js');
-            const e = creerEquipeMixte(projet!, objectif, definitions);
+        { nom: 'equipe-mixte', projet: true, args: '[projet] [objectif]', groupe: 'Agents', description: 'Créer une équipe guidée ou réutiliser un modèle', executer: async ({ projet, apresProjet }) => {
+            const { preparerEquipeGuidee } = await import('./equipesGuidees.js');
+            const e = await preparerEquipeGuidee(projet!, apresProjet);
+            if (!e) return;
             console.log(`Équipe ${e.id} créée. Vérifie le plan dans /equipe ${e.id}, puis clique Lancer. Les appels utilisent tes comptes et clés API.`);
             setTimeout(() => bus.emit('lancer', `/equipe ${e.id}`), 100);
         } },

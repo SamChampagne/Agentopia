@@ -1,8 +1,8 @@
 export type Fournisseur = 'claude' | 'codex' | 'perplexity';
-export const FOURNISSEURS: Record<Fournisseur, { nom: string; capacite: string }> = {
-    claude: { nom: 'Claude', capacite: 'Code, fichiers et commandes · clé API Anthropic' },
-    codex: { nom: 'Codex', capacite: 'Code, fichiers et commandes · connexion du CLI Codex' },
-    perplexity: { nom: 'Perplexity', capacite: 'Recherche web avec sources · clé API Perplexity' },
+export const FOURNISSEURS: Record<Fournisseur, { nom: string; capacite: string; code: boolean }> = {
+    claude: { nom: 'Claude', capacite: 'Code, fichiers et commandes · clé API Anthropic', code: true },
+    codex: { nom: 'Codex', capacite: 'Code, fichiers et commandes · connexion du CLI Codex', code: true },
+    perplexity: { nom: 'Perplexity', capacite: 'Recherche web avec sources · clé API Perplexity', code: false },
 };
 export function nomAgentDefaut(f?: Fournisseur | 'choisir'): string {
     return f && f !== 'choisir' && Object.hasOwn(FOURNISSEURS, f) ? FOURNISSEURS[f].nom : 'Choisir à chaque fois';

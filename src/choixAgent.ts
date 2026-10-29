@@ -6,7 +6,7 @@ import { guiderConnexion } from './providers/assistantConnexion.js';
 import { conseiller } from './conseiller.js';
 
 export async function choisirAgent(code = false, prefere = chargerConfig().fournisseurDefaut): Promise<Fournisseur> {
-    const candidats = (Object.keys(FOURNISSEURS) as Fournisseur[]).filter((f) => !code || f !== 'perplexity');
+    const candidats = (Object.keys(FOURNISSEURS) as Fournisseur[]).filter((f) => !code || FOURNISSEURS[f].code);
     const prets = candidats.filter((f) => disponibilite(f).pret);
     const f = prefere && prefere !== 'choisir' && candidats.includes(prefere) ? prefere
         : prets.length === 1 ? prets[0] : await choisir(code ? 'Quel agent travaille dans le projet ?' : 'Quel agent utiliser ?', candidats.map((f) => ({

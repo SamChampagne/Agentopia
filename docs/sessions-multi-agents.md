@@ -42,18 +42,30 @@ Après une erreur ou un arrêt, **Reprendre** renvoie la dernière demande avec 
 
 ## Équipes
 
-`/equipe-mixte` propose deux formats :
+**Équipes → Nouvelle équipe**, `/equipe nouvelle` et `/equipe-mixte` ouvrent le même parcours guidé :
 
-1. Recherche Perplexity → développement Claude/Codex → revue Claude/Codex.
-2. Un plan de 1 à 8 tâches avec fournisseur, mission et dépendances choisis. Les tâches indépendantes se lancent en parallèle, selon la limite d’agents de la configuration.
+1. Développement → revue et vérification.
+2. Reproduction d’un bug → correction → vérification (deux sessions).
+3. Recherche Perplexity → développement → revue.
+4. Un modèle enregistré ou un plan de 1 à 8 tâches composé à la main.
+
+L’agent de code par défaut est proposé, sinon le seul agent disponible est choisi automatiquement. Un autre fournisseur de code disponible fait la revue ; si un seul est disponible, deux conversations distinctes du même fournisseur sont utilisées. **Changer les agents** permet de corriger ce choix. Les connexions nécessaires sont affichées dans l’aperçu et vérifiées au lancement. Les tâches indépendantes se lancent en parallèle, selon la limite de la configuration. L’ancien planificateur Claude CLI reste accessible avec `/equipe-cli`.
 
 Le plan est enregistré avant tout appel. Ouvrir l’équipe, vérifier les missions, puis cliquer **Lancer**. Un dépôt Git avec un commit et un checkout propre est requis. Chaque tâche de code reçoit son propre worktree, basé sur les commits du dépôt. Les fichiers non suivis, variables d’environnement stockées dans des fichiers et modifications non commitées ne sont pas copiés.
+
+**Actions (a) → Enregistrer ce plan comme modèle** conserve les missions, fournisseurs et dépendances. Le modèle est proposé à la création d’une autre équipe, qui demande un nouvel objectif. Il ne contient pas les anciens résultats, sessions, branches ou dossiers de travail. Le texte des missions est repris tel quel : vérifier les références propres au projet avant de créer le plan. **Config → Modèles d’équipe** (`/modeles-equipes`) permet de consulter ou retirer un modèle sans toucher aux équipes existantes.
+
+Après une erreur ou un arrêt, **Débloquer (a) → Reprendre** poursuit la tâche dans la même conversation, branche et dossier, avec les fichiers partiels conservés. Il faut attendre l’arrêt effectif de l’agent et terminer les dépendances. La reprise est refusée si une tâche dépendante a déjà démarré, pour ne pas invalider son travail. **Recommencer dans de nouvelles branches** est une action distincte avec confirmation ; les anciennes tentatives sont conservées. Une tâche sans session récupérable utilise ce second parcours.
+
+**Actions → Voir le bilan** (`/equipe-bilan`) rassemble résultats, blocages, dépendances attendues, branches et commandes observées au dernier tour de chaque session. Le coût couvre tous les jours des sessions actuellement rattachées à l’équipe ; les anciennes tentatives dans d’autres sessions sont exclues et les montants absents restent inconnus. Le bilan est copiable. Il distingue les résumés des agents des preuves d’exécution disponibles.
 
 Les résultats et sources des dépendances sont transmis au prochain agent ; leurs branches sont fusionnées dans son worktree avant son lancement. Un conflit Git bloque la tâche. Une tâche n’est marquée terminée qu’après un succès explicite du fournisseur, un résumé non vide et, pour le code, un worktree propre. Cela ne constitue pas une preuve que les tests métier sont suffisants : lire les résultats et les diffs avant intégration.
 
 Un moteur détaché unique par dossier de données lance les tâches suivantes, même après fermeture des fenêtres. Il retrouve les workers en cours après son redémarrage. Les réservations empêchent de rejouer une même tentative ; un lancement interrompu ou ambigu demande une vérification/reprise explicite. La création d’un plan Claude CLI reste liée à la fenêtre jusqu’à l’enregistrement du plan. **Intégrer** lance un agent dans le checkout principal après vérification qu’il est propre. Il fusionne les branches retenues et exécute les vérifications demandées. Aucun push automatique.
 
-**Config → Moteur des équipes** (`/moteur`) affiche son état. `/tout-arreter` enregistre une pause persistante et demande l’interruption des équipes, des agents intégrés et des sessions natives en arrière-plan ; les onglets CLI interactifs restent indépendants. La pause bloque également les nouveaux tours intégrés et conseils. Reprendre le moteur ne relance pas les équipes arrêtées : utiliser **Lancer** sur leur carte. Les permissions attendent toujours une réponse explicite. Les changements déjà effectués sont conservés.
+**Config → Moteur des équipes** (`/moteur`) affiche son état et sa version. `/tout-arreter` enregistre une pause persistante et demande l’interruption des équipes, des agents intégrés et des sessions natives en arrière-plan ; les onglets CLI interactifs restent indépendants. La pause bloque également les nouveaux tours intégrés et conseils. Reprendre le moteur ne relance pas les équipes arrêtées : utiliser **Débloquer → Reprendre** sur leur carte. Les permissions attendent toujours une réponse explicite. Les changements déjà effectués sont conservés.
+
+Un moteur d’une ancienne version est remplacé automatiquement lorsqu’il est au repos. Si des équipes ou commandes sont en cours, Agentopia demande de les laisser finir ou de les arrêter avant la mise à niveau ; les commandes d’arrêt restent utilisables. La pause globale reste enregistrée après la mise à jour.
 
 Le PC doit rester allumé. Aucun service de démarrage Windows n’est installé : après un redémarrage du poste, ouvrir Agentopia redémarre le moteur. Les tâches planifiées manquées sont rattrapées le même jour, avec une réservation préalable pour empêcher une double exécution automatique. Une erreur ou un crash laisse une trace consultable dans `/planifications` ; un nouvel essai manuel reste possible. Un processus de session disparu est signalé après deux minutes sans activité, jamais déclaré réussi.
 
@@ -91,7 +103,7 @@ node test-codex-protocole.mjs
 
 Les tests d’agents utilisent des transports simulés et un dépôt Git temporaire. Ils couvrent états, permissions, interruptions, erreurs, verrouillage, protocoles, sources, dépendances et isolation des branches. Le dernier diagnostic parle au vrai app-server Codex sans créer de conversation ni appeler de modèle. Aucun de ces tests ne valide une exécution payante chez Claude ou Perplexity.
 
-La suite `test:ci` comprend aussi un moteur et des workers dans des processus séparés : unicité, arrêt brutal, reprise, dépendances sans doublon et pause persistante. Les tests d’utilisation couvrent les compteurs cumulés, le coût absent, les limites, les bilans et les réservations de planification. Les tests TUI vérifient les parcours clavier existants et la mission guidée. Le workflow `.github/workflows/validation.yml` lance cette suite sous Windows à chaque push/PR ; il ne publie aucun paquet et n’appelle aucun modèle.
+La suite `test:ci` comprend aussi un moteur et des workers dans des processus séparés : unicité, arrêt brutal, reprise sur place, dépendances sans doublon, pause persistante et remplacement d’un ancien moteur au repos. Les tests d’utilisation couvrent les compteurs cumulés, le coût absent, les limites, les bilans et les réservations de planification. Les tests TUI vérifient les parcours clavier existants, la mission guidée, l’aperçu d’équipe, l’annulation et le bilan. Les modèles sont testés pour préserver leurs définitions, refuser les dépendances invalides et exclure les données des anciennes exécutions. Le workflow `.github/workflows/validation.yml` lance cette suite sous Windows à chaque push/PR ; il ne publie aucun paquet et n’appelle aucun modèle.
 
 Références : [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview), [Codex app-server](https://learn.chatgpt.com/docs/app-server), [Perplexity Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart).
 

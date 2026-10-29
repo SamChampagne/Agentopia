@@ -2,9 +2,11 @@
 
 Poste de pilotage pour travailler avec Claude, Codex, Perplexity et des **équipes d’agents** : conversations, projets, Git, Docker et serveurs SSH.
 
-**Sessions intégrées Claude, Codex et Perplexity** : `+ Session` ou `/session`, configuration via `/fournisseurs`, collaboration via `/equipe-mixte`. [Connexion, utilisation et limites](docs/sessions-multi-agents.md).
+**Sessions intégrées Claude, Codex et Perplexity** : `+ Session` ou `/session`, configuration via `/fournisseurs`, collaboration via **Équipes → Nouvelle équipe**. [Connexion, utilisation et limites](docs/sessions-multi-agents.md).
 
-**Version 1.1** : dans un projet, **Mission** guide les parcours Corriger un bug, Ajouter une fonction et Analyser. Les équipes lancées et les tâches planifiées sont pilotées par un moteur indépendant de la fenêtre. **Config → Moteur des équipes** permet la pause globale ; **Utilisation des agents** et **Limites des agents** affichent les données disponibles et les limites réglables. Les écrans existants sont conservés.
+**Version 1.2** : les nouvelles équipes proposent un parcours guidé (développement + revue, correction + vérification, recherche + code + revue), les agents disponibles et un aperçu avant lancement. **Actions (a)** permet d’enregistrer un modèle réutilisable, de consulter le bilan commun et de reprendre une tâche interrompue dans sa conversation et sa branche existantes. Les écrans existants sont conservés.
+
+Dans un projet, **Mission** guide aussi le travail avec un seul agent. Les équipes lancées et les tâches planifiées sont pilotées par un moteur indépendant de la fenêtre. **Config → Moteur des équipes** permet la pause globale ; **Utilisation des agents** et **Limites des agents** affichent les données disponibles et les limites réglables.
 
 Lancer **Agentopia.bat** (ou le raccourci **Agentopia**). L’ancien lanceur `Claudetopia.bat` reste compatible. Les fichiers `.claudetopia*`, les historiques et les clés existants sont conservés ; seule l’ancienne bannière par défaut devient **AGENTOPIA**. Le dépôt GitHub garde pour l’instant son adresse `SamChampagne/ClaudeTopia`.
 

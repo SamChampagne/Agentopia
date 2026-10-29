@@ -150,12 +150,15 @@ function signalerChangements(avant: Map<string, string>): void {
     }
 }
 
+let derniereErreurMoteur: string | undefined;
 async function lireAgents(): Promise<void> {
     const avant = new Map(donnees.agents.map((a) => [a.sessionId, a.statut]));
     // Le maître est un Claude comme les autres : il n'a pas de carte
     donnees.agents = (await listerAgents()).filter((a) => path.resolve(a.cwd).toLowerCase() !== DOSSIER_MAITRE && !estFermee(a.cle));
     donnees.activites = new Map(donnees.agents.map((a) => [a.sessionId, activiteDe(a.fichier)]));
-    if (!moteurEnPause() && process.env.CLAUDETOPIA_TEST_UI !== '1') void assurerMoteur().catch((e) => bus.emit('notice', (e as Error).message));
+    if (!moteurEnPause() && process.env.CLAUDETOPIA_TEST_UI !== '1') void assurerMoteur()
+        .then(() => { derniereErreurMoteur = undefined; })
+        .catch((e) => { const message = (e as Error).message; if (message !== derniereErreurMoteur) bus.emit('notice', message); derniereErreurMoteur = message; });
     donnees.equipes = lireEquipes();
     signalerChangements(avant);
     signalerConflits();

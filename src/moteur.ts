@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as pause } from 'node:timers/promises';
-import { DOSSIER_MOTEUR, moteurEnPause, type ActionMoteur } from './moteurClient.js';
+import { DOSSIER_MOTEUR, VERSION_MOTEUR, moteurEnPause, type ActionMoteur } from './moteurClient.js';
 import { prendreVerrou } from './verrou.js';
 import { ecrireAtomique, listerIntegrees, interrompreIntegree, envoyerIntegree } from './sessionsIntegrees.js';
 import * as equipes from './equipe.js';
@@ -18,12 +18,13 @@ export async function executerMoteur(options: { envoyer?: typeof envoyerIntegree
     if (!liberer) return;
     const commandes = path.join(DOSSIER_MOTEUR, 'commandes'); fs.mkdirSync(commandes, { recursive: true });
     let arrete = false, dernierePlanification = 0, erreur: string | undefined;
-    const etat = () => ecrireAtomique(path.join(DOSSIER_MOTEUR, 'etat.json'), { pid: process.pid, date: Date.now(), erreur });
+    const etat = () => ecrireAtomique(path.join(DOSSIER_MOTEUR, 'etat.json'), { pid: process.pid, date: Date.now(), erreur, version: VERSION_MOTEUR });
     const finir = () => { arrete = true; };
     process.once('SIGTERM', finir); process.once('SIGINT', finir);
     const pouls = setInterval(etat, 2000); etat();
     const actions: Record<ActionMoteur, (id: string, tache: string) => unknown> = {
         lancer: equipes.lancerEquipe, arreter: equipes.arreterEquipe, integrer: equipes.integrer, relancer: equipes.relancerTache,
+        reprendre: (id, tache) => equipes.reprendreTache(id, tache, options.envoyer ?? envoyerIntegree),
         ecarter: equipes.basculerEcart, retirer: equipes.retirerTache, ranger: equipes.terminerEquipe,
         planification: (id) => {
             const p = chargerConfig().planifications?.find((p) => p.id === id);
@@ -53,7 +54,7 @@ export async function executerMoteur(options: { envoyer?: typeof envoyerIntegree
                         const c = JSON.parse(fs.readFileSync(enCours, 'utf8'));
                         if (!Object.hasOwn(actions, c.action)) throw new Error('Commande moteur inconnue');
                         if (Date.now() - c.creee > 120_000) throw new Error('Demande expirée ; relance-la depuis l’équipe');
-                        if (moteurEnPause() && ['lancer', 'integrer', 'relancer', 'planification'].includes(c.action)) throw new Error('Tout est en pause · Reprendre le moteur avant de lancer une tâche');
+                        if (moteurEnPause() && ['lancer', 'integrer', 'relancer', 'reprendre', 'planification'].includes(c.action)) throw new Error('Tout est en pause · Reprendre le moteur avant de lancer une tâche');
                         resultat = await actions[c.action as ActionMoteur](c.id, c.tache);
                     } catch (e) { echec = (e as Error).message; }
                     ecrireAtomique(fichier.replace(/\.json$/, '.reponse'), { resultat, erreur: echec });

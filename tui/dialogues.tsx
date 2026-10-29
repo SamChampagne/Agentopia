@@ -64,7 +64,7 @@ export function Choix({ d, hauteur }: { d: any; hauteur: number }) {
                         onMouseDown={() => (d.multiple ? basculer(i) : valider(pos))}>
                         <text fg={actif ? theme.accent : 'gray'}>{pos === courant ? '❯ ' : '  '}</text>
                         {d.multiple && <text fg={coches.has(i) ? '#4ade80' : fond.discret}>{coches.has(i) ? '◉ ' : '○ '}</text>}
-                        <text fg={actif ? theme.accent : fond.texte} truncate>
+                        <text fg={actif ? theme.accent : fond.texte} truncate flexShrink={0} maxWidth="70%">
                             {/* Un libellé peut être coloré par chalk (la pastille d'un projet) */}
                             {morceauxAnsi(c.label).map((m, j) => <span key={j} fg={m.fg} bg={m.bg} attributes={m.attributs}>{m.t}</span>)}
                         </text>

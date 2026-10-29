@@ -33,7 +33,7 @@ const COMMANDES_MAITRE: Record<string, string> = {
     '/codex <projet> <consigne>': 'nouvelle conversation Codex intégrée',
     '/perplexity <projet> <consigne>': 'nouvelle recherche Perplexity intégrée (web uniquement)',
     '/onglet <projet>': 'ouvrir Claude dans un onglet',
-    '/equipe <projet> -- <objectif>': 'créer une équipe Claude CLI (plan puis tâches en parallèle)',
+    '/equipe <projet> -- <objectif>': 'ouvrir la création guidée d’une équipe avec les fournisseurs choisis',
     '/equipe <idEquipe>': 'ouvrir une équipe',
     '/terminal <pwsh|cmd|bash|wsl> <projet>': 'ouvrir un terminal dans un projet',
     '/code <projet>': 'ouvrir dans VS Code',

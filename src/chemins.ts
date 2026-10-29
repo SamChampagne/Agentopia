@@ -23,6 +23,7 @@ export const CHEMINS = {
     ssh: fichier('-ssh.json'),
     trace: fichier('-trace'),
     equipes: fichier('-equipes.json'),
+    modelesEquipes: fichier('-modeles-equipes'),
     maitre: fichier('-maitre'),
     sftpEmpreintes: fichier('-sftp-empreintes.json'),
     etat: fichier('-etat.json'),

@@ -14,7 +14,7 @@ import { validerDependances } from './equipePlan.js';
 import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
 import { disponibilite } from './providers/config.js';
 import { RACINE_SESSIONS, creerIntegree, envoyerIntegree, lireIntegree, ecrireAtomique } from './sessionsIntegrees.js';
-import { commanderMoteur, localAuMoteur } from './moteurClient.js';
+import { commanderMoteur, localAuMoteur, moteurEnPause } from './moteurClient.js';
 import { sousVerrou } from './verrou.js';
 
 // Équipe d'agents sur un projet :
@@ -555,6 +555,40 @@ export async function relancerTache(id: string, tache: string): Promise<string |
     if (['en cours', 'bloquee'].includes(t.etat)) return 'Cette tâche est encore active ; interromps-la avant de la relancer';
     Object.assign(t, { etat: 'attente', agentId: undefined, sessionId: undefined, branche: undefined, cwd: undefined, resultat: undefined, vuTravailler: false, absentDepuis: undefined, tentative: randomUUID().slice(0, 8) });
     return lancerEquipe(id);
+}
+
+export async function reprendreTache(id: string, tache: string, envoyer = envoyerIntegree): Promise<string | undefined> {
+    if (!localAuMoteur()) return commanderMoteur('reprendre', id, tache);
+    const e = equipeDe(id), t = e?.taches.find((t) => t.id === tache);
+    if (!e?.mixte || !t?.agentId || !t.fournisseur) return 'Cette tâche ne possède pas de conversation intégrée à reprendre';
+    if (e.archivee || ['integration', 'finie'].includes(e.etat)) return 'Cette équipe ne peut plus être reprise à cette étape';
+    if (moteurEnPause()) return 'Moteur en pause · Config → Moteur des équipes → Reprendre';
+    if (!['erreur', 'arretee'].includes(t.etat)) return 'Seule une tâche arrêtée ou en erreur peut être reprise';
+    if (t.dependances.some((id) => e.taches.find((d) => d.id === id)?.etat !== 'faite')) return 'Termine les tâches dont cette étape dépend avant de la reprendre';
+    const dependDe = (c: Tache, cible: string, vus = new Set<string>()): boolean => {
+        if (vus.has(c.id)) return false; vus.add(c.id);
+        return c.dependances.some((d) => d === cible || !!e.taches.find((x) => x.id === d && dependDe(x, cible, vus)));
+    };
+    if (e.taches.some((c) => c !== t && dependDe(c, t.id) && c.etat !== 'attente')) return 'Une tâche dépendante a déjà démarré : vérifie son travail avant de reprendre cette étape';
+    const s = lireIntegree(t.agentId);
+    if (!s || s.fournisseur !== t.fournisseur || path.resolve(s.cwd) !== path.resolve(t.cwd || e.projet)) return 'La conversation ne correspond plus au dossier de cette tâche';
+    if (['travaille', 'bloquee'].includes(s.etat)) return 'L’agent est encore actif. Attends son arrêt ou réponds à sa permission';
+    if (!fs.existsSync(s.cwd)) return 'Le dossier de travail a disparu. Recommence dans une nouvelle branche';
+    if (t.branche) {
+        try { if (gitVerifie(['branch', '--show-current'], s.cwd) !== t.branche) return `La branche du dossier a changé. Rétablis ${t.branche} avant de reprendre cette tâche`; }
+        catch (err) { return `Impossible de vérifier la branche : ${(err as Error).message}`; }
+    }
+    const d = disponibilite(t.fournisseur); if (!d.pret) return d.texte;
+    const prompt = `Reprends la tâche interrompue dans cette conversation.\nOBJECTIF : ${e.objectif}\nTA TÂCHE : ${t.consigne}\n`
+        + (FOURNISSEURS[t.fournisseur].code
+            ? 'Les fichiers et la branche de la tentative précédente sont conservés. Commence par vérifier leur état. Ne réinitialise pas le dépôt et ne jette pas les changements existants. Termine le travail restant, exécute les vérifications pertinentes puis commite les changements. Ne pousse pas.'
+            : 'Continue la recherche à partir des résultats déjà présents. Vérifie les sources et explique les incertitudes.')
+        + '\nTermine par le résultat, les vérifications réellement exécutées et les points restant à vérifier.';
+    // Conserver agentId, tentative, branche et cwd. Aucune réservation de nouveau worktree.
+    t.etat = 'en cours'; t.fin = undefined; t.resultat = undefined; e.etat = 'en cours'; e.message = undefined; sauver();
+    try { await envoyer(s.id, prompt); }
+    catch (err) { t.etat = 'erreur'; t.resultat = (err as Error).message; sauver(); return t.resultat; }
+    return undefined;
 }
 
 // Écarter une tâche (son diff ne convient pas) ou la garder de nouveau

@@ -55,7 +55,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
         <Box flexDirection="column" width={largeur} height={hauteur} paddingLeft={1}>
             <Titre texte="ÉQUIPES D'AGENTS" droite="clic = ouvrir · Échap fermer" />
             <Box height={2} flexShrink={0}>
-                <Text color="gray" wrap="wrap">Un chef d'équipe découpe ton objectif en tâches, puis plusieurs agents Claude les font en parallèle, chacun sur sa branche. À la fin, un intégrateur fusionne tout.</Text>
+                <Text color="gray" wrap="wrap">Choisis un parcours ou un modèle, puis les agents réalisent les tâches selon leurs dépendances. Chaque agent de code a sa branche. Tu relis le résultat avant l’intégration.</Text>
             </Box>
             <Separateur largeur={largeur - 2} />
             {lignes.slice(0, hauteur - 4).map((e, i) => {
@@ -83,7 +83,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
 
 // ─── Une équipe ──────────────────────────────────────────────────────────────
 
-export function boutonsEquipe(e: Equipe, t?: Tache) {
+function boutonsEquipeBase(e: Equipe, t?: Tache) {
     const fermer = { label: '✕ Fermer', action: 'fermer' };
     // Une tâche finie avec sa branche : lire son diff avant de fusionner, et l'écarter si besoin
     const revue = t?.branche && t.etat === 'faite' && (e.etat === 'prete' || e.etat === 'erreur')
@@ -93,11 +93,21 @@ export function boutonsEquipe(e: Equipe, t?: Tache) {
         case 'planification': return [{ label: '− Abandonner', action: 'ranger' }, fermer];
         case 'plan': return [...(e.mixte || estDeConfiance(e.projet) ? [] : [{ label: '▭ Accepter le dossier', action: 'confiance' }]), { label: '▶ Lancer l\'équipe', action: 'lancer' }, ...(e.mixte ? [] : [{ label: '↻ Refaire le plan', action: 'replan' }]), { label: '− Retirer la tâche', action: 'retirer' }, { label: '− Abandonner', action: 'ranger' }, fermer];
         case 'en cours': return [...ouvrirAgent, { label: '■ Arrêter', action: 'arreter' }, fermer];
-        case 'erreur': return [{ label: '↻ Relancer', action: 'lancer' }, ...ouvrirAgent, ...revue, { label: '⇄ Intégrer ce qui est fait', action: 'integrer' }, { label: '↻ Refaire le plan', action: 'replan' }, { label: '− Ranger', action: 'ranger' }, fermer];
+        case 'erreur': return [{ label: '↻ Relancer', action: 'lancer' }, ...ouvrirAgent, ...revue, { label: '⇄ Intégrer ce qui est fait', action: 'integrer' }, ...(e.mixte ? [] : [{ label: '↻ Refaire le plan', action: 'replan' }]), { label: '− Ranger', action: 'ranger' }, fermer];
         case 'prete': return [{ label: '⇄ Intégrer', action: 'integrer' }, ...revue, ...ouvrirAgent, { label: '✓ Ranger l\'équipe', action: 'ranger' }, fermer];
         case 'integration': return [{ label: '↵ Voir l\'intégrateur', action: 'integrateur' }, { label: '■ Arrêter', action: 'arreter' }, fermer];
         default: return [{ label: '↵ Voir l\'intégrateur', action: 'integrateur' }, ...ouvrirAgent, { label: '✓ Ranger l\'équipe', action: 'ranger' }, fermer];
     }
+}
+
+export function boutonsEquipe(e: Equipe, t?: Tache) {
+    const boutons = boutonsEquipeBase(e, t);
+    if (e.mixte && ['plan', 'erreur'].includes(e.etat) && e.taches.some((t) => ['erreur', 'arretee'].includes(t.etat))) {
+        const i = boutons.findIndex((b) => b.action === 'lancer');
+        if (i >= 0) boutons[i] = { label: '↻ Débloquer (a)', action: 'actions-equipe' };
+    }
+    if (boutons.some((b) => b.action === 'actions-equipe')) return boutons;
+    return [boutons[0], { label: '⋯ Actions (a)', action: 'actions-equipe' }, ...boutons.slice(1)];
 }
 
 function DetailEquipe({ id, fermer, retour }: { id: string; fermer: () => void; retour?: () => void }) {
@@ -142,6 +152,11 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
         setMessage('');
         if (action !== aConfirmer) setAConfirmer(undefined);
         if (action === 'fermer') return retour ? retour() : fermer();
+        if (action === 'actions-equipe' || (action === 'lancer' && e.mixte)) {
+            fermer();
+            const commande = action === 'actions-equipe' || e.taches.some((t) => ['erreur', 'arretee'].includes(t.etat)) ? 'equipe-actions' : 'equipe-lancer';
+            return void bus.emit('lancer', `/${commande} ${e.id}`);
+        }
         if (action === 'agent') return ouvrirSession(courante?.agentId);
         if (action === 'integrateur') return ouvrirSession(e.integrateur?.agentId);
         if (action === 'diff' && courante) {
@@ -169,13 +184,13 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
         if (action === 'arreter') {
             setMessage('Arrêt des agents…');
             await arreterEquipe(e.id);
-            return setMessage('Agents arrêtés · « Relancer » reprend les tâches non finies');
+            return setMessage(e.mixte ? 'Agents arrêtés · Débloquer → Reprendre conserve le travail en cours' : 'Agents arrêtés · Relancer redémarre les tâches non finies');
         }
         if (action === 'integrer') {
             const modifs = modifsLocales(e);
-            if (modifs && aConfirmer !== 'integrer') {
+            if (modifs) {
                 setAConfirmer('integrer');
-                return setMessage(`! ${e.nomProjet} a ${modifs} fichier(s) modifié(s) non commité(s) : la fusion peut les gêner · reclique pour intégrer quand même`);
+                return setMessage(`! ${e.nomProjet} a ${modifs} fichier(s) non commité(s) : commite-les ou range-les avant d’intégrer`);
             }
             setAConfirmer(undefined);
             setMessage('Démarrage de l\'intégrateur…');
@@ -211,6 +226,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
         if (key.downArrow) setChoix(taches[Math.min(taches.length - 1, index + 1)]?.id);
         if (key.return) ouvrirSession(courante?.agentId);
         if (input === 'l' && (e.etat === 'plan' || e.etat === 'erreur')) void agir('lancer');
+        if (input === 'a') void agir('actions-equipe');
     });
 
     const etat = etatEquipe(e, t0);

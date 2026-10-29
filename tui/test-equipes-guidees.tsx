@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createTestRenderer } from '@opentui/core/testing';
+import { createRoot } from '@opentui/react';
+
+const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'agentopia-equipes-tui-'));
+process.env.CLAUDETOPIA_DATA_DIR = dossier;
+process.env.CLAUDETOPIA_SANS_REPRISE = '1';
+process.env.CLAUDETOPIA_TEST_UI = '1';
+process.env.AGENTOPIA_SANS_MOTEUR = '1';
+fs.writeFileSync(path.join(dossier, 'claudetopia.json'), JSON.stringify({ racines: [], extras: [], notifications: false, fetchAuto: false, maitre: { actif: false }, fournisseurDefaut: 'claude' }));
+const { App } = await import('./app.tsx');
+const { lireDonnees } = await import('../dist/ui/donnees.js');
+const { bus } = await import('../dist/ui/bus.js');
+const { COMMANDES } = await import('../dist/commandes.js');
+const { CHEMINS } = await import('../dist/chemins.js');
+const { rechargerEquipes } = await import('../dist/equipe.js');
+const { enregistrerModeleEquipe } = await import('../dist/modelesEquipes.js');
+const { recetteEquipe } = await import('../dist/equipesGuidees.js');
+const equipe: any = { id: 'fixture', mixte: true, projet: dossier, nomProjet: 'Projet fixture', objectif: 'Recherche dans les projets', etat: 'erreur', creee: Date.now(),
+    taches: recetteEquipe('duo', 'claude', 'codex').map((t: any, i: number) => ({ ...t, id: `t${i + 1}`, etat: i ? 'attente' : 'erreur', role: 'dev', resultat: i ? undefined : 'Interruption fixture' })) };
+fs.writeFileSync(CHEMINS.equipes, JSON.stringify([equipe])); rechargerEquipes(); lireDonnees().equipes = [equipe];
+enregistrerModeleEquipe(equipe, 'Mon duo réutilisable');
+const ui = await createTestRenderer({ width: 130, height: 36, autoFocus: false });
+const root = createRoot(ui.renderer);
+const dessiner = async () => { await new Promise((r) => setTimeout(r, 120)); await ui.flush(); await ui.renderOnce(); };
+try {
+    root.render(<App quitter={() => {}} />); await dessiner();
+    const parcours = COMMANDES.find((c: any) => c.nom === 'equipe-mixte')!.executer({ args: [], reste: 'Objectif fixture', apresProjet: 'Objectif fixture', projet: { nom: 'Fixture', chemin: dossier } as any });
+    const annule = Promise.resolve(parcours).catch((e) => { assert.equal(e.constructor.name, 'Annule'); });
+    await dessiner();
+    assert.match(ui.captureCharFrame(), /Développer.*faire relire/);
+    assert.match(ui.captureCharFrame(), /Mon duo réutilisable/);
+    ui.mockInput.pressEnter(); await dessiner();
+    assert.match(ui.captureCharFrame(), /Créer le plan et ouvrir/);
+    assert.match(ui.captureCharFrame(), /Développement/); assert.match(ui.captureCharFrame(), /Revue et vérification/);
+    ui.mockInput.pressEscape(); await dessiner(); await annule;
+    assert.equal(JSON.parse(fs.readFileSync(CHEMINS.equipes, 'utf8')).length, 1, 'Annuler ne crée pas une équipe');
+    bus.emit('lancer', '/equipe fixture'); await dessiner(); await dessiner();
+    assert.match(ui.captureCharFrame(), /Débloquer \(a\)/);
+    ui.mockInput.pressKey('a'); await dessiner(); await dessiner();
+    assert.match(ui.captureCharFrame(), /Voir le bilan de l’équipe/);
+    assert.match(ui.captureCharFrame(), /Enregistrer ce plan comme modèle/);
+    ui.mockInput.pressEnter(); await dessiner(); await dessiner();
+    assert.match(ui.captureCharFrame(), /Bilan de l’équipe/);
+    assert.match(ui.captureCharFrame(), /Interruption fixture/);
+    ui.mockInput.pressKey('\u001b[6~'); await dessiner();
+    ui.mockInput.pressKey('\u001b[6~'); await dessiner();
+    assert.match(ui.captureCharFrame(), /Attend : t1/);
+    ui.mockInput.pressEnter(); await dessiner(); await dessiner();
+    assert.match(ui.captureCharFrame(), /Débloquer \(a\)/);
+    ui.resize(100, 32); await dessiner();
+    ui.mockInput.pressKey('a'); await dessiner(); await dessiner();
+    assert.match(ui.captureCharFrame(), /Voir le bilan de l’équipe/);
+    ui.mockInput.pressEnter(); await dessiner(); await dessiner();
+    assert.match(ui.captureCharFrame(), /Bilan de l’équipe/);
+    assert.match(ui.captureCharFrame(), /Retour à l’équipe/);
+    process.stdout.write('✓ TUI : parcours guidé, aperçu, modèle réutilisable, annulation, actions et bilan au clavier (130 et 100 colonnes)\n');
+} finally {
+    root.render(<text>fin</text>); await dessiner(); await ui.dispose();
+    const rel = path.relative(os.tmpdir(), dossier);
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) fs.rmSync(dossier, { recursive: true, force: true });
+}
