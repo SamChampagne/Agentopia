@@ -3,11 +3,12 @@ import { theme, fond } from '../dist/theme.js';
 
 // Saisie commune : dans le chat d'une session, ou au bas des autres vues.
 
-export function Barre({ valeur, cle, setValeur, soumettre, suggestions, indexSugg, choisirSugg, indication, actif, raisonPause, placeholder, maitre = false }: {
+export function Barre({ valeur, cle, setValeur, soumettre, suggestions, indexSugg, choisirSugg, indication, actif, raisonPause, placeholder, pieces = [], gererPieces, maitre = false }: {
     valeur: string; cle: number; setValeur: (v: string) => void; soumettre: (v: string) => void;
     suggestions: any[]; indexSugg: number; choisirSugg: (i: number) => void;
     indication: { texte: string; couleur: string }; actif: boolean; raisonPause?: string; maitre?: boolean;
     placeholder?: string;
+    pieces?: string[]; gererPieces?: () => void;
 }) {
     return (
         <box flexShrink={0} flexDirection="column">
@@ -18,7 +19,9 @@ export function Barre({ valeur, cle, setValeur, soumettre, suggestions, indexSug
                     {s.description && <text fg={fond.discret} truncate flexGrow={1}>{`  ${s.description}`}</text>}
                 </box>
             ))}
-            <text fg={indication.couleur} truncate paddingLeft={1}>{` ${indication.texte}`}</text>
+            {pieces.length > 0 && <text height={1} flexShrink={0} fg={theme.accent} truncate paddingLeft={1}
+                onMouseDown={() => actif && gererPieces?.()}>{`📎 ${pieces.length} pièce(s) jointe(s) · Alt+I gérer / retirer`}</text>}
+            <text height={1} flexShrink={0} fg={indication.couleur} truncate paddingLeft={1}>{` ${indication.texte}`}</text>
             <box height={3} border borderStyle="rounded" borderColor={maitre ? '#a78bfa' : actif ? fond.bordure : fond.discret} flexDirection="row" paddingLeft={1}>
                 <text fg={!actif ? fond.discret : maitre ? '#a78bfa' : theme.primaire}>{!actif ? '· ' : maitre ? '◈ ' : '❯ '}</text>
                 {/* key : changer la valeur depuis le code (historique, suggestion) recrée le champ avec ce texte */}

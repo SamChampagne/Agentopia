@@ -1,5 +1,13 @@
 # Agentopia 1.4 — bêta Windows
 
+La bêta **1.4.0-beta.9** corrige les défauts reproduits pendant un audit multi-agent. [Rapport complet, critiques et prochaines priorités](audit-stabilite-2026-10-30.md).
+
+- **Équipes** : relancer une tâche préserve les autres échecs ; une exclusion incompatible avec les dépendances est expliquée et refusée ; la fin d’intégration est vérifiée dans Git au lieu de dépendre uniquement du résumé de l’agent.
+- **Conversations** : cliquer sur les pièces jointes ou utiliser **Alt+I** pour les retirer ; un fichier inaccessible est signalé avant envoi ; le brouillon du maître est restauré après erreur.
+- **Petit terminal** : sous 100 colonnes, le chat prend la largeur disponible avec accès aux sessions, actions et outils. Les préférences reviennent en agrandissant la fenêtre.
+- **Données et projets** : sauvegarde et récupération des réglages ; choix explicite entre projets homonymes ; import contrôlé et planifications importées en pause.
+- **Windows** : le lanceur lit une activation unique et atomique ; une erreur de changement de version conserve la version précédente. `/diagnostic` inclut les fournisseurs intégrés.
+
 La bêta **1.4.0-beta.8** reprend la stabilisation des conversations préparée dans la bêta 7 : un double appui rapide sur Entrée ne déclenche plus deux envois ; parcourir l’historique avec ↑ ↓ conserve le brouillon, même lorsqu’une commande rappelée affiche des suggestions. La recherche utilise ses propres flèches et retrouve le message préparé à sa fermeture. Un historique remplacé ou temporairement inaccessible ne laisse plus une ancienne version figée ou un chat vide à l’écran.
 
 Le contrôle Windows a bloqué la publication de la bêta 7 sur un refus de renommage pendant la réparation. La bêta 8 réessaie les renommages temporairement verrouillés pendant 12 secondes au maximum, avec une indication visible. Un refus permanent conserve la version active et donne une erreur lisible. Le nettoyage d’un dossier encore verrouillé ne masque plus le résultat ni ne laisse le verrou d’installation bloqué.

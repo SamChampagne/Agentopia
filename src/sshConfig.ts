@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
+import { validerHoteSsh } from './importConfiguration.js';
 
 // Modifier ~/.ssh/config depuis Agentopia : ajouter, modifier, supprimer un serveur.
 // Seul le bloc « Host <alias> » concerné est réécrit ; le reste du fichier (commentaires, Host *, Match…)
@@ -78,6 +79,7 @@ function ecrire(blocs: Bloc[]): void {
 
 // Ajoute le serveur, ou remplace son bloc (ancienAlias : il a été renommé)
 export function enregistrerHote(h: HoteSsh, ancienAlias = h.alias): void {
+    validerHoteSsh(h);
     const blocs = decouper();
     const i = blocs.findIndex((b) => b.alias?.toLowerCase() === ancienAlias.toLowerCase());
     // Les blocs spécifiques doivent passer avant « Host * » : un nouveau serveur va juste avant le premier bloc générique

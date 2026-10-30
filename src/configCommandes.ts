@@ -4,7 +4,8 @@ import * as path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import type { Commande } from './commandes.js';
-import { Config, sauverConfig, CHEMIN_CONFIG } from './config.js';
+import { Config, sauverConfig, CHEMIN_CONFIG, etatRecuperationConfig } from './config.js';
+import { diagnostiquerAgents } from './diagnosticAgents.js';
 import { CLAUDE } from './claude.js';
 import { passerLaMain } from './ui/ecran.js';
 import { choisir, saisir, confirmer, tache } from './ui/bus.js';
@@ -149,6 +150,10 @@ interface Verification {
 export async function diagnostic(config: Config): Promise<Verification[]> {
     const v: Verification[] = [];
     const ajouter = (niveau: Niveau, quoi: string, detail: string, solution?: string) => v.push({ niveau, quoi, detail, solution });
+    const recuperation = etatRecuperationConfig();
+    if (recuperation) ajouter('avert', 'Réglages récupérés', recuperation.message,
+        recuperation.copie ? `original conservé : ${recuperation.copie}` : recuperation.sauvegarde ? `sauvegarde : ${recuperation.sauvegarde}` : `vérifie l’accès à ${CHEMIN_CONFIG}`);
+    v.push(...await diagnostiquerAgents(config));
 
     const majeure = Number(process.versions.node.split('.')[0]);
     ajouter(majeure >= 24 ? 'ok' : 'avert', 'Node.js', `${process.version}${majeure >= 24 ? ' (souris active)' : ''}`,

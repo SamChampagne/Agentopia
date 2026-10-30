@@ -13,17 +13,27 @@ export interface Projet {
 // Liste tous les projets : chaque sous-dossier des racines + les extras
 export function listerProjets(config: Config): Projet[] {
     const projets: Projet[] = [];
+    const vus = new Set<string>();
+    const ajouter = (chemin: string, racine: string) => {
+        try {
+            if (!fs.statSync(chemin).isDirectory()) return;
+            const reel = fs.realpathSync.native(chemin);
+            const cle = process.platform === 'win32' ? reel.toLowerCase() : reel;
+            if (vus.has(cle)) return;
+            vus.add(cle);
+            projets.push({ nom: path.basename(path.resolve(chemin)), chemin: path.resolve(chemin), racine });
+        } catch { /* Un disque déconnecté ou un dossier inaccessible ne bloque pas les autres projets. */ }
+    };
     for (const racine of config.racines) {
-        if (!fs.existsSync(racine)) continue;
-        for (const entree of fs.readdirSync(racine, { withFileTypes: true })) {
+        let entrees: fs.Dirent[];
+        try { entrees = fs.readdirSync(racine, { withFileTypes: true }); } catch { continue; }
+        for (const entree of entrees) {
             if (!entree.isDirectory() || entree.name.startsWith('.')) continue;
-            projets.push({ nom: entree.name, chemin: path.join(racine, entree.name), racine });
+            ajouter(path.join(racine, entree.name), racine);
         }
     }
     for (const extra of config.extras) {
-        if (fs.existsSync(extra)) {
-            projets.push({ nom: path.basename(extra), chemin: extra, racine: '(extra)' });
-        }
+        ajouter(extra, '(extra)');
     }
     return projets;
 }
@@ -35,8 +45,9 @@ export function trouverProjet(projets: Projet[], cle: string): Projet | Projet[]
         return projets[numero - 1];
     }
     const bas = cle.toLowerCase();
-    const exact = projets.find((p) => p.nom.toLowerCase() === bas);
-    if (exact) return exact;
+    const exacts = projets.filter((p) => p.nom.toLowerCase() === bas);
+    if (exacts.length === 1) return exacts[0];
+    if (exacts.length > 1) return exacts;
     const partiels = projets.filter((p) => p.nom.toLowerCase().includes(bas));
     if (partiels.length === 1) return partiels[0];
     if (partiels.length > 1) return partiels;

@@ -19,6 +19,7 @@ import { sousVerrou } from './verrou.js';
 import { validerDefinitions, type DefinitionTache } from './modelesEquipes.js';
 import { lireStockageEquipes, ecrireStockageEquipes, restaurerStockageEquipes, sauvegardeEquipes } from './stockageEquipes.js';
 import { listerIntegrees, interrompreIntegree } from './sessionsIntegrees.js';
+import { dependanteDemarree, erreurSelectionIntegration, verifierIntegration } from './validationEquipe.js';
 
 // Équipe d'agents sur un projet :
 //   1. un chef d'équipe (claude -p, lecture seule) découpe l'objectif en tâches, chacune avec un rôle métier
@@ -317,6 +318,32 @@ export async function planifier(e: Equipe): Promise<void> {
 
 // ─── Exécution ───────────────────────────────────────────────────────────────
 
+function erreurAvantLancement(e: Equipe, taches: Tache[]): string | undefined {
+    try { validerDependances(e.taches); } catch (err) { return (err as Error).message; }
+    if (e.mixte) {
+        for (const f of new Set(taches.map((t) => t.fournisseur!))) {
+            const d = disponibilite(f); if (!d.pret) return `${FOURNISSEURS[f].nom} : ${d.texte}`;
+        }
+        if (modifsLocales(e)) return 'Commite ou range tes modifications locales avant de lancer : les agents partent du dernier commit.';
+    } else if (!estDeConfiance(e.projet)) {
+        return `Claude n'a jamais été ouvert dans ${e.projet} : lance-le une fois dans un onglet et accepte « Trust this folder », puis relance l'équipe`;
+    }
+    return undefined;
+}
+
+function erreurAvantRelance(e: Equipe, taches: Tache[]): string | undefined {
+    const dependante = dependanteDemarree(e, taches);
+    if (dependante) return `Une tâche dépendante a déjà démarré (« ${dependante.titre} ») : vérifie son travail avant de recommencer cette étape`;
+    if (taches.some((t) => enLancement.has(t) || t.fournisseur && t.agentId && ['travaille', 'bloquee'].includes(lireIntegree(t.agentId)?.etat || '')))
+        return 'L’agent est encore actif. Attends son arrêt avant de recommencer dans une nouvelle branche';
+    return undefined;
+}
+
+function reinitialiserTache(t: Tache): void {
+    Object.assign(t, { etat: 'attente', agentId: undefined, sessionId: undefined, branche: undefined, cwd: undefined,
+        resultat: undefined, debut: undefined, fin: undefined, vuTravailler: false, absentDepuis: undefined, tentative: randomUUID().slice(0, 8) });
+}
+
 export async function lancerEquipe(id: string): Promise<string | undefined> {
     if (!localAuMoteur()) return commanderMoteur('lancer', id);
     const e = equipeDe(id);
@@ -325,19 +352,13 @@ export async function lancerEquipe(id: string): Promise<string | undefined> {
     if (e.etat === 'finie') return 'Cette équipe est déjà intégrée';
     if (e.etat === 'en cours') return undefined;
     if (e.etat === 'integration') return 'L’intégration est déjà en cours';
-    try { validerDependances(e.taches); } catch (err) { return (err as Error).message; }
-    if (e.mixte) {
-        for (const f of new Set(e.taches.map((t) => t.fournisseur!))) {
-            const d = disponibilite(f); if (!d.pret) return `${FOURNISSEURS[f].nom} : ${d.texte}`;
-        }
-        if (modifsLocales(e)) return 'Commite ou range tes modifications locales avant de lancer : les agents partent du dernier commit.';
-        // Le projet peut avoir avancé depuis la création du plan. Les reprises gardent leur base.
-        if (peutModifierPlan(e)) e.base = gitVerifie(['rev-parse', '--verify', 'HEAD'], e.projet);
-    }
-    if (!e.mixte && !estDeConfiance(e.projet)) {
-        return `Claude n'a jamais été ouvert dans ${e.projet} : lance-le une fois dans un onglet et accepte « Trust this folder », puis relance l'équipe`;
-    }
-    for (const t of e.taches) if (t.etat === 'arretee' || t.etat === 'erreur') Object.assign(t, { etat: 'attente', agentId: undefined, sessionId: undefined, branche: undefined, cwd: undefined, resultat: undefined, vuTravailler: false, absentDepuis: undefined, tentative: randomUUID().slice(0, 8) });
+    if (e.integrateur) return 'Une intégration a déjà démarré. Reprends-la depuis Actions pour conserver ses changements';
+    const relancees = e.taches.filter((t) => t.etat === 'arretee' || t.etat === 'erreur');
+    const erreur = erreurAvantRelance(e, relancees) || erreurAvantLancement(e, e.taches);
+    if (erreur) return erreur;
+    // Le projet peut avoir avancé depuis la création du plan. Les reprises gardent leur base.
+    if (e.mixte && peutModifierPlan(e)) e.base = gitVerifie(['rev-parse', '--verify', 'HEAD'], e.projet);
+    for (const t of relancees) reinitialiserTache(t);
     e.etat = 'en cours';
     e.message = undefined;
     sauver();
@@ -511,7 +532,8 @@ function suivre(t: Tache, agents: SessionVue[]): boolean {
                 if (!t.resultat) throw new Error('La session est terminée sans résumé exploitable');
                 if (gitVerifie(['status', '--porcelain'], a.cwd)) throw new Error('La session a laissé des modifications non commitées');
                 t.etat = 'faite'; t.fin = maintenant;
-                t.branche = gitVerifie(['branch', '--show-current'], a.cwd) || undefined;
+                // L'intégrateur garde sa destination initiale pour détecter un changement de branche.
+                if (t.role !== 'integrateur') t.branche = gitVerifie(['branch', '--show-current'], a.cwd) || undefined;
             } catch (err) { t.etat = 'erreur'; t.resultat = (err as Error).message; }
         } else if (a.statut === 'attend') {
             t.etat = 'bloquee';
@@ -546,6 +568,10 @@ export function avancerEquipes(agents: SessionVue[], services = { envoyer: envoy
             }
         } else if (e.etat === 'integration' && e.integrateur) {
             change = suivre(e.integrateur, agents) || change;
+            if (e.integrateur.etat === 'faite') {
+                try { verifierIntegration(e); }
+                catch (err) { e.integrateur.etat = 'erreur'; e.integrateur.fin = undefined; e.integrateur.resultat = (err as Error).message; }
+            }
             if (e.integrateur.etat === 'faite') {
                 e.etat = 'finie';
                 change = true;
@@ -584,15 +610,14 @@ export async function integrer(id: string, envoyer = envoyerIntegree): Promise<s
     if (e.etat === 'finie') return 'Cette équipe est déjà intégrée';
     const occupee = autreIntegration(e); if (occupee) return occupee;
     if (e.mixte && e.integrateur?.agentId) return 'Reprends l’intégration existante dans Actions pour conserver sa conversation et ses changements';
+    const selection = erreurSelectionIntegration(e); if (selection) return selection;
     if (modifsLocales(e)) return 'Le dossier du projet contient des modifications non commitées : range-les avant l’intégration';
     if (e.mixte && e.taches.some((t) => !t.ecartee && t.etat !== 'faite')) return 'Attends la fin des tâches ou écarte celles qui ont échoué avant d’intégrer';
     if (!e.taches.some((t) => t.branche && !t.ecartee)) return 'aucune branche à fusionner (toutes écartées ?)';
     let branche: string | undefined;
-    if (e.mixte) {
-        try { branche = gitVerifie(['branch', '--show-current'], e.projet); }
-        catch (err) { return (err as Error).message; }
-        if (!branche) return 'Le projet n’est sur aucune branche. Choisis une branche Git avant d’intégrer';
-    }
+    try { branche = gitVerifie(['branch', '--show-current'], e.projet); }
+    catch (err) { return (err as Error).message; }
+    if (!branche) return 'Le projet n’est sur aucune branche. Choisis une branche Git avant d’intégrer';
     e.integrateur = { id: 'integration', titre: 'Intégration', role: 'integrateur', consigne: '', dependances: [], etat: 'attente',
         branche,
         fournisseur: e.mixte ? e.taches.find((t) => t.fournisseur !== 'perplexity')?.fournisseur : undefined, tentative: randomUUID().slice(0, 8) };
@@ -622,10 +647,15 @@ export async function relancerTache(id: string, tache: string): Promise<string |
     const t = e?.taches.find((x) => x.id === tache);
     if (!e || !t || e.archivee) return 'tâche introuvable';
     if (['integration', 'finie'].includes(e.etat)) return 'Cette équipe ne peut plus être relancée à cette étape';
+    if (e.integrateur) return 'Une intégration a déjà démarré. Reprends-la depuis Actions pour conserver ses changements';
     if (moteurEnPause()) return 'Moteur en pause · Reprends le moteur avant de relancer';
     if (['en cours', 'bloquee'].includes(t.etat)) return 'Cette tâche est encore active ; interromps-la avant de la relancer';
-    Object.assign(t, { etat: 'attente', agentId: undefined, sessionId: undefined, branche: undefined, cwd: undefined, resultat: undefined, vuTravailler: false, absentDepuis: undefined, tentative: randomUUID().slice(0, 8) });
-    return lancerEquipe(id);
+    const erreur = erreurAvantRelance(e, [t]) || erreurAvantLancement(e, [t]);
+    if (erreur) return erreur;
+    reinitialiserTache(t);
+    e.etat = 'en cours'; e.message = undefined;
+    sauver();
+    return undefined;
 }
 
 export async function reprendreTache(id: string, tache: string, envoyer = envoyerIntegree): Promise<string | undefined> {
@@ -640,11 +670,7 @@ export async function reprendreTache(id: string, tache: string, envoyer = envoye
         if (!t.branche) return 'Cette ancienne intégration n’a pas enregistré sa branche. Ouvre sa conversation pour vérifier et terminer la fusion';
     }
     if (t.dependances.some((id) => e.taches.find((d) => d.id === id)?.etat !== 'faite')) return 'Termine les tâches dont cette étape dépend avant de la reprendre';
-    const dependDe = (c: Tache, cible: string, vus = new Set<string>()): boolean => {
-        if (vus.has(c.id)) return false; vus.add(c.id);
-        return c.dependances.some((d) => d === cible || !!e.taches.find((x) => x.id === d && dependDe(x, cible, vus)));
-    };
-    if (e.taches.some((c) => c !== t && dependDe(c, t.id) && c.etat !== 'attente')) return 'Une tâche dépendante a déjà démarré : vérifie son travail avant de reprendre cette étape';
+    if (dependanteDemarree(e, [t])) return 'Une tâche dépendante a déjà démarré : vérifie son travail avant de reprendre cette étape';
     const s = lireIntegree(t.agentId);
     if (!s || s.fournisseur !== t.fournisseur || path.resolve(s.cwd) !== path.resolve(t.cwd || e.projet)) return 'La conversation ne correspond plus au dossier de cette tâche';
     if (['travaille', 'bloquee'].includes(s.etat)) return 'L’agent est encore actif. Attends son arrêt ou réponds à sa permission';
@@ -671,8 +697,11 @@ export async function reprendreTache(id: string, tache: string, envoyer = envoye
 // Écarter une tâche (son diff ne convient pas) ou la garder de nouveau
 export async function basculerEcart(id: string, tache: string): Promise<boolean> {
     if (!localAuMoteur()) return commanderMoteur('ecarter', id, tache);
-    const t = equipeDe(id)?.taches.find((x) => x.id === tache);
-    if (!t?.branche) return false;
+    const e = equipeDe(id), t = e?.taches.find((x) => x.id === tache);
+    if (!e || !t?.branche || e.archivee) return false;
+    if (e.integrateur) throw new Error('La sélection est conservée dès le début de l’intégration. Reprends l’intégration existante depuis Actions.');
+    const erreur = erreurSelectionIntegration(e, tache);
+    if (erreur) throw new Error(erreur);
     t.ecartee = !t.ecartee;
     sauver();
     return t.ecartee;

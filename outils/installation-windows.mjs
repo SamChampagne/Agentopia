@@ -30,7 +30,7 @@ const powershell = (script) => {
 };
 export function verifierPaquet(dossier, progression = () => {}) {
     const manifeste = JSON.parse(fs.readFileSync(path.join(dossier, 'distribution.json'), 'utf8'));
-    if (manifeste.format !== 'agentopia-windows-v1' || !/^[a-zA-Z0-9._-]+$/.test(manifeste.id) || !Array.isArray(manifeste.fichiers)) throw new Error('Paquet Agentopia invalide');
+    if (manifeste.format !== 'agentopia-windows-v1' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(manifeste.id) || !Array.isArray(manifeste.fichiers)) throw new Error('Paquet Agentopia invalide');
     let controle = 0, dernier = -1;
     for (const entree of manifeste.fichiers) {
         const cible = path.resolve(dossier, entree.chemin);
@@ -70,16 +70,73 @@ function extraireArchive(archive, destination, progression) {
         p.once('close', (code) => { clearTimeout(delai); lignes.close(); code === 0 && !expire ? resoudre() : rejeter(new Error(expire ? 'La décompression a dépassé le délai prévu. Réessaie.' : erreur.trim() || 'Décompression interrompue')); });
     });
 }
-export function activerVersion(destination, id) {
-    if (!/^[a-zA-Z0-9._-]+$/.test(id)) throw new Error('Identifiant de version invalide');
+// Ce lanceur reste identique entre les versions. Le remplacement atomique du
+// reçu est le seul point d'activation, y compris pour un retour arrière.
+const LANCEUR = '@echo off\r\nsetlocal DisableDelayedExpansion\r\ntitle Agentopia\r\n'
+    + 'set "AGENTOPIA_DISTRIBUTION_ROOT=%~dp0"\r\n'
+    + '"%SystemRoot%\\System32\\findstr.exe" /r /b /c:"{\\"active\\":\\"[a-zA-Z0-9][a-zA-Z0-9._-]*\\"}" /c:"{\\"active\\":\\"[a-zA-Z0-9][a-zA-Z0-9._-]*\\",\\"precedente\\":\\"[a-zA-Z0-9][a-zA-Z0-9._-]*\\"}" "%~dp0activation.json" >nul 2>nul\r\n'
+    + 'if errorlevel 1 (echo Activation Agentopia invalide. Relance Agentopia-Setup.exe. & exit /b 1)\r\n'
+    + 'set "AGENTOPIA_VERSION="\r\n'
+    + 'for /f "usebackq tokens=2 delims=:,{}" %%V in ("%~dp0activation.json") do if not defined AGENTOPIA_VERSION set "AGENTOPIA_VERSION=%%~V"\r\n'
+    + 'setlocal EnableDelayedExpansion\r\nset "AGENTOPIA_INVALIDE=!AGENTOPIA_VERSION!"\r\n'
+    + 'set "AGENTOPIA_DEBUT=!AGENTOPIA_VERSION:~0,1!"\r\n'
+    + 'for %%C in (a b c d e f g h i j k l m n o p q r s t u v w x y z A B C D E F G H I J K L M N O P Q R S T U V W X Y Z 0 1 2 3 4 5 6 7 8 9) do (if defined AGENTOPIA_INVALIDE set "AGENTOPIA_INVALIDE=!AGENTOPIA_INVALIDE:%%C=!" & if defined AGENTOPIA_DEBUT set "AGENTOPIA_DEBUT=!AGENTOPIA_DEBUT:%%C=!")\r\n'
+    + 'for %%C in (. _ -) do if defined AGENTOPIA_INVALIDE set "AGENTOPIA_INVALIDE=!AGENTOPIA_INVALIDE:%%C=!"\r\n'
+    + 'if not defined AGENTOPIA_VERSION (echo Activation Agentopia absente. Relance Agentopia-Setup.exe. & exit /b 1)\r\n'
+    + 'if defined AGENTOPIA_DEBUT (echo Activation Agentopia invalide. Relance Agentopia-Setup.exe. & exit /b 1)\r\n'
+    + 'if defined AGENTOPIA_INVALIDE (echo Activation Agentopia invalide. Relance Agentopia-Setup.exe. & exit /b 1)\r\n'
+    + 'setlocal DisableDelayedExpansion\r\n'
+    + 'set "PATH=%~dp0versions\\%AGENTOPIA_VERSION%\\runtime;%PATH%"\r\n'
+    + '"%~dp0versions\\%AGENTOPIA_VERSION%\\runtime\\node.exe" "%~dp0versions\\%AGENTOPIA_VERSION%\\dist\\index.js" %*\r\n';
+
+function remplacerFichier(temporaire, fichier, renommer) {
+    for (let tentative = 0; ; tentative++) {
+        try { renommer(temporaire, fichier); return; }
+        catch (e) {
+            if (!['EPERM', 'EACCES', 'EBUSY'].includes(e.code) || tentative === 5) throw e;
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10 * 2 ** tentative);
+        }
+    }
+}
+export function activerVersion(destination, id, renommer = fs.renameSync) {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(id)) throw new Error('Identifiant de version invalide');
     const version = path.join(destination, 'versions', id);
     verifierPaquet(version);
     const fichier = path.join(destination, 'activation.json');
-    let ancienne; try { ancienne = JSON.parse(fs.readFileSync(fichier, 'utf8')); } catch {}
+    let ancienne; try {
+        ancienne = JSON.parse(fs.readFileSync(fichier, 'utf8'));
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(ancienne?.active)) ancienne = undefined;
+        else if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(ancienne.precedente ?? '')) delete ancienne.precedente;
+    } catch {}
     const nouvelle = { active: id, precedente: ancienne?.active === id ? ancienne.precedente : ancienne?.active };
-    // Le lanceur n'utilise que l'identifiant contrôlé, aucun chemin de projet ou secret.
-    fs.writeFileSync(path.join(destination, 'Agentopia.cmd'), `@echo off\r\nsetlocal\r\ntitle Agentopia\r\nset "AGENTOPIA_DISTRIBUTION_ROOT=%~dp0"\r\nset "PATH=%~dp0versions\\${id}\\runtime;%PATH%"\r\n"%~dp0versions\\${id}\\runtime\\node.exe" "%~dp0versions\\${id}\\dist\\index.js" %*\r\n`);
-    fs.writeFileSync(`${fichier}.tmp`, JSON.stringify(nouvelle)); fs.renameSync(`${fichier}.tmp`, fichier);
+    const lanceur = path.join(destination, 'Agentopia.cmd');
+    const temporaireEtat = `${fichier}.${randomUUID()}.tmp`, temporaireLanceur = `${lanceur}.${randomUUID()}.tmp`;
+    let ancienLanceur; try { ancienLanceur = fs.readFileSync(lanceur); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    let lanceurChange = false;
+    try {
+        // Préparer les deux fichiers avant de modifier quoi que ce soit.
+        fs.writeFileSync(temporaireEtat, JSON.stringify(nouvelle));
+        if (ancienLanceur?.toString('utf8') !== LANCEUR) {
+            fs.writeFileSync(temporaireLanceur, LANCEUR);
+            remplacerFichier(temporaireLanceur, lanceur, renommer);
+            lanceurChange = true;
+        }
+        remplacerFichier(temporaireEtat, fichier, renommer);
+    } catch (e) {
+        if (lanceurChange) {
+            try {
+                if (ancienLanceur) {
+                    fs.writeFileSync(temporaireLanceur, ancienLanceur);
+                    remplacerFichier(temporaireLanceur, lanceur, fs.renameSync);
+                } else fs.rmSync(lanceur, { force: true });
+            } catch (retour) {
+                throw new AggregateError([e, retour], 'Activation interrompue. Le reçu précédent est conservé ; relance Agentopia-Setup.exe pour rétablir le lanceur.');
+            }
+        }
+        throw new Error('Activation interrompue : la version précédente est conservée. Réessaie la mise à jour.', { cause: e });
+    } finally {
+        fs.rmSync(temporaireEtat, { force: true }); fs.rmSync(temporaireLanceur, { force: true });
+    }
     return nouvelle;
 }
 export async function installerArchive(archive, hashAttendu, options = {}) {

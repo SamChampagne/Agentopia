@@ -27,6 +27,7 @@ for (const id of ['session-a', 'session-b']) {
         nom: 'Projet fixture', titre: id, debut: new Date(), statut: 'attend', fichier } as any);
 }
 const graines = new CarnetBrouillons();
+fs.writeFileSync(path.join(dossier, 'capture.png'), 'fixture');
 graines.ecrire(destinationBrouillon('session-a'), { images: [path.join(dossier, 'capture.png')] }); graines.sauver();
 const ui = await createTestRenderer({ width: 130, height: 34, autoFocus: false });
 const root = createRoot(ui.renderer);

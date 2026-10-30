@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { CHEMINS, NOM, nomBanniere } from './chemins.js';
 import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
+import { StockageConfig } from './stockageConfig.js';
 
 // Fichier de config dans le dossier utilisateur : ~/.claudetopia.json
 export const CHEMIN_CONFIG = CHEMINS.config;
@@ -74,38 +75,49 @@ const CONFIG_DEFAUT: Config = {
 // Vrai si le fichier de config n'existait pas : on lance l'assistant /scan au démarrage
 export let premierLancement = false;
 
-export function chargerConfig(): Config {
-    try {
-        const brut = JSON.parse(fs.readFileSync(CHEMIN_CONFIG, 'utf-8'));
-        const config = { ...CONFIG_DEFAUT, ...brut, theme: { ...CONFIG_DEFAUT.theme, ...brut.theme } };
-        // Un fournisseur retiré/inconnu ne doit jamais déclencher un autre agent en silence.
-        if (!Object.hasOwn(FOURNISSEURS, config.fournisseurDefaut)) config.fournisseurDefaut = 'choisir';
-        // Renommer uniquement la bannière du produit ; garder les titres personnalisés.
-        config.banniere = nomBanniere(config.banniere);
-        if (config.banniere !== brut.banniere || config.fournisseurDefaut !== brut.fournisseurDefaut) sauverConfig(config);
-        // L'ancien mode clair n'existe plus : sa palette (couleurs foncées) est illisible sur fond sombre
-        if ('modeClair' in brut) {
-            if (brut.modeClair) config.theme = { ...CONFIG_DEFAUT.theme };
-            delete config.modeClair;
-            sauverConfig(config);
-        }
-        // Écrit les nouvelles clés dans le fichier pour qu'elles soient faciles à modifier
-        if (Object.keys(CONFIG_DEFAUT).some((k) => !(k in brut))) sauverConfig(config);
-        return config;
-    } catch {
-        if (!fs.existsSync(CHEMIN_CONFIG)) premierLancement = true;
-        sauverConfig(CONFIG_DEFAUT);
-        return structuredClone(CONFIG_DEFAUT);
+function normaliserConfig(valeur: unknown): Config {
+    if (!valeur || typeof valeur !== 'object' || Array.isArray(valeur)) throw new Error('Configuration invalide');
+    const brut = valeur as Record<string, any>;
+    for (const cle of ['racines', 'extras', 'dockerDistant', 'sectionsMasquees', 'sectionsRepliees']) {
+        if (brut[cle] !== undefined && (!Array.isArray(brut[cle]) || !brut[cle].every((v: unknown) => typeof v === 'string'))) throw new Error(`Réglage invalide : ${cle}`);
     }
+    for (const cle of ['theme', 'couleurs', 'prompts', 'equipe', 'maitre', 'ecran', 'limitesAgents', 'gardeFou', 'themeAuto']) {
+        if (brut[cle] !== undefined && (!brut[cle] || typeof brut[cle] !== 'object' || Array.isArray(brut[cle]))) throw new Error(`Réglage invalide : ${cle}`);
+    }
+    for (const cle of ['sftp', 'planifications', 'modelesSession']) {
+        if (brut[cle] !== undefined && (!Array.isArray(brut[cle]) || !brut[cle].every((v: unknown) => v && typeof v === 'object' && !Array.isArray(v)))) throw new Error(`Réglage invalide : ${cle}`);
+    }
+    for (const cle of ['banniere', 'prenom', 'lancement']) if (brut[cle] !== undefined && typeof brut[cle] !== 'string') throw new Error(`Réglage invalide : ${cle}`);
+    for (const cle of ['notifications', 'panneau', 'fetchAuto', 'cartesDetaillees', 'sons']) if (brut[cle] !== undefined && typeof brut[cle] !== 'boolean') throw new Error(`Réglage invalide : ${cle}`);
+    for (const cle of ['largeurLaterale', 'budgetJour', 'ecranVeille']) if (brut[cle] !== undefined && (typeof brut[cle] !== 'number' || !Number.isFinite(brut[cle]))) throw new Error(`Réglage invalide : ${cle}`);
+    for (const [section, champs] of Object.entries({ theme: ['primaire', 'secondaire', 'accent'], equipe: ['permissions'], maitre: ['modele'], ecran: ['laterale', 'actions'], themeAuto: ['mode', 'jour', 'soir'] })) {
+        for (const champ of champs) if (brut[section]?.[champ] !== undefined && typeof brut[section][champ] !== 'string') throw new Error(`Réglage invalide : ${section}.${champ}`);
+    }
+    for (const section of ['couleurs', 'prompts']) if (brut[section] && !Object.values(brut[section]).every((v) => typeof v === 'string')) throw new Error(`Réglage invalide : ${section}`);
+    for (const [section, champ] of [['maitre', 'actif'], ['ecran', 'icones']]) {
+        if (brut[section]?.[champ] !== undefined && typeof brut[section][champ] !== 'boolean') throw new Error(`Réglage invalide : ${section}.${champ}`);
+    }
+    for (const [section, champs] of Object.entries({ equipe: ['parallele'], maitre: ['veille'], limitesAgents: ['toursJour', 'dureeMinutes'] })) {
+        for (const champ of champs) if (brut[section]?.[champ] !== undefined && (typeof brut[section][champ] !== 'number' || !Number.isFinite(brut[section][champ]))) throw new Error(`Réglage invalide : ${section}.${champ}`);
+    }
+    for (const [section, champs] of Object.entries({ ecran: ['cockpitMasques'], gardeFou: ['serveurs', 'branches'] })) {
+        for (const champ of champs) if (brut[section]?.[champ] !== undefined && (!Array.isArray(brut[section][champ]) || !brut[section][champ].every((v: unknown) => typeof v === 'string'))) throw new Error(`Réglage invalide : ${section}.${champ}`);
+    }
+    const defaut = structuredClone(CONFIG_DEFAUT);
+    const config = { ...defaut, ...brut, theme: { ...defaut.theme, ...brut.theme }, equipe: { ...defaut.equipe, ...brut.equipe }, maitre: { ...defaut.maitre, ...brut.maitre } } as Config & { modeClair?: boolean };
+    if (!Object.hasOwn(FOURNISSEURS, config.fournisseurDefaut ?? '')) config.fournisseurDefaut = 'choisir';
+    config.banniere = nomBanniere(config.banniere);
+    if (config.modeClair) config.theme = { ...defaut.theme };
+    delete config.modeClair;
+    return config;
 }
-
-export function sauverConfig(config: Config): void {
-    const temporaire = `${CHEMIN_CONFIG}.${process.pid}.${crypto.randomUUID()}.tmp`;
-    try {
-        fs.writeFileSync(temporaire, JSON.stringify(config, null, 2), 'utf-8');
-        fs.renameSync(temporaire, CHEMIN_CONFIG);
-    } finally { fs.rmSync(temporaire, { force: true }); }
+const stockage = new StockageConfig(CHEMIN_CONFIG, normaliserConfig, () => structuredClone(CONFIG_DEFAUT));
+export const etatRecuperationConfig = () => stockage.etat;
+export function chargerConfig(): Config {
+    if (!fs.existsSync(CHEMIN_CONFIG)) premierLancement = true;
+    return stockage.charger();
 }
+export function sauverConfig(config: Config): void { stockage.sauver(config); }
 
 export function chargerHistorique(): string[] {
     try {

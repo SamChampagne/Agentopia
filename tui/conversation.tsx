@@ -19,11 +19,12 @@ const COL = 24;
 
 // position (/ecran) : actions en colonne à gauche ou à droite, en rangée en haut, ou cachées (clic droit)
 // recherche (Ctrl+F) : les lignes qui contiennent le terme sont surlignées ; occurrence = laquelle montrer (la plus récente d'abord)
-export function Conversation({ s, largeur, cout, agir, position = 'gauche', recherche = '', occurrence = 0, surTrouvees, diff = true, saisie, navigationActive = true }: {
+export function Conversation({ s, largeur, cout, agir, position = 'gauche', recherche = '', occurrence = 0, surTrouvees, diff = true, saisie, navigationActive = true, compact = false, menuActions }: {
     s: any; largeur: number; cout?: number; agir: (action: string) => void; position?: string;
     recherche?: string; occurrence?: number; surTrouvees?: (n: number) => void; diff?: boolean;
     saisie?: ReactNode;
     navigationActive?: boolean;
+    compact?: boolean; menuActions?: () => void;
 }) {
     // lireTranscript relit seulement la fin ajoutée et rend le même tableau si rien n'a changé (pas de rendu inutile)
     const [messages, setMessages] = useState<any[]>(() => lireTranscript(s.fichier));
@@ -70,6 +71,11 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
             {(s.integree || enHistorique) && <text height={1} flexShrink={0} fg={enHistorique ? theme.accent : fond.eteint} paddingLeft={1} truncate
                 onMouseDown={() => enHistorique && retourEnBas()}>{enHistorique ? '↑ Historique · ↓ Derniers messages (Alt+Fin ou clic)' : s.terminalExterne ? 'Terminal Codex ouvert · lecture seule ici jusqu’à sa fermeture' : s.statut === 'travaille' ? '● En direct · messages et sorties des outils' : s.statut === 'bloquee' ? '● En attente de ta réponse' : 'Conversation à jour · Pg↑ Pg↓ parcourir'}</text>}
             {s.integree && !messages.length && <text fg={fond.discret} paddingLeft={1}>Écris ton premier message dans la barre ci-dessous.</text>}
+            {compact && <box height={1} flexShrink={0} paddingLeft={1} flexDirection="row">
+                <text fg={theme.secondaire} onMouseDown={() => agir('fermer')}>← Retour  </text>
+                <text fg={theme.accent} onMouseDown={menuActions}>⋯ Actions · Alt+A</text>
+                <text fg={theme.secondaire} onMouseDown={() => setDetails((v) => !v)}>{`  ${details ? 'Résumer' : 'Outils'} · Alt+L`}</text>
+            </box>}
             {position === 'haut' && <box paddingLeft={1} border={['bottom']} borderColor={fond.bordure}><Boutons boutons={actions} agir={executerAction} /></box>}
             <box flexGrow={1} flexShrink={1} minHeight={0} flexDirection={position === 'droite' ? 'row-reverse' : 'row'}>
                 {enColonne && <box width={COL} flexShrink={0} flexDirection="column" paddingLeft={1} paddingRight={1} paddingTop={1}

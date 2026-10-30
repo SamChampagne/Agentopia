@@ -2,28 +2,23 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { Commande } from './commandes.js';
 import { Config, sauverConfig } from './config.js';
-import { lireHotes, enregistrerHote, clesDisponibles, HoteSsh } from './sshConfig.js';
+import { lireHotes, enregistrerHote, clesDisponibles } from './sshConfig.js';
 import { bureau } from './configCommandes.js';
 import { confirmer, saisir } from './ui/bus.js';
 import { c } from './theme.js';
+import { validerExportConfiguration, type ExportConfiguration } from './importConfiguration.js';
+import { listerProjets } from './projets.js';
 
 // Emporter sa configuration sur un autre poste : réglages, prompts, tâches planifiées, dossiers de projets,
 // serveurs SSH et connexions SFTP. Jamais de secret : ni jetons, ni mots de passe, ni clés privées.
-
-interface Export {
-    format: 'claudetopia-export';
-    version: 1;
-    date: string;
-    poste: string;
-    config: Partial<Config>;
-    ssh: HoteSsh[];
-}
 
 // Réglages copiés tels quels (les chemins et les secrets sont traités à part)
 const REGLAGES: (keyof Config)[] = ['banniere', 'prenom', 'theme', 'couleurs', 'notifications', 'prompts', 'lancement', 'fournisseurDefaut', 'equipe', 'maitre',
     'fetchAuto', 'sectionsMasquees', 'sectionsRepliees','cartesDetaillees', 'budgetJour', 'largeurLaterale', 'dockerDistant'];
 
 const nomDe = (chemin: string) => path.basename(chemin.replace(/[\\/]+$/, ''));
+const dossierPresent = (chemin: string) => { try { return fs.statSync(chemin).isDirectory(); } catch { return false; } };
+const cleChemin = (chemin: string) => process.platform === 'win32' ? path.resolve(chemin).toLowerCase() : path.resolve(chemin);
 
 export function commandesExport(config: Config): Commande[] {
     return [
@@ -31,7 +26,7 @@ export function commandesExport(config: Config): Commande[] {
             nom: 'exporter', groupe: 'Config',
             description: 'Exporter sa configuration (sans aucun secret) pour un autre poste',
             executer: async () => {
-                const donnees: Export = {
+                const donnees: ExportConfiguration = {
                     format: 'claudetopia-export', version: 1, date: new Date().toISOString(), poste: process.env.COMPUTERNAME ?? '',
                     config: {
                         ...Object.fromEntries(REGLAGES.map((k) => [k, config[k]])),
@@ -54,51 +49,56 @@ export function commandesExport(config: Config): Commande[] {
             description: 'Importer la configuration exportée d\'un autre poste',
             executer: async ({ reste }) => {
                 const fichier = (reste || await saisir('Fichier à importer', path.join(process.env.CLAUDETOPIA_DOSSIER_EXPORT ?? bureau(), 'claudetopia-export.json'))).trim().replace(/^"|"$/g, '');
-                let d: Export;
+                let lu: unknown;
                 try {
-                    d = JSON.parse(fs.readFileSync(fichier, 'utf-8'));
+                    lu = JSON.parse(fs.readFileSync(fichier, 'utf-8'));
                 } catch {
                     return console.log(c.erreur(`✕ Fichier illisible : ${fichier}`));
                 }
-                if (d.format !== 'claudetopia-export') return console.log(c.erreur('✕ Ce n\'est pas un export Agentopia'));
+                const d = validerExportConfiguration(lu);
                 const resume = `${Object.keys(d.config.prompts ?? {}).length} prompts, ${(d.config.planifications ?? []).length} tâche(s) planifiée(s), ${d.ssh.length} serveur(s) SSH, ${(d.config.sftp ?? []).length} connexion(s) SFTP`;
-                if (!await confirmer(`Importer la configuration de ${d.poste || 'l\'autre poste'} (${new Date(d.date).toLocaleDateString('fr-CA')}) : ${resume} ?`)) return;
+                const date = d.date && Number.isFinite(Date.parse(d.date)) ? ` (${new Date(d.date).toLocaleDateString('fr-CA')})` : '';
+                if (!await confirmer(`Importer la configuration de ${d.poste || 'l\'autre poste'}${date} : ${resume} ? Les tâches importées resteront en pause.`)) return;
 
                 const notes: string[] = [];
+                const candidate = structuredClone(config);
                 for (const k of REGLAGES) {
                     if (d.config[k] === undefined) continue;
                     // Les prompts s'ajoutent à ceux d'ici, le reste remplace
-                    if (k === 'prompts') config.prompts = { ...d.config.prompts, ...config.prompts };
-                    else (config as unknown as Record<string, unknown>)[k] = d.config[k];
+                    if (k === 'prompts') candidate.prompts = { ...d.config.prompts, ...config.prompts };
+                    else (candidate as unknown as Record<string, unknown>)[k] = d.config[k];
                 }
                 // Dossiers de projets : seulement ceux qui existent sur ce poste
-                const racines = (d.config.racines ?? []).filter((r) => fs.existsSync(r) && !config.racines.includes(r));
-                const extras = (d.config.extras ?? []).filter((r) => fs.existsSync(r) && !config.extras.includes(r));
-                config.racines.push(...racines);
-                config.extras.push(...extras);
-                const absents = [...(d.config.racines ?? []), ...(d.config.extras ?? [])].filter((r) => !fs.existsSync(r));
+                const racines = [...new Set(d.config.racines ?? [])].filter((r) => dossierPresent(r) && !config.racines.includes(r));
+                const extras = [...new Set(d.config.extras ?? [])].filter((r) => dossierPresent(r) && !config.extras.includes(r));
+                candidate.racines.push(...racines);
+                candidate.extras.push(...extras);
+                const absents = [...(d.config.racines ?? []), ...(d.config.extras ?? [])].filter((r) => !dossierPresent(r));
                 if (absents.length) notes.push(`${absents.length} dossier(s) de projets absent(s) ici (ignorés) : /scan pour chercher les projets de ce poste`);
 
                 // Tâches planifiées : le projet est retrouvé par son nom
-                const { getProjets, rafraichirProjets } = await import('./commandes.js');
-                rafraichirProjets();
-                const projets = getProjets();
+                const { rafraichirProjets } = await import('./commandes.js');
+                const projets = listerProjets(candidate);
                 for (const p of d.config.planifications ?? []) {
                     if ((config.planifications ?? []).some((x) => x.id === p.id)) continue;
-                    const ici = projets.find((x) => x.nom.toLowerCase() === nomDe(p.projet).toLowerCase());
-                    if (!ici) {
-                        notes.push(`tâche « ${p.nom} » ignorée : projet ${nomDe(p.projet)} absent de ce poste`);
+                    const exact = projets.find((x) => cleChemin(x.chemin) === cleChemin(p.projet));
+                    const correspondants = exact ? [exact] : projets.filter((x) => x.nom.toLowerCase() === nomDe(p.projet).toLowerCase());
+                    if (correspondants.length !== 1) {
+                        notes.push(`tâche « ${p.nom} » ignorée : projet ${nomDe(p.projet)} ${correspondants.length ? 'ambigu (plusieurs dossiers)' : 'absent de ce poste'}`);
                         continue;
                     }
-                    config.planifications = [...(config.planifications ?? []), { ...p, projet: ici.chemin }];
+                    candidate.planifications = [...(candidate.planifications ?? []), { ...p, projet: correspondants[0].chemin, actif: false }];
+                    notes.push(`tâche « ${p.nom} » importée en pause · /planifications pour la vérifier et l’activer`);
                 }
                 // SFTP : les connexions par mot de passe devront le ressaisir (il ne voyage pas)
                 for (const s of d.config.sftp ?? []) {
-                    if ((config.sftp ?? []).some((x) => x.nom === s.nom)) continue;
-                    config.sftp = [...(config.sftp ?? []), s];
+                    if ((candidate.sftp ?? []).some((x) => x.nom === s.nom)) continue;
+                    candidate.sftp = [...(candidate.sftp ?? []), s];
                     if (s.auth === 'motdepasse') notes.push(`SFTP « ${s.nom} » : ressaisis le mot de passe avec /sftp-modifier ${s.nom}`);
                 }
-                sauverConfig(config);
+                sauverConfig(candidate);
+                Object.assign(config, candidate);
+                rafraichirProjets();
 
                 // Serveurs SSH absents d'ici ; la clé, si une clé du même nom existe sur ce poste
                 const deja = new Set(lireHotes().map((h) => h.alias.toLowerCase()));
@@ -107,6 +107,7 @@ export function commandesExport(config: Config): Commande[] {
                 for (const h of d.ssh) {
                     if (deja.has(h.alias.toLowerCase())) continue;
                     enregistrerHote({ ...h, cle: h.cle ? cles.find((k) => path.basename(k) === h.cle) : undefined });
+                    deja.add(h.alias.toLowerCase());
                     ajoutes++;
                 }
                 console.log(c.succes(`✓ Configuration importée · ${racines.length + extras.length} dossier(s) de projets, ${ajoutes} serveur(s) SSH ajoutés`));

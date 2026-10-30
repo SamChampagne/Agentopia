@@ -44,7 +44,7 @@ La construction compile le code, vérifie les types TUI, copie uniquement les co
 
 Résultats dans `releases/<identifiant>/` : `Agentopia-Setup.exe`, `Agentopia-Windows-x64.zip`, `agentopia-release.json`, `SHA256SUMS.txt` et le dossier portable. Pour rendre `/maj` utilisable publiquement, publier ces quatre fichiers dans une Release du dépôt `SamChampagne/Agentopia`. Aucune publication automatique n’est effectuée par la construction.
 
-Le tag local `agentopia-1.0.0-baseline` conserve le point de départ avant le moteur indépendant et les missions de la version 1.1. La validation CI est définie dans `.github/workflows/validation.yml` ; elle s’exécutera sur GitHub après envoi de la branche. Le paquet embarque le moteur et ses workers dans `dist/`. Aucun service système n’est installé et aucune tâche planifiée n’est créée par l’installeur.
+Le tag local `agentopia-1.0.0-baseline` conserve le point de départ avant le moteur indépendant et les missions de la version 1.1. La validation CI est définie dans `.github/workflows/validation.yml` ; elle s’exécute sur les pushes et les PR. Le paquet embarque le moteur et ses workers dans `dist/`. Aucun service système n’est installé et aucune tâche planifiée n’est créée par l’installeur.
 
 La version 1.2 ajoute les équipes guidées, les modèles réutilisables, le bilan commun et la reprise dans la même branche. Fermer les anciennes fenêtres puis relancer Agentopia après installation. Le moteur précédent est remplacé au repos ; s’il travaille encore, laisser finir ou utiliser la pause globale avant de reprendre le moteur depuis Config. Les modèles restent dans le profil utilisateur lors d’une réparation ou d’un retour de version.
 
@@ -66,6 +66,8 @@ Pour publier : pousser un tag `agentopia-<version>-beta.<numéro>` correspondant
 La gestion du tour est séparée en `sessionWorker` (cycle de vie), `horlogeTravail` (budget actif), `demandesPermission` (file de réponses), `presentationPermission` (texte), `finEquipe` (parcours final) et `versionsDistribution` (sélection et validation des mises à jour). Ces responsabilités peuvent évoluer indépendamment des adaptateurs fournisseurs.
 
 ## Signature et SmartScreen
+
+Depuis la bêta 9, le lanceur installé reste identique entre versions et lit l’identifiant contrôlé dans `activation.json`. Le remplacement atomique de ce reçu est le seul point d’activation. La migration d’un ancien lanceur et l’échec d’activation sont testés, ainsi que le lancement réel avec des espaces et caractères particuliers dans le chemin. Le stockage des réglages conserve aussi une sauvegarde valide et une copie des données illisibles avant récupération ; `/diagnostic` indique le résultat.
 
 Le Setup actuel est non signé. SmartScreen peut donc afficher « Windows a protégé votre ordinateur » et « éditeur inconnu » avant toute fenêtre Agentopia. Le changement d’interface ne contourne pas cette protection. La distribution publique doit prévoir une signature Authenticode avec une identité d’éditeur vérifiée, ou une distribution via le Microsoft Store. Un certificat autosigné ne suffit pas, et une signature reconnue ne garantit pas immédiatement la disparition des avertissements : [documentation Microsoft](https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation).
 

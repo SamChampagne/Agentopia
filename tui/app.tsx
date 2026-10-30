@@ -22,6 +22,7 @@ import { Barre } from './barre.tsx';
 import { useBrouillon } from './brouillons.ts';
 import { destinationBrouillon } from '../dist/ui/brouillons.js';
 import { HistoriqueSaisie } from '../dist/ui/historiqueSaisie.js';
+import { retirerPiecesJointes, verifierPiecesJointes } from '../dist/ui/piecesJointes.js';
 import { contexteSaisie } from '../dist/ui/contexteSaisie.js';
 import { Journal } from './journal.tsx';
 import { QuelleTouche } from './quelleTouche.tsx';
@@ -47,7 +48,7 @@ import { executerLigne, trouverCommande, rafraichirProjets, getProjets, config, 
 import { CHEMINS } from '../dist/chemins.js';
 import { liens } from '../dist/notifications.js';
 import { imageDuPressePapiers, joindreImages, fichiersDeposes, EST_IMAGE } from '../dist/ui/pressePapiers.js';
-import { chargerConfig, chargerHistorique, ajouterHistorique, sauverConfig, premierLancement } from '../dist/config.js';
+import { chargerConfig, chargerHistorique, ajouterHistorique, sauverConfig, premierLancement, etatRecuperationConfig } from '../dist/config.js';
 import { theme, fond, couleurProjet, degrade, c } from '../dist/theme.js';
 
 // Texte non sélectionnable par défaut : un clic un peu glissé surlignait une partie du libellé cliqué.
@@ -306,6 +307,36 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     const ouvrirDetailRef = useRef(ouvrirDetail);
     ouvrirDetailRef.current = ouvrirDetail;
 
+    async function gererPieces() {
+        if (demandeRef.current || occupeRef.current) return;
+        const cible = destination;
+        const pieces = carnet.lire(cible).images;
+        if (!pieces.length) return void bus.emit('notice', 'Aucune pièce jointe dans ce brouillon · Alt+V pour ajouter une image.');
+        try {
+            const choix = await choisir('Pièces jointes du brouillon', [
+                ...pieces.map((fichier, i) => ({ label: `Retirer ${i + 1} · ${path.basename(fichier)}`, valeur: i, description: fichier })),
+                { label: 'Retirer toutes les pièces jointes', valeur: -1 },
+            ], pieces.length > 8, 'Le texte du message est conservé. Échap pour revenir sans modification.');
+            const actuel = carnet.lire(cible);
+            const indices = choix === -1 ? actuel.images.map((_, i) => i) : [actuel.images.indexOf(pieces[choix])];
+            carnet.ecrire(cible, retirerPiecesJointes(actuel, indices));
+            setCle((k) => k + 1);
+            bus.emit('notice', choix === -1 ? 'Pièces jointes retirées · texte conservé.' : 'Pièce jointe retirée · texte conservé.');
+        } catch (e) { if (!(e instanceof Annule)) bus.emit('notice', (e as Error).message); }
+    }
+
+    async function ouvrirListeSessions() {
+        if (!await fermerOuvert()) return void bus.emit('notice', 'Attends la fin de la commande en cours.');
+        try {
+            const id = await choisir('Sessions ouvertes', [
+                ...lireDonnees().agents.map((s: any) => ({ label: `${s.nom} · ${s.fournisseur ?? 'Claude'} · ${s.titre || s.id}`, valeur: s.cle })),
+                { label: '+ Nouvelle session', valeur: 'nouvelle-session' },
+            ], true);
+            if (id === 'nouvelle-session') void lancer('/session', true);
+            else setSelection(id);
+        } catch (e) { if (!(e instanceof Annule)) bus.emit('notice', (e as Error).message); }
+    }
+
     function soumettre(v: string) {
         if (recherche) return setOccurrence((o) => o + 1);
         // Le verrou est synchrone : deux touches Entrée peuvent arriver avant le prochain rendu React.
@@ -315,8 +346,12 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             bus.emit('notice', 'Écris dans le terminal Codex. Ferme Codex pour reprendre ici · brouillon conservé.');
             return;
         }
+        if (modeMaitre && images.length && !/^[/!]/.test(v.trim())) {
+            bus.emit('notice', 'Le maître reçoit du texte · Alt+I pour retirer les pièces jointes, ou envoie-les à une session.');
+            return;
+        }
         if (!modeMaitre && session?.fournisseur === 'perplexity' && images.length && !/^[/!]/.test(v.trim())) {
-            bus.emit('notice', 'Perplexity reçoit du texte et des liens web. Retire les pièces jointes locales avant l’envoi.');
+            bus.emit('notice', 'Perplexity reçoit du texte et des liens web · Alt+I pour retirer les pièces jointes.');
             return;
         }
         if (!modeMaitre && session?.integree && v.trim() && !/^[/!]/.test(v.trim()) && ['travaille', 'bloquee'].includes(session.statut)) {
@@ -336,6 +371,10 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         if (!v.trim() && session?.arrierePlan) return void lancer(`/rejoindre ${session.id}`, true);
         const ancien = { texte: v, images: [...images] };
         const estMessage = !/^[/!]/.test(v.trim());
+        if (estMessage) {
+            try { verifierPiecesJointes(images); }
+            catch (e) { bus.emit('notice', (e as Error).message); return; }
+        }
         const message = estMessage ? joindreImages(v.trim(), images) : v;
         remplacer('');
         if (estMessage) setImages([]);
@@ -346,7 +385,19 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             }
         };
         // Mode maître : le texte est une demande au maître (les commandes / et ! restent des commandes)
-        if (modeMaitre && v.trim() && !/^[/!]/.test(v.trim())) return void parlerAuMaitre(v.trim());
+        if (modeMaitre && v.trim() && estMessage) {
+            const cible = destination;
+            void parlerAuMaitre(v.trim()).catch((e) => {
+                if (!(e instanceof Annule)) console.log(c.erreur(`  ✕ ${(e as Error).message}`));
+                return false;
+            }).then((ok) => {
+                if (!ok) {
+                    carnet.restaurer(cible, ancien);
+                    bus.emit('notice', 'Demande au maître non effectuée · brouillon restauré.');
+                }
+            });
+            return;
+        }
         // Une conversation est ouverte et ce n'est ni une commande ni du shell : le texte lui est envoyé
         if (session && v.trim() && !/^[/!]/.test(v.trim())) {
             console.log(`\n${c.accent('❯')} ${v.trim()} ${c.discret(`→ ${session.nom}`)}`);
@@ -409,30 +460,40 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         const verbe = nom === '/arreter' ? 'mettre en pause' : nom === '/fermer' ? 'fermer' : 'supprimer';
         return `${verbe} ${s ? `${s.nom} (${s.titre || s.id || 'onglet'})` : id}`;
     };
-    async function parlerAuMaitre(texte: string) {
-        if (etatMaitre().enCours) return void bus.emit('notice', '◈ le maître réfléchit encore : attends sa réponse');
-        const e = await demanderAuMaitre(texte, getProjets().map((p: any) => p.nom), session?.id ?? session?.sessionId);
+    async function parlerAuMaitre(texte: string): Promise<boolean> {
+        if (etatMaitre().enCours) return false;
+        let e;
+        try { e = await demanderAuMaitre(texte, getProjets().map((p: any) => p.nom), session?.id ?? session?.sessionId); }
+        catch (err) { console.log(c.erreur(`  ✕ ${(err as Error).message}`)); return false; }
         console.log(`\n${c.violet('◈')} ${texte}`);
-        if (e.erreur) return console.log(c.erreur(`  ✕ ${e.erreur}`));
+        if (e.erreur) { console.log(c.erreur(`  ✕ ${e.erreur}`)); return false; }
         console.log(`  ${e.reponse}`);
         if (e.plan) {
             try { await proposerPlan(e.plan); } catch (err) { if ((err as Error).name !== 'Annule') console.log(c.erreur((err as Error).message)); }
-            return;
+            return true;
         }
         const commandes: string[] = e.commandes ?? [];
         const destructrices = commandes.filter((x) => DESTRUCTRICES.has(x.split(/\s+/)[0]));
         if (destructrices.length && !(await confirmer(`◈ Le maître va ${destructrices.map(decrire).join(', ')} : d'accord ?`))) {
-            return console.log(c.discret('  annulé'));
+            console.log(c.discret('  annulé'));
+            return true;
         }
         for (const commande of commandes) {
             const avecOui = DESTRUCTRICES.has(commande.split(/\s+/)[0]) && !commande.includes('--oui') ? `${commande} --oui` : commande;
             await lancerRef.current(avecOui, true);
         }
+        return true;
     }
     // Préparation visuelle seulement, aucun appel à un modèle au démarrage.
     useEffect(() => {
         if (process.env.CLAUDETOPIA_TEST_UI) return;
         void prechauffer(getProjets().map((p: any) => p.nom));
+    }, []);
+    useEffect(() => {
+        const recuperation = etatRecuperationConfig();
+        if (!recuperation) return;
+        const t = setTimeout(() => bus.emit('notice', `${recuperation.message} · /diagnostic`), 0);
+        return () => clearTimeout(t);
     }, []);
 
     // ─── Reprendre là où on en était : la conversation ouverte ou la vue affichée ───
@@ -599,6 +660,8 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             return;
         }
         if (occupe) return;
+        if (alt && k.name === 'i' && !recherche) { k.preventDefault(); return void gererPieces(); }
+        if (alt && k.name === 'a' && session) { k.preventDefault(); return void ouvrirMenu(menuSession(session, () => undefined)); }
         if (k.ctrl && k.name === 'f' && session) {
             setRecherche(true);
             setOccurrence(0);
@@ -697,7 +760,8 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         return { texte: `↳ nouvelle conversation · ${nomAgentDefaut(config.fournisseurDefaut)} · ${path.basename(process.cwd())} · Ctrl+K pour tout le reste`, couleur: fond.discret };
     }
 
-    const colonneVisible = !pleinEcran && !focus && disp.laterale !== 'cachee';
+    const compact = width < 100;
+    const colonneVisible = !pleinEcran && !focus && disp.laterale !== 'cachee' && !(compact && session);
     // En mode focus, la barre du haut disparaît aussi : la zone principale commence à la première ligne
     const haut = focus ? 0 : 2;
     const lateral = !colonneVisible ? 0
@@ -708,12 +772,13 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     const nbSugg = Math.min(8, suggestions.length);
     const barreDansChat = !!session && !demande && !detail && !modeMaitre;
     const hauteurRaccourcis = quelleTouche !== undefined ? 2 + Math.ceil(Object.keys(noeudA(quelleTouche).enfants).length / 3) : 0;
-    const corps = height - haut - hauteurRaccourcis - (barreDansChat ? 0 : 4 + nbSugg);
+    const corps = height - haut - hauteurRaccourcis - (barreDansChat ? 0 : 4 + nbSugg + (!recherche && images.length ? 1 : 0));
     // Une seule saisie montée : mêmes brouillons, commandes et recherche dans les deux emplacements.
     const saisie = <>
         <Barre key={destination} valeur={valeur} cle={cle} setValeur={surSaisie} soumettre={soumettre} suggestions={recherche ? [] : suggestions} indexSugg={sugg}
             choisirSugg={(i) => (suggestions[i]?.executer ? (remplacer(''), void lancer(suggestions[i].texte)) : remplacer(suggestions[i].texte))}
             indication={indication()} actif={!demande && quelleTouche === undefined && (!session?.terminalExterne || recherche || modeMaitre)}
+            pieces={recherche ? [] : images} gererPieces={() => void gererPieces()}
             raisonPause={!demande && session?.terminalExterne && !recherche && !modeMaitre ? 'Lecture seule : cette conversation est ouverte dans le terminal Codex.' : undefined}
             placeholder={recherche ? 'Rechercher dans les messages · Entrée / ↑ ↓ pour parcourir' : barreDansChat ? `Écrire à ${session.fournisseur ?? 'Claude'} · Entrée pour envoyer` : undefined} maitre={modeMaitre} />
     </>;
@@ -731,9 +796,9 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     else if (session) {
         zone = (
             <box flexGrow={1} onMouseDown={(e: any) => droit(e) && ouvrirMenu(menuSession(session, () => undefined))}>
-                <Conversation key={session.cle} s={session} largeur={principal} cout={d.cout.parSession[session.sessionId]} agir={agir} position={disp.actions}
+                <Conversation key={session.cle} s={session} largeur={principal} cout={d.cout.parSession[session.sessionId]} agir={agir} position={compact ? 'cachees' : disp.actions}
                     recherche={recherche ? valeur.trim() : ''} occurrence={occurrence} surTrouvees={setTrouvees} diff={diffDirect} saisie={barreDansChat ? saisie : undefined}
-                    navigationActive={!modeMaitre && quelleTouche === undefined} />
+                    navigationActive={!modeMaitre && quelleTouche === undefined} compact={compact} menuActions={() => void ouvrirMenu(menuSession(session, () => undefined))} />
             </box>
         );
     } else if (vueZone === 'grille') zone = <Grille d={d} largeur={principal} hauteur={corps} tic={tic} ouvrir={setSelection} />;
@@ -778,12 +843,12 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         <box width={width} height={height} flexDirection="column" backgroundColor="#0c0c0c" onMouseMove={activite} onMouseDown={activite}>
             {!focus && <box height={1} flexShrink={0} flexDirection="row" onMouseDown={(e: any) => droit(e) && ouvrirMenu({ titre: 'Agentopia', articles: general(parler) })}>
                 <Ansi texte={degrade(' ✻ ' + (chargerConfig().banniere || 'AGENTOPIA').toUpperCase() + ' ')} />
-                {BOUTONS.map((b) => (
+                {(compact ? [{ label: 'Live', action: '/global' }, { label: 'Sessions', action: 'sessions-compactes' }, { label: 'Projets', action: '/projets' }, { label: '⋯', action: '/menu-principal' }] : BOUTONS).map((b) => (
                     <text key={b.action} onMouseOver={() => setSurvolHaut(b.action)} onMouseOut={() => setSurvolHaut(undefined)}
-                        onMouseDown={() => void ouvrirDepuisClic(b.action)}
+                        onMouseDown={() => b.action === 'sessions-compactes' ? void ouvrirListeSessions() : void ouvrirDepuisClic(b.action)}
                         fg={survolHaut === b.action ? fond.texte : fond.eteint} attributes={survolHaut === b.action ? GRAS : 0}>
                         {/* Icônes cachées (/ecran) : seulement les noms */}
-                        {`  ${disp.icones || b.label === '⋯' ? b.label : b.label.split(' ').slice(1).join(' ')} `}
+                        {`  ${compact || disp.icones || b.label === '⋯' ? b.label : b.label.split(' ').slice(1).join(' ')} `}
                     </text>
                 ))}
                 <box flexGrow={1} />

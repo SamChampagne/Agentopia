@@ -145,23 +145,24 @@ async function demanderProjet(message = 'Projet'): Promise<Projet> {
     const ordre = [...recents, ...projets.filter((p) => !recents.includes(p))];
     return choisir(message, ordre.map((p) => {
         const branche = brancheGit(p.chemin);
-        return { label: `${puce(p.nom)} ${p.nom}`, valeur: p, description: branche ? `⎇ ${branche}` : p.racine };
+        return { label: `${puce(p.nom)} ${p.nom}`, valeur: p, description: `${p.chemin}${branche ? ` · ⎇ ${branche}` : ''}` };
     }), true);
 }
 
-function resoudreProjet(cle: string): Projet | undefined {
+async function resoudreProjet(cle: string): Promise<Projet> {
     // "." = dossier courant
     if (cle === '.') return { nom: path.basename(process.cwd()), chemin: process.cwd(), racine: '(courant)' };
     // Chemin complet (utilisé par les boutons des cartes de session)
-    if (path.isAbsolute(cle) && fs.existsSync(cle)) return { nom: path.basename(cle), chemin: cle, racine: '(chemin)' };
+    if (path.isAbsolute(cle)) {
+        try { if (fs.statSync(cle).isDirectory()) return { nom: path.basename(cle), chemin: cle, racine: '(chemin)' }; } catch { /* Message explicite ci-dessous. */ }
+        throw new Error(`Dossier de projet introuvable ou inaccessible : ${cle}`);
+    }
     const trouve = trouverProjet(projets, cle);
     if (!trouve) {
-        console.log(c.erreur(`Aucun projet ne correspond à « ${cle} ».`));
-        return undefined;
+        throw new Error(`Aucun projet ne correspond à « ${cle} ». Ouvre /projets pour le choisir.`);
     }
     if (Array.isArray(trouve)) {
-        console.log(c.alerte(`Plusieurs projets correspondent à « ${cle} » : `) + trouve.map((p) => p.nom).join(', '));
-        return undefined;
+        return choisir(`Plusieurs projets correspondent à « ${cle} » · choisis le dossier`, trouve.map((p) => ({ label: p.nom, description: p.chemin, valeur: p })), true);
     }
     return trouve;
 }
@@ -459,7 +460,8 @@ export const COMMANDES: Commande[] = [
             const separation = args.indexOf('--');
             const noms = separation >= 0 ? args.slice(0, separation) : args;
             const consigne = separation >= 0 ? developperPrompts(args.slice(separation + 1).join(' ')) : '';
-            const cibles = noms.map(resoudreProjet).filter((p): p is Projet => !!p);
+            const cibles: Projet[] = [];
+            for (const nom of noms) cibles.push(await resoudreProjet(nom));
             if (!cibles.length) return console.log(c.alerte('Usage : /multi saniplan api-ipg -- @securite'));
             // Sans consigne : un onglet par projet ; avec : des sessions d'arrière-plan qui travaillent en parallèle
             for (const p of cibles) await lancerClaude(p, consigne || undefined, consigne ? 'fond' : 'onglet');
@@ -478,7 +480,7 @@ export const COMMANDES: Commande[] = [
             const avant = separation >= 0 ? args.slice(0, separation) : args;
             const objectif = separation >= 0 ? developperPrompts(args.slice(separation + 1).join(' ')) : '';
             const cle = avant[0] === 'nouvelle' ? avant[1] : avant[0];
-            const projet = cle ? resoudreProjet(cle) : await demanderProjet('Équipe sur quel projet ?');
+            const projet = cle ? await resoudreProjet(cle) : await demanderProjet('Équipe sur quel projet ?');
             if (projet) await COMMANDES.find((c) => c.nom === 'equipe-mixte')!.executer({ args: [], reste: objectif, apresProjet: objectif, projet });
         },
     },
@@ -496,7 +498,7 @@ export const COMMANDES: Commande[] = [
             if (avant[0] && equipeDe(avant[0])) return ouvrir(avant[0]);
             if (!avant.length && !objectif) return ouvrir();
             const cle = avant[0] === 'nouvelle' ? avant[1] : avant[0];
-            const projet = cle ? resoudreProjet(cle) : await demanderProjet('Équipe sur quel projet ?');
+            const projet = cle ? await resoudreProjet(cle) : await demanderProjet('Équipe sur quel projet ?');
             if (!projet) return;
             if (!objectif) {
                 const { MODELES_EQUIPE } = await import('./equipe.js');
@@ -643,7 +645,7 @@ export const COMMANDES: Commande[] = [
             // « defaut » : le premier terminal détecté (PowerShell 7 s'il est là)
             let t = args[0] === 'defaut' ? terminaux()[0] : args[0] ? terminal(args[0]) : undefined;
             const cle = t ? args.slice(1).join(' ') : args.join(' ');
-            const projet = cle ? resoudreProjet(cle) : undefined;
+            const projet = cle ? await resoudreProjet(cle) : undefined;
             if (cle && !projet) return;
             const dossier = projet?.chemin ?? process.cwd();
             t ??= await choisir(`Terminal dans ${path.basename(dossier)}`, terminaux().map((x) => ({ label: `❯ ${x.nom}`, valeur: x, description: x.exe })), false);
@@ -815,7 +817,7 @@ export const COMMANDES: Commande[] = [
         nom: 'pull', args: '[projet|all]', groupe: 'Git',
         description: 'git pull --ff-only',
         executer: async ({ args }) => {
-            const cibles = args[0] === 'all' ? projets.filter((p) => etatGit(p.chemin)) : [args[0] ? resoudreProjet(args[0]) : await demanderProjet()];
+            const cibles = args[0] === 'all' ? projets.filter((p) => etatGit(p.chemin)) : [args[0] ? await resoudreProjet(args[0]) : await demanderProjet()];
             for (const p of cibles) {
                 if (!p) continue;
                 console.log(`${puce(p.nom)} ${p.nom}`);
@@ -1046,7 +1048,7 @@ export async function executerLigne(ligne: string): Promise<void> {
             throw new Error(`Commande inconnue : ${premier}.${proches.length ? ` Essaie ${proches.join(', ')}.` : ' Ouvre /aide ou Ctrl+K.'} Aucun agent lancé.`);
         }
         // Même parcours que /session : choix explicite ou préférence, jamais de Claude implicite.
-        const ici = resoudreProjet('.')!;
+        const ici = await resoudreProjet('.');
         return COMMANDES.find((c) => c.nom === 'session')!.executer({ args: [], reste: texte, projet: ici, apresProjet: developperPrompts(texte) });
     }
     const reste = texte.slice(premier.length).trim();
@@ -1059,7 +1061,7 @@ export async function executerLigne(ligne: string): Promise<void> {
     let apresProjet = reste;
     if (cmd.projet) {
         if (args[0]) {
-            projet = resoudreProjet(args[0]);
+            projet = await resoudreProjet(args[0]);
             if (!projet) return;
             apresProjet = reste.slice(premierArg!.fin).trim();
         } else {

@@ -4,7 +4,7 @@ import { Box, Text, useInput } from 'ink';
 import { useTailleVue, useClicsVue, Separateur, Titre } from './Vues.js';
 import { bus } from './bus.js';
 import { compteClaude, CompteClaude, identiteGit, cheminRaccourci } from '../configCommandes.js';
-import { chargerConfig } from '../config.js';
+import { chargerConfig, etatRecuperationConfig } from '../config.js';
 import { jetonsConfigures } from '../jetons.js';
 import { nomPalette, theme, fond } from '../theme.js';
 import { FOURNISSEURS, nomAgentDefaut } from '../providers/types.js';
@@ -92,6 +92,7 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
 // Les réglages affichés, pour l'interface Ink comme pour la nouvelle (tui/)
 export function lignesConfig({ config, git, jetons, raccourci }: EtatConfig, claude?: CompteClaude): LigneConfig[] {
     return [
+        ...(etatRecuperationConfig() ? [{ type: 'reglage' as const, label: 'Réglages récupérés', valeur: etatRecuperationConfig()!.message, couleur: '#facc15', commande: '/diagnostic', aide: 'voir la sauvegarde' }] : []),
         { type: 'section', texte: 'COMPTES' },
         { type: 'reglage', label: 'Fournisseurs IA', valeur: Object.values(FOURNISSEURS).map((f) => f.nom).join(', '), commande: '/fournisseurs', aide: 'connecter et vérifier' },
         { type: 'reglage', label: '⚿ Connexions', valeur: 'tout voir et tout connecter au même endroit', couleur: theme.accent, commande: '/connexions', aide: 'ouvrir' },
