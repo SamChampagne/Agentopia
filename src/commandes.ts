@@ -957,8 +957,8 @@ export const COMMANDES: Commande[] = [
     // Config
     {
         nom: 'scan', args: '[filtre]', groupe: 'Config',
-        description: 'Scanner le poste : projets, doublons, serveurs SSH, outils',
-        executer: async ({ reste }) => { const { preparerPoste } = await import('./preparation.js'); await preparerPoste(config, { rescan: true, filtre: reste || undefined }); },
+        description: 'Rechercher de nouveaux projets ou revoir les projets ignorés',
+        executer: async ({ reste }) => { const { ouvrirPreparation } = await import('./preparation.js'); await ouvrirPreparation(config, { rescan: true, filtre: reste || undefined }); },
     },
     {
         nom: 'racine', args: 'add|rm <chemin>', groupe: 'Config',
@@ -999,6 +999,10 @@ export const COMMANDES: Commande[] = [
     { nom: 'aide', alias: ['help', '?'], groupe: 'Config', description: 'Cette aide', executer: afficherAide },
     { nom: 'clear', alias: ['cls'], groupe: 'Config', description: 'Vider le journal et revenir au cockpit', executer: () => { /* géré par l'interface */ } },
     { nom: 'sorties', groupe: 'Config', description: 'Voir le journal complet des commandes (Échap pour revenir)', executer: () => { /* géré par l'interface */ } },
+    { nom: 'avis', groupe: 'Config', description: 'Retrouver les avis et erreurs de ce lancement', executer: async () => {
+        const { ouvrirAvis } = await import('./ui/avis.js');
+        await ouvrirAvis();
+    } },
     { nom: 'exit', alias: ['quit', 'q'], groupe: 'Config', description: 'Quitter', executer: () => { /* géré par l'interface */ } },
 ];
 

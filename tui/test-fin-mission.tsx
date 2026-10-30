@@ -40,13 +40,15 @@ try {
     bus.emit('lancer', `/equipe ${e.id}`); await dessiner(); await dessiner();
     assert.match(ui.captureCharFrame(), /Relire \(b\)/); ui.mockInput.pressKey('b'); await dessiner(); await dessiner();
     assert.match(ui.captureCharFrame(), /Bilan de l’équipe/); assert.match(ui.captureCharFrame(), /Intégrer les branches retenues/);
-    ui.mockInput.pressArrow('down'); ui.mockInput.pressArrow('down'); ui.mockInput.pressEnter(); await dessiner();
+    assert.match(ui.captureCharFrame(), /Vérifier le projet/);
+    for (let i = 0; i < 4; i++) ui.mockInput.pressArrow('down');
+    ui.mockInput.pressEnter(); await dessiner();
     assert.match(ui.captureCharFrame(), /Changements de la branche/); assert.match(ui.captureCharFrame(), /resultat.txt/);
     ui.mockInput.pressEnter(); await dessiner(); assert.match(ui.captureCharFrame(), /Bilan de l’équipe/);
     assert.equal(git('branch', '--show-current').trim(), 'main');
     assert.equal(fs.readFileSync(path.join(dossier, 'resultat.txt'), 'utf8'), 'Avant\n', 'Relire ne fusionne pas');
     ui.resize(130, 36); await dessiner();
-    for (let i = 0; i < 4; i++) ui.mockInput.pressArrow('down');
+    for (let i = 0; i < 6; i++) ui.mockInput.pressArrow('down');
     ui.mockInput.pressEnter(); await dessiner(); assert.match(ui.captureCharFrame(), /branches non intégrées/);
     ui.mockInput.pressEnter(); await dessiner(); await dessiner();
     assert.equal(JSON.parse(fs.readFileSync(CHEMINS.equipes, 'utf8'))[0].archivee, true);

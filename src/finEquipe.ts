@@ -3,6 +3,7 @@ import { choisir, confirmer, bus } from './ui/bus.js';
 import { copier } from './lanceurs.js';
 import { bilanEquipe } from './equipeBilan.js';
 import { erreurSelectionIntegration } from './validationEquipe.js';
+import { consulterVerificationsEquipe, resumeVerificationEquipe, verifierEquipe } from './verificationEquipe.js';
 
 /** Les mêmes étapes servent au bilan et aux deux interfaces terminal. */
 export function suiteEquipe(e: Equipe) {
@@ -29,16 +30,23 @@ function retrouver(id: string) {
 export async function relireEquipe(id: string) {
     let avis = '';
     while (true) {
-        const e = retrouver(id), suite = suiteEquipe(e), bilan = bilanEquipe(e);
+        const e = retrouver(id), suite = suiteEquipe(e), bilan = `${bilanEquipe(e)}\n\n${await resumeVerificationEquipe(id)}`;
         const action = await choisir('Bilan de l’équipe', [
             { label: 'Retour à l’équipe', valeur: 'retour' },
             { label: 'Copier le bilan complet', valeur: 'copier' },
+            { label: 'Vérifier le projet · scripts existants', valeur: 'verifier' },
+            { label: 'Journaux des vérifications', valeur: 'verifications' },
             ...suite.branches.map((t) => ({ label: `Relire le diff · ${t.titre}${t.ecartee ? ' (écartée)' : ''}`, valeur: `diff:${t.id}` })),
             ...(suite.peutIntegrer ? [{ label: 'Intégrer les branches retenues', valeur: 'integrer' }] : []),
             ...(suite.reprise ? [{ label: 'Reprendre l’intégration · Actions', valeur: 'reprendre' }] : []),
             ...(suite.peutRanger ? [{ label: 'Ranger l’équipe', valeur: 'ranger' }] : []),
         ], false, `${avis ? `${avis}\n\n` : ''}${suite.instruction}\n\n${bilan}`);
         if (action === 'copier') { copier(bilan); bus.emit('notice', 'Bilan copié'); continue; }
+        if (action === 'verifier' || action === 'verifications') {
+            try { await (action === 'verifier' ? verifierEquipe(id) : consulterVerificationsEquipe(id)); avis = ''; }
+            catch (err) { avis = (err as Error).name === 'Annule' ? 'Vérification annulée.' : (err as Error).message; }
+            continue;
+        }
         if (action.startsWith('diff:')) {
             const t = retrouver(id).taches.find((t) => t.id === action.slice(5));
             const d = t && diffTache(id, t.id);

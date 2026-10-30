@@ -3,13 +3,15 @@ import { theme, fond } from '../dist/theme.js';
 
 // Saisie commune : dans le chat d'une session, ou au bas des autres vues.
 
-export function Barre({ valeur, cle, setValeur, soumettre, suggestions, indexSugg, choisirSugg, indication, actif, raisonPause, placeholder, pieces = [], gererPieces, maitre = false }: {
+export function Barre({ valeur, cle, setValeur, soumettre, suggestions, indexSugg, choisirSugg, indication, actif, raisonPause, placeholder, pieces = [], gererPieces, avis, maitre = false }: {
     valeur: string; cle: number; setValeur: (v: string) => void; soumettre: (v: string) => void;
     suggestions: any[]; indexSugg: number; choisirSugg: (i: number) => void;
     indication: { texte: string; couleur: string }; actif: boolean; raisonPause?: string; maitre?: boolean;
     placeholder?: string;
     pieces?: string[]; gererPieces?: () => void;
+    avis?: { nombre: number; actif: boolean; ouvrir: () => void };
 }) {
+    const libelleAvis = avis ? ` Avis${avis.nombre ? ` ${avis.nombre}` : ''} · Alt+N ` : '';
     return (
         <box flexShrink={0} flexDirection="column">
             {(actif ? suggestions : []).slice(0, 8).map((s, i) => (
@@ -21,7 +23,11 @@ export function Barre({ valeur, cle, setValeur, soumettre, suggestions, indexSug
             ))}
             {pieces.length > 0 && <text height={1} flexShrink={0} fg={theme.accent} truncate paddingLeft={1}
                 onMouseDown={() => actif && gererPieces?.()}>{`📎 ${pieces.length} pièce(s) jointe(s) · Alt+I gérer / retirer`}</text>}
-            <text height={1} flexShrink={0} fg={indication.couleur} truncate paddingLeft={1}>{` ${indication.texte}`}</text>
+            <box height={1} flexShrink={0} flexDirection="row">
+                <text width={0} flexGrow={1} flexShrink={1} minWidth={0} height={1} fg={indication.couleur} truncate paddingLeft={1}>{` ${indication.texte}`}</text>
+                {avis && <text width={libelleAvis.length} height={1} flexShrink={0} fg={!avis.actif ? fond.discret : avis.nombre ? theme.accent : fond.eteint}
+                    onMouseDown={() => avis.actif && avis.ouvrir()}>{libelleAvis}</text>}
+            </box>
             <box height={3} border borderStyle="rounded" borderColor={maitre ? '#a78bfa' : actif ? fond.bordure : fond.discret} flexDirection="row" paddingLeft={1}>
                 <text fg={!actif ? fond.discret : maitre ? '#a78bfa' : theme.primaire}>{!actif ? '· ' : maitre ? '◈ ' : '❯ '}</text>
                 {/* key : changer la valeur depuis le code (historique, suggestion) recrée le champ avec ce texte */}

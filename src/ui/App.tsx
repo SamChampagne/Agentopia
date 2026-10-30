@@ -6,7 +6,7 @@ import { destinationBrouillon } from './brouillons.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
 import TextInput from 'ink-text-input';
 import { bus, Demande, Annule, choisir, confirmer } from './bus.js';
@@ -44,7 +44,9 @@ import { serveursLateraux, miseLateraleDe, basculerRepli } from './sections.js';
 import { souris, Souris } from './terminal.js';
 import { quitterEcran } from './ecran.js';
 import { journal, lignesJournal, avecRetrait, vider } from './journal.js';
-import { imageDuPressePapiers, joindreImages, fichiersDeposes, EST_IMAGE } from './pressePapiers.js';
+import { joindreImages, fichiersDeposes, EST_IMAGE } from './pressePapiers.js';
+import { CollageImage } from './collageImage.js';
+import { historiqueAvis } from './avis.js';
 import { lateraleADroite, COL_ACTIONS, ActionSession } from './mise.js';
 import { disposition } from './disposition.js';
 import { calculerMise, miseLaterale, placerBoutons, placerBoutonsLignes, nbRangees, boutonRangee, boutonA, choisirLargeurLaterale, HAUT, CARTE, LATERAL_MIN } from './mise.js';
@@ -130,6 +132,9 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     const [recherche, setRecherche] = useState(false);
     const destinationSaisie = destinationBrouillon(selection, modeMaitre, recherche);
     const { texte: saisie, images, setTexte: setSaisie, setImages, carnet } = useBrouillon(destinationSaisie);
+    const [collage] = useState(() => new CollageImage(carnet));
+    const collageEnCours = useSyncExternalStore(collage.abonner, collage.lire);
+    useEffect(() => () => collage.fermer(), [collage]);
     const [cleSaisie, setCleSaisie] = useState(0);
     const [demande, setDemande] = useState<Demande>();
     const [tache, setTache] = useState<string>();
@@ -280,6 +285,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         bus.on('tache', surTache);
         let minuterieNotice: NodeJS.Timeout | undefined;
         const surNotice = (t: string) => {
+            historiqueAvis.ajouter(t);
             setNotice(t);
             clearTimeout(minuterieNotice);
             minuterieNotice = setTimeout(() => setNotice(undefined), 6000);
@@ -458,7 +464,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             ajouterHistorique(texte);
         }
         // Une commande ordinaire affiche son résultat dans le journal : on referme la session ouverte
-        if (!cmd?.cache) setSelection(undefined);
+        if (!cmd?.cache && cmd?.nom !== 'avis') setSelection(undefined);
         if (!silencieux) console.log(`\n${c.accent('❯')} ${ligne.trim() || c.discret('(menu)')}`);
         setDefilement(0);
         setOccupe(true);
@@ -469,7 +475,10 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             if (err instanceof Annule) {
                 if (!silencieux) console.log(c.discret('Annulé'));
             }
-            else console.log(c.erreur(`✗ ${(err as Error).message}`));
+            else {
+                historiqueAvis.ajouter(`Commande ${cmd?.nom ?? texte.split(' ')[0]} : ${(err as Error).message}`);
+                console.log(c.erreur(`✗ ${(err as Error).message}`));
+            }
             return false;
         } finally {
             rafraichirProjets();
@@ -505,6 +514,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
 
     function soumettre(valeur: string) {
         if (recherche) return setOccurrence((o) => o + 1);
+        if (collage.lire().destination === destinationSaisie && !/^[/!]/.test(valeur.trim())) return void bus.emit('notice', 'Ajout de l’image en cours · ton message est conservé.');
         if (session?.integree && valeur.trim() && !/^[/!]/.test(valeur.trim()) && (occupe || ['travaille', 'bloquee'].includes(session.statut))) {
             return void bus.emit('notice', 'L’agent travaille ou attend une réponse · brouillon conservé.');
         }
@@ -578,7 +588,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         if (etatMaitre().enCours) return void bus.emit('notice', '◈ le maître réfléchit encore : attends sa réponse');
         const e = await demanderAuMaitre(texte, getProjets().map((p) => p.nom), session?.id ?? session?.sessionId);
         console.log(`\n${c.violet('◈')} ${texte}`);
-        if (e.erreur) return console.log(c.erreur(`  ✕ ${e.erreur}`));
+        if (e.erreur) { historiqueAvis.ajouter(`Maître : ${e.erreur}`); return console.log(c.erreur(`  ✕ ${e.erreur}`)); }
         console.log(`  ${e.reponse}`);
         if (e.plan) {
             try { await proposerPlan(e.plan); } catch (err) { if ((err as Error).name !== 'Annule') console.log(c.erreur((err as Error).message)); }
@@ -976,16 +986,11 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             return setCtrlC(Date.now());
         }
         if (demande || occupe) return;
+        if (key.meta && input === 'n') return void lancer('/avis', false, true);
         // Alt+V : image du presse-papiers
-        if (key.meta && input === 'v') {
-            const chemin = imageDuPressePapiers();
-            if (!chemin) {
-                console.log(c.alerte('Pas d\'image dans le presse-papiers'));
-                return remplacer(saisie);
-            }
-            const n = images.length + 1;
-            setImages([...images, chemin]);
-            return remplacer(`${saisie}${saisie && !saisie.endsWith(' ') ? ' ' : ''}[image ${n}] `);
+        if (key.meta && input === 'v' && !recherche) {
+            if (collage.lire().destination) return void bus.emit('notice', 'Une image est déjà en cours d’ajout · attends sa fin.');
+            return void collage.coller(destinationSaisie, modeMaitre ? 'maître' : session?.nom ?? 'nouvelle conversation');
         }
         // Ctrl+F : chercher dans la conversation ouverte
         if (key.ctrl && input === 'f' && session) {
@@ -1132,7 +1137,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                 {!pleinEcran && m.lateral > 0 && aDroite && laterale}
             </Box>
             <Box height={1} flexShrink={0} paddingX={2} width={m.largeur} overflow="hidden">
-                {notice
+                {collageEnCours.destination === destinationSaisie ? <Text color={theme.accent}>Ajout de l’image en cours · tu peux continuer à écrire</Text> : notice
                     ? <Text color={notice.startsWith('✕') ? '#f87171' : notice.startsWith('!') ? '#fb923c' : '#4ade80'} wrap="truncate-end">{notice}</Text>
                     : !demande && !occupe && <Text color={destination().couleur} wrap="truncate-end">{destination().texte}</Text>}
             </Box>

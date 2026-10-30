@@ -32,11 +32,8 @@ export function commandesSessions(config: Config): Commande[] {
             arreterMaitre(); config.maitre.fournisseur = fournisseur; sauverConfig(config); await prechauffer([]);
         } },
         { nom: 'choisir-agents', groupe: 'Config', description: 'Ajouter ou changer les agents à préparer automatiquement', executer: async () => {
-            const { lirePreparation, preparerPoste } = await import('./preparation.js');
-            const { CHEMINS } = await import('./chemins.js');
-            const { ecrireAtomique } = await import('./sessionsIntegrees.js');
-            const etat = lirePreparation(); delete etat.selection; etat.ignores = []; etat.terminee = false;
-            ecrireAtomique(CHEMINS.preparation, etat); await preparerPoste(config);
+            const { revoirAgentsPreparation } = await import('./preparation.js');
+            await revoirAgentsPreparation(config, { tous: true });
         } },
         { nom: 'agent-defaut', groupe: 'Config', description: 'Agent des nouvelles conversations, ou choisir à chaque fois', executer: async () => {
             const fournisseur = await choisir<NonNullable<Config['fournisseurDefaut']>>('Agent des nouvelles conversations', [

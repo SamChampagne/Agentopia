@@ -69,7 +69,7 @@ test('le scan ajoute uniquement les nouveaux choix et préserve les projets exis
 test('seul un outil choisi manquant est installé, sans marquer une connexion en échec comme prête', async () => {
     const installations = [], c = config();
     const r = await preparerPoste(c, { fichier: fichier('installation') }, services({ choisirPlusieurs: async () => ['codex'], present: (outil) => outil === 'git' ? 'git.exe' : undefined,
-        installer: async (outil) => { installations.push(outil); }, verifier: async () => { throw new Error('Hors ligne'); },
+        choisir: async () => 'installer', installer: async (outil) => { installations.push(outil); }, verifier: async () => { throw new Error('Hors ligne'); },
     }));
     assert.deepEqual(installations, ['codex']); assert.equal(r.etats.codex.pret, false); assert.equal(r.terminee, false); assert.equal(c.fournisseurDefaut, 'choisir');
 });

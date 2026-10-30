@@ -5,7 +5,7 @@ import { preparationAReprendre } from '../dist/preparation.js';
 // Lancer : bun tui/app.tsx   (Ctrl+C pour quitter)
 import * as fs from 'fs';
 import * as path from 'path';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createCliRenderer, TextRenderable } from '@opentui/core';
 import { createRoot, extend, useKeyboard, useTerminalDimensions } from '@opentui/react';
 import { Ansi } from './ansi.tsx';
@@ -23,6 +23,8 @@ import { useBrouillon } from './brouillons.ts';
 import { destinationBrouillon } from '../dist/ui/brouillons.js';
 import { HistoriqueSaisie } from '../dist/ui/historiqueSaisie.js';
 import { retirerPiecesJointes, verifierPiecesJointes } from '../dist/ui/piecesJointes.js';
+import { CollageImage, type LireImage } from '../dist/ui/collageImage.js';
+import { historiqueAvis } from '../dist/ui/avis.js';
 import { contexteSaisie } from '../dist/ui/contexteSaisie.js';
 import { Journal } from './journal.tsx';
 import { QuelleTouche } from './quelleTouche.tsx';
@@ -47,7 +49,7 @@ import { calculerSuggestions, commandeSession } from '../dist/ui/saisie.js';
 import { executerLigne, trouverCommande, rafraichirProjets, getProjets, config, demarrerNotifications } from '../dist/commandes.js';
 import { CHEMINS } from '../dist/chemins.js';
 import { liens } from '../dist/notifications.js';
-import { imageDuPressePapiers, joindreImages, fichiersDeposes, EST_IMAGE } from '../dist/ui/pressePapiers.js';
+import { joindreImages, fichiersDeposes, EST_IMAGE } from '../dist/ui/pressePapiers.js';
 import { chargerConfig, chargerHistorique, ajouterHistorique, sauverConfig, premierLancement, etatRecuperationConfig } from '../dist/config.js';
 import { theme, fond, couleurProjet, degrade, c } from '../dist/theme.js';
 
@@ -98,7 +100,7 @@ const LATERAL_MIN = 28;
 
 // commandeInitiale : « sp commit saniplan » (lancée puis on quitte) · auDemarrage : l'assistant au premier lancement
 // accueil : l'écran d'accueil animé, quelques secondes au lancement
-export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }: { quitter: () => void; commandeInitiale?: string; auDemarrage?: string; accueil?: boolean }) {
+export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, lireImage }: { quitter: () => void; commandeInitiale?: string; auDemarrage?: string; accueil?: boolean; lireImage?: LireImage }) {
     const [splash, setSplash] = useState(accueil);
     useEffect(() => {
         if (!splash) return;
@@ -173,6 +175,10 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     const [recherche, setRecherche] = useState(false);
     const destination = destinationBrouillon(selection, modeMaitre, recherche);
     const { texte: valeur, images, setTexte: setValeurEtat, setImages, carnet } = useBrouillon(destination);
+    const [collage] = useState(() => new CollageImage(carnet, lireImage));
+    const collageEnCours = useSyncExternalStore(collage.abonner, collage.lire);
+    const avis = useSyncExternalStore(historiqueAvis.abonner, historiqueAvis.lire);
+    useEffect(() => () => collage.fermer(), [collage]);
     // Valeur réelle de la barre, à jour à chaque frappe : le clavier la lit (l'état React peut avoir une frappe de retard)
     const valeurRef = useRef('');
     valeurRef.current = valeur;
@@ -252,7 +258,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             ajouterHistorique(texte);
         }
         // Une commande ordinaire affiche son résultat dans le journal : on referme la conversation ouverte
-        if (!cmd?.cache) setSelection(undefined);
+        if (!cmd?.cache && cmd?.nom !== 'avis') setSelection(undefined);
         if (!silencieux) console.log(`\n${c.accent('❯')} ${ligne.trim() || c.discret('(menu)')}`);
         commandeCourante.current = texte.split(' ')[0] === '/ssh' && texte.split(' ')[1] === 'vue' ? texte : texte.split(' ').slice(0, 2).join(' ');
         occupeRef.current = true;
@@ -263,7 +269,10 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         } catch (err) {
             if (err instanceof Annule || (err as Error)?.name === 'Annule') {
                 if (!silencieux) console.log(c.discret('Annulé'));
-            } else console.log(c.erreur(`✗ ${(err as Error).message}`));
+            } else {
+                historiqueAvis.ajouter(`Commande ${cmd?.nom ?? texte.split(' ')[0]} : ${(err as Error).message}`);
+                console.log(c.erreur(`✗ ${(err as Error).message}`));
+            }
             return false;
         } finally {
             if (!process.env.CLAUDETOPIA_TEST_UI) { rafraichirProjets(); rafraichirAgents(); }
@@ -339,6 +348,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
 
     function soumettre(v: string) {
         if (recherche) return setOccurrence((o) => o + 1);
+        if (collage.lire().destination === destination && !/^[/!]/.test(v.trim())) return void bus.emit('notice', 'Ajout de l’image en cours · ton message est conservé.');
         // Le verrou est synchrone : deux touches Entrée peuvent arriver avant le prochain rendu React.
         if (occupeRef.current) return void bus.emit('notice', 'Commande en cours · ton brouillon est conservé.');
         if (modeMaitre && etatMaitre().enCours && !/^[/!]/.test(v.trim())) return void bus.emit('notice', 'Le maître réfléchit encore · ton brouillon est conservé.');
@@ -388,7 +398,10 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         if (modeMaitre && v.trim() && estMessage) {
             const cible = destination;
             void parlerAuMaitre(v.trim()).catch((e) => {
-                if (!(e instanceof Annule)) console.log(c.erreur(`  ✕ ${(e as Error).message}`));
+                if (!(e instanceof Annule)) {
+                    historiqueAvis.ajouter(`Maître : ${(e as Error).message}`);
+                    console.log(c.erreur(`  ✕ ${(e as Error).message}`));
+                }
                 return false;
             }).then((ok) => {
                 if (!ok) {
@@ -464,9 +477,9 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         if (etatMaitre().enCours) return false;
         let e;
         try { e = await demanderAuMaitre(texte, getProjets().map((p: any) => p.nom), session?.id ?? session?.sessionId); }
-        catch (err) { console.log(c.erreur(`  ✕ ${(err as Error).message}`)); return false; }
+        catch (err) { historiqueAvis.ajouter(`Maître : ${(err as Error).message}`); console.log(c.erreur(`  ✕ ${(err as Error).message}`)); return false; }
         console.log(`\n${c.violet('◈')} ${texte}`);
-        if (e.erreur) { console.log(c.erreur(`  ✕ ${e.erreur}`)); return false; }
+        if (e.erreur) { historiqueAvis.ajouter(`Maître : ${e.erreur}`); console.log(c.erreur(`  ✕ ${e.erreur}`)); return false; }
         console.log(`  ${e.reponse}`);
         if (e.plan) {
             try { await proposerPlan(e.plan); } catch (err) { if ((err as Error).name !== 'Annule') console.log(c.erreur((err as Error).message)); }
@@ -578,6 +591,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         liens.on('demande', surLien);
         const surTache = (t?: string) => setTache(t);
         const surNotice = (t: string) => {
+            historiqueAvis.ajouter(t);
             setNotice(t);
             clearTimeout(minuterie);
             minuterie = setTimeout(() => setNotice(undefined), 6000);
@@ -660,6 +674,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             return;
         }
         if (occupe) return;
+        if (alt && k.name === 'n') { k.preventDefault(); return void lancer('/avis', true); }
         if (alt && k.name === 'i' && !recherche) { k.preventDefault(); return void gererPieces(); }
         if (alt && k.name === 'a' && session) { k.preventDefault(); return void ouvrirMenu(menuSession(session, () => undefined)); }
         if (k.ctrl && k.name === 'f' && session) {
@@ -673,11 +688,9 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         }
         // Alt+V : l'image du presse-papiers devient une pièce jointe
         if (alt && k.name === 'v' && !recherche) {
-            const chemin = imageDuPressePapiers();
-            if (!chemin) return void bus.emit('notice', 'Pas d\'image dans le presse-papiers');
-            setImages([...images, chemin]);
-            const v = valeurRef.current;
-            return remplacer(`${v}${v && !v.endsWith(' ') ? ' ' : ''}[image ${images.length + 1}] `);
+            k.preventDefault();
+            if (collage.lire().destination) return void bus.emit('notice', 'Une image est déjà en cours d’ajout · attends sa fin.');
+            return void collage.coller(destination, modeMaitre ? 'maître' : session?.nom ?? 'nouvelle conversation');
         }
         if (alt && (k.name === 'left' || k.name === 'right')) return redimensionner(lateral + (k.name === 'right' ? 2 : -2), true);
         if (k.ctrl && k.name === 'k') return void lancer('/palette', true);
@@ -731,6 +744,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             return { texte: `⌕ chercher : ${t.length < 2 ? 'tape au moins 2 lettres' : trouvees ? `${(occurrence % trouvees) + 1}/${trouvees} · Entrée / ↑ ↓ parcourir` : 'aucun résultat'} · Échap fermer`, couleur: theme.secondaire };
         }
         if (tache) return { texte: `${SPINNER[tic % SPINNER.length]} ${tache}…`, couleur: theme.accent };
+        if (collageEnCours.destination === destination) return { texte: 'Ajout de l’image en cours · tu peux continuer à écrire', couleur: theme.accent };
         if (notice) return { texte: notice, couleur: theme.secondaire };
         if (occupe) return { texte: 'commande en cours…', couleur: 'gray' };
         const t = valeur.trim();
@@ -779,6 +793,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             choisirSugg={(i) => (suggestions[i]?.executer ? (remplacer(''), void lancer(suggestions[i].texte)) : remplacer(suggestions[i].texte))}
             indication={indication()} actif={!demande && quelleTouche === undefined && (!session?.terminalExterne || recherche || modeMaitre)}
             pieces={recherche ? [] : images} gererPieces={() => void gererPieces()}
+            avis={{ nombre: avis.filter((a) => !a.lu).length, actif: !demande && !occupe, ouvrir: () => void lancer('/avis', true) }}
             raisonPause={!demande && session?.terminalExterne && !recherche && !modeMaitre ? 'Lecture seule : cette conversation est ouverte dans le terminal Codex.' : undefined}
             placeholder={recherche ? 'Rechercher dans les messages · Entrée / ↑ ↓ pour parcourir' : barreDansChat ? `Écrire à ${session.fournisseur ?? 'Claude'} · Entrée pour envoyer` : undefined} maitre={modeMaitre} />
     </>;

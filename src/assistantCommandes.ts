@@ -19,10 +19,12 @@ export function commandesAssistant(config: Config): Commande[] {
         },
         {
             nom: 'preparer', alias: ['bienvenue', 'assistant'], groupe: 'Config',
-            description: 'Préparer le poste automatiquement, ou reprendre une étape interrompue',
-            executer: async () => {
-                const { preparerPoste } = await import('./preparation.js');
-                await preparerPoste(config);
+            args: '[projets|agents]', description: 'Préparer le poste, reprendre une étape ou revoir les choix reportés',
+            executer: async ({ reste }) => {
+                const { ouvrirPreparation } = await import('./preparation.js');
+                const action = reste.trim().toLowerCase();
+                if (action && action !== 'projets' && action !== 'agents') throw new Error('Utilise /preparer, /preparer projets ou /preparer agents.');
+                await ouvrirPreparation(config, { action: action === 'projets' || action === 'agents' ? action : undefined });
             },
         },
     ];
