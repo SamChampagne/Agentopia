@@ -186,11 +186,11 @@ Les anciens fichiers `~/.cli-perso*` sont repris automatiquement au premier lanc
 
 ## Validation de la bêta
 
-La version publiée a passé **97 tests Node**, **6 scénarios d’interface** et les contrôles du vrai Setup sur un Windows GitHub distinct du poste de développement : installation, mise à jour, réparation, retour arrière et conservation des données. Les téléchargements ont été vérifiés par SHA-256.
+La validation comprend **108 tests Node**, **7 scénarios d’interface** et les contrôles du vrai Setup sur un Windows GitHub distinct du poste de développement : installation, mise à jour, réparation, retour arrière et conservation des données. La publication automatique dépend de leur réussite. Les téléchargements sont vérifiés par SHA-256.
 
 Les fournisseurs sont simulés en CI. Un parcours Codex réel avec développement, revue et reprise d’intégration a aussi été testé sur la base 1.3.1 ; les parcours Claude et Perplexity restent à valider avec leurs comptes réels.
 
-[Résultat de la validation Windows](https://github.com/SamChampagne/Agentopia/actions/runs/40903567365)
+[Résultat de la validation Windows](https://github.com/SamChampagne/Agentopia/actions/runs/41095414913)
 
 ## Développement
 
