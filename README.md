@@ -4,21 +4,23 @@ Poste de pilotage pour travailler avec Claude, Codex, Perplexity et des **équip
 
 Dans une session, le champ de message se trouve directement sous le chat et reste visible pendant le défilement. Chaque conversation conserve son brouillon.
 
-**Nouveau en bêta 11** : dans **Équipes → Relire**, lance un script existant du projet et garde son résultat, son code de sortie et son journal. Les preuves deviennent périmées si le projet change. **Alt+N** retrouve les avis, **Alt+V** colle une image sans bloquer la saisie, et Config permet de revoir les choix reportés. [Guide pratique](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.11/docs/verifier-un-resultat.md).
+**Nouveau en bêta 12** : sessions et historiques mieux protégés contre les fichiers corrompus, lancements Windows durcis et contrôle renforcé des mises à jour. Une première connexion SFTP demande de vérifier l’empreinte du serveur avant d’envoyer les identifiants. [Audit de sécurité et limites](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.12/docs/audit-securite-2026-10-30.md).
 
-**Audit et stabilisation 1.4.0-beta.9** : relances ciblées, intégration vérifiée dans Git, récupération des réglages et activation Windows cohérente. **Alt+I** gère les pièces jointes ; les petites fenêtres adaptent le chat sans changer tes préférences. [Audit complet et prochaines priorités](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.11/docs/audit-stabilite-2026-10-30.md).
+**Bêta 11** : dans **Équipes → Relire**, lance un script existant du projet et garde son résultat, son code de sortie et son journal. Les preuves deviennent périmées si le projet change. **Alt+N** retrouve les avis, **Alt+V** colle une image sans bloquer la saisie, et Config permet de revoir les choix reportés. [Guide pratique](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.12/docs/verifier-un-resultat.md).
+
+**Audit et stabilisation 1.4.0-beta.9** : relances ciblées, intégration vérifiée dans Git, récupération des réglages et activation Windows cohérente. **Alt+I** gère les pièces jointes ; les petites fenêtres adaptent le chat sans changer tes préférences. [Audit complet et prochaines priorités](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.12/docs/audit-stabilite-2026-10-30.md).
 
 **Stabilisation des conversations** : les frappes rapides ne doublent plus les envois, les flèches de l’historique préservent le brouillon et la recherche possède sa propre navigation. **Pg↑ / Pg↓** parcourent les messages ; **Alt+Fin** ou le lien **Derniers messages** retrouve le direct sans interrompre la lecture d’un ancien passage.
 
-**[Télécharger Agentopia pour Windows](https://github.com/SamChampagne/Agentopia/releases/download/agentopia-1.4.0-beta.11/Agentopia-Setup.exe)** · [Notes de version et ZIP portable](https://github.com/SamChampagne/Agentopia/releases/tag/agentopia-1.4.0-beta.11)
+**[Télécharger Agentopia pour Windows](https://github.com/SamChampagne/Agentopia/releases/download/agentopia-1.4.0-beta.12/Agentopia-Setup.exe)** · [Notes de version et ZIP portable](https://github.com/SamChampagne/Agentopia/releases/tag/agentopia-1.4.0-beta.12)
 
-Version disponible : **1.4.0-beta.11 · Windows x64**. Cette page décrit la bêta publiée ; ses sources se trouvent actuellement sur la branche [codex/sessions-multi-agents](https://github.com/SamChampagne/Agentopia/tree/codex/sessions-multi-agents), avec la [revue du code dans la PR #1](https://github.com/SamChampagne/Agentopia/pull/1).
+Version disponible : **1.4.0-beta.12 · Windows x64**. Cette page décrit la bêta publiée ; ses sources se trouvent actuellement sur la branche [codex/sessions-multi-agents](https://github.com/SamChampagne/Agentopia/tree/codex/sessions-multi-agents), avec la [revue du code dans la PR #1](https://github.com/SamChampagne/Agentopia/pull/1).
 
-**Sessions intégrées Claude, Codex et Perplexity** : `+ Session` ou `/session`, configuration via `/fournisseurs`, collaboration via **Équipes → Nouvelle équipe**. [Connexion, utilisation et limites](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.11/docs/sessions-multi-agents.md).
+**Sessions intégrées Claude, Codex et Perplexity** : `+ Session` ou `/session`, configuration via `/fournisseurs`, collaboration via **Équipes → Nouvelle équipe**. [Connexion, utilisation et limites](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.12/docs/sessions-multi-agents.md).
 
 **Conversations Codex** : réponses et sorties de commandes progressives, outils lisibles avec détails (Alt+L), tableaux adaptés à la largeur et séparation entre les actions et le chat. **Ouvrir Codex** et **Codex à côté** (Alt+J) reprennent la même conversation dans le terminal ; Agentopia conserve le brouillon et reste en lecture seule jusqu’à la fermeture de Codex. Les mini-graphes turquoise des cartes ont été retirés.
 
-**Bêta 1.4** : attente utilisateur exclue de la limite de travail, permissions lisibles avec commande exacte, bilan **Relire (b) → Intégrer → Ranger**, et mises à jour adaptées au canal stable ou bêta. [Notes de version](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.11/docs/beta-1.4.md).
+**Bêta 1.4** : attente utilisateur exclue de la limite de travail, permissions lisibles avec commande exacte, bilan **Relire (b) → Intégrer → Ranger**, et mises à jour adaptées au canal stable ou bêta. [Notes de version](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.12/docs/beta-1.4.md).
 
 **Version 1.3.1** : récupération des verrous de session après plantage, protection contre deux workers exécutant le même tour et sauvegarde des équipes avant chaque écriture. Un fichier d’équipes illisible est signalé dans **Équipes → Récupérer les équipes** : la restauration conserve une copie du fichier abîmé et met le moteur en pause, sans relancer les tâches. Les conversations et branches restent en place.
 
@@ -32,13 +34,13 @@ Lancer **Agentopia.bat** depuis les sources, ou le raccourci **Agentopia** aprè
 
 ## Installation Windows
 
-Télécharger **[Agentopia-Setup.exe depuis la bêta 1.4](https://github.com/SamChampagne/Agentopia/releases/tag/agentopia-1.4.0-beta.11)**. Le paquet contient Node 24, Bun et les dépendances de l’interface. Le petit installateur ouvre une fenêtre de téléchargement avec les Mo reçus et le pourcentage, puis affiche la vérification et l’installation. Agentopia s’ouvre automatiquement quand tout est prêt. Une connexion Internet est nécessaire ; aucun terminal de compilation n’est requis. En cas d’échec, la fenêtre propose de réessayer et d’ouvrir le journal.
+Télécharger **[Agentopia-Setup.exe depuis la bêta 1.4](https://github.com/SamChampagne/Agentopia/releases/tag/agentopia-1.4.0-beta.12)**. Le paquet contient Node 24, Bun et les dépendances de l’interface. Le petit installateur ouvre une fenêtre de téléchargement avec les Mo reçus et le pourcentage, puis affiche la vérification et l’installation. Agentopia s’ouvre automatiquement quand tout est prêt. Une connexion Internet est nécessaire ; aucun terminal de compilation n’est requis. En cas d’échec, la fenêtre propose de réessayer et d’ouvrir le journal.
 
 **Windows affiche « éditeur inconnu » ?** La bêta n’est pas encore signée avec un certificat d’éditeur reconnu. La nouvelle fenêtre d’installation ne supprime pas l’avertissement SmartScreen, qui intervient avant le lancement. Une signature reconnue et la réputation de l’application sont des étapes distinctes de la distribution. [Explications Microsoft](https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation).
 
 Au premier lancement, choisis les projets et les agents à utiliser. Agentopia détecte les outils présents, propose les installations nécessaires et guide la connexion. Une interruption conserve les choix déjà faits. Le parcours reste accessible avec **Config → Préparer le poste** ; `/scan` recherche les projets sans préparer les agents.
 
-`/maj`, `/reparer` et `/retour-version` gèrent les installations Windows : téléchargement vérifié, réparation avec le paquet conservé et retour à la version précédente. Les données personnelles sont séparées du logiciel. [Détails de construction et de validation](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.11/docs/distribution-windows.md).
+`/maj`, `/reparer` et `/retour-version` gèrent les installations Windows : téléchargement vérifié, réparation avec le paquet conservé et retour à la version précédente. Les données personnelles sont séparées du logiciel. [Détails de construction et de validation](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.12/docs/distribution-windows.md).
 
 ## Installation depuis les sources
 
@@ -129,7 +131,7 @@ Vue **SSH** (bouton en haut) : se connecter, tester l'accès de Claude, **+ Ajou
 
 `/sftp` ouvre aussi des connexions **SFTP** configurées dans Agentopia (`/sftp-ajouter`), par clé ou par **mot de passe**
 (chiffré par Windows, seul ton compte peut le relire). Dans la vue Fichiers : ouvrir un fichier dans VS Code, télécharger,
-envoyer, créer un dossier, supprimer. L'empreinte d'un serveur est enregistrée à la 1re connexion : si elle change, la connexion est refusée.
+envoyer, créer un dossier, supprimer. À la première connexion, compare l’empreinte affichée avec celle fournie par l’administrateur du serveur, puis choisis **Accepter la clé (o)**. **Échap** annule ; Entrée n’accepte pas la clé. Si une empreinte connue change, la connexion est refusée. Un téléchargement conserve tout fichier local déjà présent au même emplacement.
 
 ## Sessions
 
@@ -197,7 +199,7 @@ Les anciens fichiers `~/.cli-perso*` sont repris automatiquement au premier lanc
 
 ## Validation de la bêta
 
-La validation comprend **163 tests Node**, **10 scénarios d’interface** et les contrôles du vrai Setup sur un Windows GitHub distinct du poste de développement : installation, mise à jour, réparation, retour arrière et conservation des données. La publication automatique dépend de leur réussite. Les téléchargements sont vérifiés par SHA-256.
+La validation comprend **203 tests Node**, **11 scénarios d’interface** et les contrôles du vrai Setup sur un Windows GitHub distinct du poste de développement : installation, mise à jour, réparation, retour arrière et conservation des données. La publication automatique dépend de leur réussite. Les téléchargements sont vérifiés par SHA-256.
 
 Les fournisseurs sont simulés en CI. Un parcours Codex réel avec développement, revue et reprise d’intégration a aussi été testé sur la base 1.3.1 ; les parcours Claude et Perplexity restent à valider avec leurs comptes réels.
 
