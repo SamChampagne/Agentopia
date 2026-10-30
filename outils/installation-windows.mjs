@@ -4,10 +4,25 @@ import os from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { setTimeout as attendre } from 'node:timers/promises';
 
 const ps = (s) => `'${s.replaceAll("'", "''")}'`;
 const dans = (racine, cible) => { const rel = path.relative(path.resolve(racine), path.resolve(cible)); return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel)); };
 export const sha256 = (f) => createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+
+// Windows peut garder un runtime ou une DLL verrouillés juste après le diagnostic.
+// On conserve le dossier vérifié et l'ancienne activation pendant les reprises.
+export async function renommerAvecReprise(source, cible, progression = () => {}, renommer = fs.renameSync, pause = attendre) {
+    for (let tentative = 0; ; tentative++) {
+        try { renommer(source, cible); return; }
+        catch (erreur) {
+            if (!['EPERM', 'EACCES', 'EBUSY'].includes(erreur.code)) throw erreur;
+            if (tentative === 14) throw new Error('Windows garde les fichiers d’installation verrouillés. La version actuelle est conservée ; ferme les fenêtres de réparation puis réessaie.', { cause: erreur });
+            if (tentative === 0) progression({ titre: 'Finalisation de l’installation', detail: 'Windows libère encore les fichiers · nouvelle tentative automatique…', pourcentage: null });
+            await pause(Math.min(200 * (tentative + 1), 1000));
+        }
+    }
+}
 const powershell = (script) => {
     const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(`$ErrorActionPreference='Stop'; ${script}`, 'utf16le').toString('base64')], { encoding: 'utf8', windowsHide: true, timeout: 180_000 });
     if (r.error || r.status !== 0) throw new Error(r.stderr?.trim() || r.error?.message || 'Opération Windows interrompue');
@@ -105,7 +120,7 @@ export async function installerArchive(archive, hashAttendu, options = {}) {
         if (!dans(destination, temporaire) || !dans(destination, cible)) throw new Error('Dossier de version invalide');
         fs.mkdirSync(path.dirname(cible), { recursive: true });
         if (fs.existsSync(cible)) verifierPaquet(cible);
-        else fs.renameSync(temporaire, cible);
+        else await renommerAvecReprise(temporaire, cible, progression);
         // Garder le paquet permet une réparation hors ligne, sans compiler ni télécharger Node/Bun.
         const cache = path.join(destination, 'paquets'); fs.mkdirSync(cache, { recursive: true });
         const zip = path.join(cache, `${manifeste.id}.zip`);
@@ -119,7 +134,13 @@ export async function installerArchive(archive, hashAttendu, options = {}) {
         return { destination, id };
     } finally {
         // Les deux chemins viennent uniquement du dossier choisi et d'un UUID local.
-        if (dans(destination, temporaire) && path.basename(temporaire).startsWith('.installation-')) fs.rmSync(temporaire, { recursive: true, force: true });
-        fs.rmSync(verrou, { force: true });
+        try {
+            if (dans(destination, temporaire) && path.basename(temporaire).startsWith('.installation-')) {
+                fs.rmSync(temporaire, { recursive: true, force: true, maxRetries: 8, retryDelay: 200 });
+            }
+        } catch (erreur) {
+            // Un nettoyage différé ne masque ni l'erreur d'installation ni son résultat.
+            console.warn(`Dossier temporaire conservé, Windows le verrouille encore : ${temporaire} (${erreur.code})`);
+        } finally { fs.rmSync(verrou, { force: true }); }
     }
 }
