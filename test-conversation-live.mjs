@@ -24,6 +24,40 @@ function session() {
     s.threadId = randomUUID(); sessions.sauverIntegree(s); return s;
 }
 
+test('historique remplacé : relit un fichier de même taille et survit à une indisponibilité temporaire', () => {
+    const f = path.join(racine, 'remplacement.jsonl');
+    const ligne = (texte) => JSON.stringify({ type: 'user', message: { content: texte } }) + '\n';
+    fs.writeFileSync(f, ligne('ancien'));
+    const avant = lireTranscript(f);
+    assert.equal(avant[0].texte, 'ancien');
+    const remplacement = `${f}.nouveau`;
+    fs.writeFileSync(remplacement, ligne('recent'));
+    fs.renameSync(remplacement, f);
+    const apres = lireTranscript(f);
+    assert.equal(apres[0].texte, 'recent');
+    fs.renameSync(f, remplacement);
+    assert.equal(lireTranscript(f), apres, 'garde le dernier historique lisible pendant le remplacement');
+    fs.renameSync(remplacement, f);
+    fs.appendFileSync(f, ligne('ajouté'));
+    assert.deepEqual(lireTranscript(f).map((m) => m.texte), ['recent', 'ajouté']);
+    fs.writeFileSync(f, ligne('change') + ligne('ajouté'));
+    const maintenant = Date.now() / 1000 + 1;
+    fs.utimesSync(f, maintenant, maintenant);
+    assert.deepEqual(lireTranscript(f).map((m) => m.texte), ['change', 'ajouté'], 'réécriture sur place de même taille');
+});
+
+test('écriture fragmentée : attend une ligne complète, y compris au milieu d’un caractère UTF-8', () => {
+    const f = path.join(racine, 'fragments.jsonl');
+    const contenu = Buffer.from(JSON.stringify({ type: 'user', message: { content: 'Réponse 🐈' } }) + '\n');
+    const coupure = contenu.indexOf(Buffer.from('🐈')) + 2;
+    fs.writeFileSync(f, contenu.subarray(0, coupure));
+    assert.equal(lireTranscript(f).length, 0);
+    fs.appendFileSync(f, contenu.subarray(coupure));
+    const lu = lireTranscript(f);
+    assert.equal(lu[0].texte, 'Réponse 🐈');
+    assert.equal(lireTranscript(f), lu, 'aucun rendu inutile sans nouveau message');
+});
+
 test('les fragments apparaissent avant la fin, puis remplacent le même message', async () => {
     const s = session();
     const flux = creerFluxCodex((e) => sessions.ajouterEvenement(s.id, 'tour', e));

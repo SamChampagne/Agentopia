@@ -43,6 +43,43 @@ try {
     bus.emit('selectionner', s.id); await dessiner(); await dessiner();
     await ui.mockInput.typeText('brouillon conservé'); await dessiner();
     assert.match(ui.captureCharFrame(), /brouillon conservé/);
+    assert.match(ui.captureCharFrame(), /Longue conversation · ligne 70/);
+    ui.mockInput.pressKey('\x1b[5~'); await dessiner();
+    assert.doesNotMatch(ui.captureCharFrame(), /Longue conversation · ligne 70/);
+    assert.match(ui.captureCharFrame(), /Derniers messages/);
+    assert.match(ui.captureCharFrame(), /brouillon conservé/);
+    // Un nouveau message ne déplace pas une lecture dans l'historique.
+    ajouterMessage(s.id, 'assistant', 'Dernière réponse en direct');
+    await new Promise((r) => setTimeout(r, 250)); await dessiner();
+    assert.doesNotMatch(ui.captureCharFrame(), /Dernière réponse en direct/);
+    ui.mockInput.pressKey('END', { meta: true }); await dessiner();
+    assert.match(ui.captureCharFrame(), /Dernière réponse en direct/);
+    assert.doesNotMatch(ui.captureCharFrame(), /Derniers messages/);
+    ui.mockInput.pressKey('HOME', { meta: true }); await dessiner();
+    assert.match(ui.captureCharFrame(), /Vérifie le projet/);
+    ui.mockInput.pressKey('\x1b[6~'); await dessiner();
+    assert.doesNotMatch(ui.captureCharFrame(), /Vérifie le projet/);
+    // Le clic sur le statut retrouve le direct, avec le même comportement que Alt+Fin.
+    await ui.mockMouse.click(85, 3); await dessiner();
+    assert.match(ui.captureCharFrame(), /Dernière réponse en direct/);
+    ui.mockInput.pressKey('f', { ctrl: true }); await dessiner();
+    await ui.mockInput.typeText('ligne 3'); await dessiner(); await dessiner();
+    assert.match(ui.captureCharFrame(), /1\/11/);
+    ui.mockInput.pressArrow('up'); await dessiner();
+    assert.match(ui.captureCharFrame(), /2\/11/);
+    ui.mockInput.pressArrow('down'); await dessiner();
+    assert.match(ui.captureCharFrame(), /1\/11/);
+    ui.mockInput.pressEscape(); await dessiner();
+    assert.match(ui.captureCharFrame(), /brouillon conservé/);
+    const autre = creerIntegree('codex', dossier, 'Seconde conversation');
+    ajouterMessage(autre.id, 'assistant', 'Conversation indépendante');
+    d.agents.push({ ...session, cle: autre.id, id: autre.id, sessionId: autre.id, fichier: path.join(dossierIntegre(autre.id), 'conversation.jsonl') });
+    bus.emit('selectionner', autre.id); await dessiner(); await dessiner();
+    assert.match(ui.captureCharFrame(), /Conversation indépendante/);
+    assert.doesNotMatch(ui.captureCharFrame(), /Longue conversation|brouillon conservé/);
+    bus.emit('selectionner', s.id); await dessiner(); await dessiner();
+    assert.match(ui.captureCharFrame(), /Dernière réponse en direct/);
+    assert.match(ui.captureCharFrame(), /brouillon conservé/);
     session.terminalExterne = true; session.statut = 'travaille'; bus.emit('notice', 'Terminal ouvert'); await dessiner();
     frame = ui.captureCharFrame(); assert.match(frame, /Lecture seule : cette conversation/);
     assert.doesNotMatch(frame, /[▁▂▃▄▅▆▇█]/);
@@ -71,7 +108,7 @@ try {
     const avant = commande.executer; const envois: string[][] = [];
     try {
         commande.executer = async (ctx: any) => { envois.push(ctx.args); };
-        ui.mockInput.pressEnter(); await dessiner(); await dessiner();
+        ui.mockInput.pressEnter(); ui.mockInput.pressEnter(); await dessiner(); await dessiner();
         assert.equal(envois.length, 1); assert.equal(envois[0][0], s.id);
         assert.match(envois[0].slice(1).join(' '), /brouillon conservé/);
     } finally { commande.executer = avant; }

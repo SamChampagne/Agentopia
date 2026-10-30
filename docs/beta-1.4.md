@@ -1,5 +1,9 @@
 # Agentopia 1.4 — bêta Windows
 
+La bêta **1.4.0-beta.7** stabilise les conversations : un double appui rapide sur Entrée ne déclenche plus deux envois ; parcourir l’historique avec ↑ ↓ conserve le brouillon, même lorsqu’une commande rappelée affiche des suggestions. La recherche utilise ses propres flèches et retrouve le message préparé à sa fermeture. Un historique remplacé ou temporairement inaccessible ne laisse plus une ancienne version figée ou un chat vide à l’écran.
+
+**Pg↑ / Pg↓** parcourent les échanges, **Alt+Début** rejoint leur début et **Alt+Fin** reprend le suivi des derniers messages. Lorsque la lecture est remontée, le lien **Derniers messages** propose le même retour au clic ; l’arrivée de texte ne déplace pas la lecture. Chaque changement de session ouvre sa propre conversation au dernier message. La disposition des écrans est conservée.
+
 La bêta **1.4.0-beta.6** place la saisie de chaque session directement sous ses messages, dans la colonne du chat. Le champ reste visible pendant le défilement et suit la disposition des actions. Les brouillons, la recherche, les suggestions et le verrouillage pendant une reprise dans le terminal Codex sont conservés.
 
 La bêta **1.4.0-beta.5** améliore les conversations : messages et sorties Codex progressifs, détails des outils (Alt+L), commandes lisibles, tableaux adaptés et séparation entre actions et chat. Les mini-graphes turquoise des cartes ont été retirés. **Ouvrir Codex** et **Codex à côté** reprennent la même conversation dans le terminal ; Agentopia garde le brouillon et reste en lecture seule jusqu’à la fermeture de Codex, puis relit l’historique. Le contrôle exclusif empêche deux tours concurrents.

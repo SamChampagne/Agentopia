@@ -10,6 +10,7 @@ const racine = fs.mkdtempSync(path.join(os.tmpdir(), 'agentopia-qol-'));
 process.env.CLAUDETOPIA_DATA_DIR = racine;
 fs.writeFileSync(path.join(racine, 'claudetopia.json'), JSON.stringify({ racines: [], extras: [], notifications: false, fetchAuto: false, maitre: { actif: false } }));
 const { CarnetBrouillons, destinationBrouillon } = await import('./dist/ui/brouillons.js');
+const { HistoriqueSaisie } = await import('./dist/ui/historiqueSaisie.js');
 const { argumentsCommande, citerArgument } = await import('./dist/ligneCommande.js');
 const { executerLigne, COMMANDES, config } = await import('./dist/commandes.js');
 const { bus } = await import('./dist/ui/bus.js');
@@ -23,6 +24,19 @@ const { guiderConnexion } = await import('./dist/providers/assistantConnexion.js
 const { chargerConfig, CHEMIN_CONFIG } = await import('./dist/config.js');
 const { migrerProfilTerminal, GUID_PROFIL } = await import('./dist/profilTerminal.js');
 after(() => fs.rmSync(racine, { recursive: true, force: true }));
+
+test('navigation historique : retrouve le brouillon, même après plusieurs commandes et une édition', () => {
+    const n = new HistoriqueSaisie();
+    assert.equal(n.parcourir('up', 'brouillon', []), 'brouillon');
+    assert.equal(n.parcourir('down', 'brouillon', ['récent', 'ancien']), 'brouillon');
+    assert.equal(n.parcourir('up', 'brouillon', ['récent', 'ancien']), 'récent');
+    assert.equal(n.parcourir('up', 'récent', ['récent', 'ancien']), 'ancien');
+    assert.equal(n.parcourir('down', 'ancien', ['récent', 'ancien']), 'récent');
+    assert.equal(n.parcourir('down', 'récent', ['récent', 'ancien']), 'brouillon');
+    n.reinitialiser();
+    assert.equal(n.parcourir('up', 'modifié', ['récent']), 'récent');
+    assert.equal(n.parcourir('down', 'récent', ['récent']), 'modifié');
+});
 
 test('renommage : ancienne bannière migrée, préférences et titre personnalisé préservés', () => {
     const avant = fs.readFileSync(CHEMIN_CONFIG, 'utf8');

@@ -10,6 +10,8 @@ process.env.CLAUDETOPIA_DATA_DIR = dossier;
 process.env.CLAUDETOPIA_SANS_REPRISE = '1';
 process.env.CLAUDETOPIA_TEST_UI = '1';
 fs.writeFileSync(path.join(dossier, 'claudetopia.json'), JSON.stringify({ banniere: 'CLAUDETOPIA', racines: [], extras: [], notifications: false, fetchAuto: false, maitre: { actif: false } }));
+const { ajouterHistorique } = await import('../dist/config.js');
+ajouterHistorique('/version');
 const { App } = await import('./app.tsx');
 const { lireDonnees } = await import('../dist/ui/donnees.js');
 const { bus } = await import('../dist/ui/bus.js');
@@ -58,8 +60,14 @@ try {
     assert.doesNotMatch(ui.captureCharFrame(), /brouillon alpha|1 pièce/);
     await ui.mockInput.typeText('brouillon beta'); await dessiner();
     assert.match(ui.captureCharFrame(), /brouillon beta/);
+    ui.mockInput.pressArrow('up'); await dessiner();
+    assert.match(ui.captureCharFrame(), /\/version/);
+    ui.mockInput.pressArrow('down'); await dessiner();
+    assert.match(ui.captureCharFrame(), /brouillon beta/, 'parcourir l’historique ne perd pas le message en préparation');
     ui.mockInput.pressKey('f', { ctrl: true }); await dessiner();
     await ui.mockInput.typeText('mot-recherche'); await dessiner();
+    ui.mockInput.pressArrow('up'); await dessiner();
+    assert.match(ui.captureCharFrame(), /mot-recherche/, 'les flèches de recherche ne rappellent pas une commande');
     ui.mockInput.pressEscape(); await dessiner();
     assert.match(ui.captureCharFrame(), /brouillon beta/); assert.doesNotMatch(ui.captureCharFrame(), /mot-recherche/);
     await choisir('session-a');
@@ -83,6 +91,12 @@ try {
         await choisir('session-a');
         bus.emit('notice', ''); await dessiner();
         assert.match(ui.captureCharFrame(), /brouillon alpha/); assert.match(ui.captureCharFrame(), /1 pièce/);
+    } finally { commandeEnvoi.executer = ancienEnvoi; }
+    // Un refus immédiat restaure aussi le champ déjà monté, sans quitter la session.
+    try {
+        commandeEnvoi.executer = async () => { throw new Error('Envoi immédiat refusé'); };
+        ui.mockInput.pressEnter(); await dessiner(); await dessiner();
+        assert.match(ui.captureCharFrame(), /brouillon alpha/, 'brouillon restauré dans le champ actif');
     } finally { commandeEnvoi.executer = ancienEnvoi; }
     root.render(<text>fermé</text>); await dessiner();
     const relu = new CarnetBrouillons(CHEMINS.brouillons);

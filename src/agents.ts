@@ -208,21 +208,27 @@ function lireLignes(fichier: string, debut: number, fin: number): { texte: strin
     }
 }
 
-// Lecture incrémentale : une session ouverte est relue chaque seconde, seules les lignes ajoutées depuis sont décodées
-const transcripts = new Map<string, { jusqua: number; messages: Message[] }>();
+// Seules les lignes complètes ajoutées sont décodées. L'identité et la date du fichier
+// distinguent un ajout d'un remplacement (import, réparation ou rotation d'historique).
+const transcripts = new Map<string, { jusqua: number; taille: number; modification: number; identite: string; messages: Message[] }>();
 const MESSAGES_MAX = 5000;
 
 // Les sessions commencent par un gros contexte (~450 Ko) : on lit assez loin pour garder le début de la conversation
 export function lireTranscript(fichier: string, octets = 2_000_000): Message[] {
     const cle = `${octets}|${fichier}`;
+    const connu = transcripts.get(cle);
     try {
-        const taille = fs.statSync(fichier).size;
-        const connu = transcripts.get(cle);
-        if (connu && taille >= connu.jusqua) {
+        const stat = fs.statSync(fichier);
+        const taille = stat.size, modification = stat.mtimeMs;
+        const identite = `${stat.dev}:${stat.ino}:${stat.birthtimeMs}`;
+        if (connu && identite === connu.identite && taille >= connu.taille
+            && (taille > connu.taille || modification === connu.modification)) {
             if (taille === connu.jusqua) return connu.messages;
             const { texte, jusqua } = lireLignes(fichier, connu.jusqua, taille);
             if (texte) connu.messages = fusionnerMessages(connu.messages, decoderTranscript(texte));
             connu.jusqua = jusqua;
+            connu.taille = taille;
+            connu.modification = modification;
             return connu.messages;
         }
         // Première lecture (ou fichier réécrit) : la fin seulement, sans la ligne coupée au début
@@ -231,10 +237,11 @@ export function lireTranscript(fichier: string, octets = 2_000_000): Message[] {
         if (debut > 0) texte = texte.slice(texte.indexOf('\n') + 1);
         if (transcripts.size > 60) transcripts.clear();
         const messages = fusionnerMessages([], decoderTranscript(texte));
-        transcripts.set(cle, { jusqua, messages });
+        transcripts.set(cle, { jusqua, taille, modification, identite, messages });
         return messages;
     } catch {
-        return [];
+        // Un fichier temporairement verrouillé ou absent ne fait pas disparaître le chat.
+        return connu?.messages ?? [];
     }
 }
 

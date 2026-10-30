@@ -91,6 +91,10 @@ Dans une session Codex intégrée, les fragments de réponse et les sorties de c
 
 Chaque conversation conserve son brouillon et ses pièces jointes, y compris après fermeture normale. La recherche Ctrl+F possède sa propre saisie ; Échap retrouve le message. Si un envoi échoue, son texte revient dans la conversation d’origine, même si une autre est ouverte. Les brouillons sont sauvegardés localement dans `~/.claudetopia-brouillons/` ; les recherches restent en mémoire. Les fichiers joints sont référencés par leur chemin, pas copiés.
 
+Les flèches ↑ ↓ de l’historique retrouvent le brouillon après les anciennes commandes. Dans la recherche, elles parcourent les résultats, sans rappeler de commande ni modifier le terme recherché. Les envois sont verrouillés dès le premier appui sur Entrée, avant le prochain rendu, pour éviter les doublons.
+
+**Pg↑ / Pg↓** font défiler les messages en gardant la saisie intacte. **Alt+Début** rejoint le début de l’historique chargé ; **Alt+Fin**, ou le lien **Derniers messages** affiché lorsqu’on remonte, retrouve la fin et le suivi automatique. Les nouveaux messages ne déplacent pas une lecture remontée. Changer de session ouvre son historique au dernier message. Un remplacement d’historique est détecté ; une indisponibilité temporaire conserve le dernier contenu lisible.
+
 Une commande `/...` inconnue affiche des suggestions sans démarrer d’agent. Les chemins avec espaces s’écrivent entre guillemets, par exemple `/codex "C:\Mes projets\Application"`. Les actions des cartes et la palette ajoutent ces guillemets automatiquement.
 
 Les choix, filtres, cases et champs sont propres à chaque dialogue. Les flèches, la frappe et Entrée peuvent s’enchaîner rapidement : la dernière sélection et le dernier texte sont ceux qui sont validés.

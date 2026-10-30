@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useKeyboard } from '@opentui/react';
 import { Ansi } from './ansi.tsx';
 import { GRAS } from './style.ts';
@@ -10,6 +10,7 @@ import { theme, fond, couleurProjet } from '../dist/theme.js';
 import { Boutons } from './vues/commun.tsx';
 import { DiffDirect } from './diffDirect.tsx';
 import { presenterPermission } from '../dist/presentationPermission.js';
+import { useNavigationConversation } from './navigationConversation.ts';
 
 // Conversation d'une session : ses actions à gauche (la description de celle survolée en dessous),
 // le texte à droite. Défilement natif à la molette, collé en bas : la fin suit en direct ; texte sélectionnable.
@@ -18,10 +19,11 @@ const COL = 24;
 
 // position (/ecran) : actions en colonne à gauche ou à droite, en rangée en haut, ou cachées (clic droit)
 // recherche (Ctrl+F) : les lignes qui contiennent le terme sont surlignées ; occurrence = laquelle montrer (la plus récente d'abord)
-export function Conversation({ s, largeur, cout, agir, position = 'gauche', recherche = '', occurrence = 0, surTrouvees, diff = true, saisie }: {
+export function Conversation({ s, largeur, cout, agir, position = 'gauche', recherche = '', occurrence = 0, surTrouvees, diff = true, saisie, navigationActive = true }: {
     s: any; largeur: number; cout?: number; agir: (action: string) => void; position?: string;
     recherche?: string; occurrence?: number; surTrouvees?: (n: number) => void; diff?: boolean;
     saisie?: ReactNode;
+    navigationActive?: boolean;
 }) {
     // lireTranscript relit seulement la fin ajoutée et rend le même tableau si rien n'a changé (pas de rendu inutile)
     const [messages, setMessages] = useState<any[]>(() => lireTranscript(s.fichier));
@@ -36,7 +38,7 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
     useKeyboard((k) => { if ((k.meta || k.option) && k.name === 'l') setDetails((v) => !v); });
     const lignes = useMemo(() => lignesTranscript(messages, largeur - (enColonne ? COL : 0) - 4, details), [messages, largeur, enColonne, details]);
     const [survol, setSurvol] = useState<string>();
-    const defilement = useRef<any>();
+    const { defilement, enHistorique, retourEnBas } = useNavigationConversation(navigationActive);
     const terme = recherche.length >= 2 ? recherche.toLowerCase() : '';
     const trouvees = useMemo(() => {
         if (!terme) return [];
@@ -55,7 +57,7 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
     const aide = actions.find((a: any) => a.action === survol)?.aide;
     return (
         <box flexGrow={1} flexShrink={1} minWidth={0} minHeight={0} flexDirection="column">
-            <box height={1} flexDirection="row" paddingLeft={1}>
+            <box height={1} flexShrink={0} flexDirection="row" paddingLeft={1}>
                 <text flexGrow={1} truncate>
                     <span fg={couleurProjet(s.nom)}>● </span>
                     <span fg={fond.texte} attributes={GRAS}>{s.nom}</span>
@@ -65,7 +67,8 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
             </box>
             {s.permission && <box paddingLeft={1} onMouseDown={() => agir('autorisation')}><text fg="#fb923c" wrapMode="word">{`! ${presenterPermission(s.permission).titre} · ${s.permission.commande || s.permission.titre} · clique ici pour répondre`}</text></box>}
             {s.erreur && <text fg="#facc15" wrapMode="word">{s.erreur}</text>}
-            {s.integree && <text fg={fond.eteint} paddingLeft={1}>{s.terminalExterne ? 'Terminal Codex ouvert · lecture seule ici jusqu’à sa fermeture' : s.statut === 'travaille' ? '● En direct · messages et sorties des outils' : s.statut === 'bloquee' ? '● En attente de ta réponse' : 'Conversation à jour'}</text>}
+            {(s.integree || enHistorique) && <text height={1} flexShrink={0} fg={enHistorique ? theme.accent : fond.eteint} paddingLeft={1} truncate
+                onMouseDown={() => enHistorique && retourEnBas()}>{enHistorique ? '↑ Historique · ↓ Derniers messages (Alt+Fin ou clic)' : s.terminalExterne ? 'Terminal Codex ouvert · lecture seule ici jusqu’à sa fermeture' : s.statut === 'travaille' ? '● En direct · messages et sorties des outils' : s.statut === 'bloquee' ? '● En attente de ta réponse' : 'Conversation à jour · Pg↑ Pg↓ parcourir'}</text>}
             {s.integree && !messages.length && <text fg={fond.discret} paddingLeft={1}>Écris ton premier message dans la barre ci-dessous.</text>}
             {position === 'haut' && <box paddingLeft={1} border={['bottom']} borderColor={fond.bordure}><Boutons boutons={actions} agir={executerAction} /></box>}
             <box flexGrow={1} flexShrink={1} minHeight={0} flexDirection={position === 'droite' ? 'row-reverse' : 'row'}>

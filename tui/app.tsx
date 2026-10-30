@@ -21,6 +21,7 @@ import { disposition } from '../dist/ui/disposition.js';
 import { Barre } from './barre.tsx';
 import { useBrouillon } from './brouillons.ts';
 import { destinationBrouillon } from '../dist/ui/brouillons.js';
+import { HistoriqueSaisie } from '../dist/ui/historiqueSaisie.js';
 import { contexteSaisie } from '../dist/ui/contexteSaisie.js';
 import { Journal } from './journal.tsx';
 import { QuelleTouche } from './quelleTouche.tsx';
@@ -180,7 +181,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     };
     const [cle, setCle] = useState(0);
     const [indexSugg, setIndexSugg] = useState(0);
-    const posHistorique = useRef(-1);
+    const historiqueSaisie = useRef(new HistoriqueSaisie());
     const [survolHaut, setSurvolHaut] = useState<string>();
     const [projets] = useState(() => getProjets());
     const [quelleTouche, setQuelleTouche] = useState<string>();
@@ -207,7 +208,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     // Images et fichiers joints (Alt+V, ou glissés dans la fenêtre) : envoyés avec le texte
     // Largeur de la colonne (0 = automatique) : Alt+←/→ ou glisser sa bordure, gardée dans la config
     const [largeurCol, setLargeurCol] = useState<number>(() => chargerConfig().largeurLaterale || 0);
-    useEffect(() => { setCle((k) => k + 1); setIndexSugg(0); posHistorique.current = -1; }, [destination]);
+    useEffect(() => { setCle((k) => k + 1); setIndexSugg(0); historiqueSaisie.current.reinitialiser(); }, [destination]);
     const glisse = useRef(false);
 
     // Une seule horloge : 800 ms si quelque chose s'anime, sinon 1 s (comme l'interface Ink)
@@ -220,10 +221,11 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
 
     const session = d.agents.find((a: any) => a.cle === selection);
     const libre = !demande && !occupe;
-    const suggestions = calculerSuggestions(valeur);
+    const suggestions = recherche ? [] : calculerSuggestions(valeur);
     const sugg = Math.min(indexSugg, Math.max(0, suggestions.length - 1));
 
     const remplacer = (texte: string) => {
+        historiqueSaisie.current.reinitialiser();
         setValeur(texte);
         setCle((k) => k + 1);
         setIndexSugg(0);
@@ -252,6 +254,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         if (!cmd?.cache) setSelection(undefined);
         if (!silencieux) console.log(`\n${c.accent('❯')} ${ligne.trim() || c.discret('(menu)')}`);
         commandeCourante.current = texte.split(' ')[0] === '/ssh' && texte.split(' ')[1] === 'vue' ? texte : texte.split(' ').slice(0, 2).join(' ');
+        occupeRef.current = true;
         setOccupe(true);
         try {
             await (silencieux ? executerLigne(texte) : avecRetrait(() => executerLigne(texte)));
@@ -263,6 +266,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             return false;
         } finally {
             if (!process.env.CLAUDETOPIA_TEST_UI) { rafraichirProjets(); rafraichirAgents(); }
+            occupeRef.current = false;
             setOccupe(false);
             if (!changement.current) figer(false);
             // Un résultat trop long pour « Dernières sorties » s'ouvre en entier (Échap ramène au cockpit)
@@ -304,15 +308,18 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
 
     function soumettre(v: string) {
         if (recherche) return setOccurrence((o) => o + 1);
+        // Le verrou est synchrone : deux touches Entrée peuvent arriver avant le prochain rendu React.
+        if (occupeRef.current) return void bus.emit('notice', 'Commande en cours · ton brouillon est conservé.');
+        if (modeMaitre && etatMaitre().enCours && !/^[/!]/.test(v.trim())) return void bus.emit('notice', 'Le maître réfléchit encore · ton brouillon est conservé.');
         if (session?.terminalExterne && !modeMaitre) {
             bus.emit('notice', 'Écris dans le terminal Codex. Ferme Codex pour reprendre ici · brouillon conservé.');
             return;
         }
-        if (session?.fournisseur === 'perplexity' && images.length && !/^[/!]/.test(v.trim())) {
+        if (!modeMaitre && session?.fournisseur === 'perplexity' && images.length && !/^[/!]/.test(v.trim())) {
             bus.emit('notice', 'Perplexity reçoit du texte et des liens web. Retire les pièces jointes locales avant l’envoi.');
             return;
         }
-        if (session?.integree && v.trim() && !/^[/!]/.test(v.trim()) && (occupe || ['travaille', 'bloquee'].includes(session.statut))) {
+        if (!modeMaitre && session?.integree && v.trim() && !/^[/!]/.test(v.trim()) && ['travaille', 'bloquee'].includes(session.statut)) {
             bus.emit('notice', session.permission ? 'Réponds à la demande de l’agent · ton brouillon est conservé' : 'L’agent travaille encore · ton brouillon est conservé');
             return;
         }
@@ -332,7 +339,6 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         const message = estMessage ? joindreImages(v.trim(), images) : v;
         remplacer('');
         if (estMessage) setImages([]);
-        posHistorique.current = -1;
         const envoyer = async (ligne: string, silencieux = false) => {
             if (await lancer(ligne, silencieux) === false) {
                 carnet.restaurer(destination, ancien);
@@ -351,6 +357,8 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
 
     // Un fichier glissé dans la fenêtre : son chemin est collé dans la barre, il devient une pièce jointe
     function surSaisie(v: string) {
+        historiqueSaisie.current.reinitialiser();
+        if (recherche) setOccurrence(0);
         const avant = valeurRef.current;
         const ajout = v.length > avant.length + 3 && v.startsWith(avant) ? v.slice(avant.length) : '';
         const fichiers = ajout && !recherche ? fichiersDeposes(ajout) : undefined;
@@ -596,8 +604,12 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             setOccurrence(0);
             return;
         }
+        if (recherche && (k.name === 'up' || k.name === 'down')) {
+            k.preventDefault();
+            return setOccurrence((o) => (o + (k.name === 'up' ? 1 : Math.max(1, trouvees) - 1)) % Math.max(1, trouvees));
+        }
         // Alt+V : l'image du presse-papiers devient une pièce jointe
-        if (alt && k.name === 'v') {
+        if (alt && k.name === 'v' && !recherche) {
             const chemin = imageDuPressePapiers();
             if (!chemin) return void bus.emit('notice', 'Pas d\'image dans le presse-papiers');
             setImages([...images, chemin]);
@@ -641,11 +653,9 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
         if (k.name === 'tab' && suggestions[sugg]) return remplacer(suggestions[sugg].texte);
         if (k.name === 'up' || k.name === 'down') {
             const sens = k.name === 'up' ? -1 : 1;
-            if (suggestions.length) return setIndexSugg(Math.max(0, Math.min(Math.min(8, suggestions.length) - 1, sugg + sens)));
+            if (suggestions.length && !historiqueSaisie.current.enCours) return setIndexSugg(Math.max(0, Math.min(Math.min(8, suggestions.length) - 1, sugg + sens)));
             // Historique : ↑ remonte, ↓ redescend
-            const p = Math.max(-1, Math.min(historique.length - 1, posHistorique.current - sens));
-            posHistorique.current = p;
-            setValeur(p < 0 ? '' : historique[p]);
+            setValeur(historiqueSaisie.current.parcourir(k.name, valeurRef.current, historique));
             setCle((x) => x + 1);
         }
     });
@@ -653,13 +663,14 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     function indication(): { texte: string; couleur: string } {
         const contexte = contexteSaisie(demande, vueActive, quelleTouche !== undefined);
         if (contexte) return { texte: contexte, couleur: theme.secondaire };
+        if (recherche) {
+            const t = valeur.trim();
+            return { texte: `⌕ chercher : ${t.length < 2 ? 'tape au moins 2 lettres' : trouvees ? `${(occurrence % trouvees) + 1}/${trouvees} · Entrée / ↑ ↓ parcourir` : 'aucun résultat'} · Échap fermer`, couleur: theme.secondaire };
+        }
         if (tache) return { texte: `${SPINNER[tic % SPINNER.length]} ${tache}…`, couleur: theme.accent };
         if (notice) return { texte: notice, couleur: theme.secondaire };
         if (occupe) return { texte: 'commande en cours…', couleur: 'gray' };
         const t = valeur.trim();
-        if (recherche) {
-            return { texte: `⌕ chercher dans la conversation : ${t.length < 2 ? 'tape au moins 2 lettres' : trouvees ? `${(occurrence % trouvees) + 1}/${trouvees} · Entrée = suivante` : 'aucun résultat'} · Échap fermer`, couleur: theme.secondaire };
-        }
         if (images.length && !t.startsWith('/')) return { texte: `${session ? `${session.fournisseur ?? 'Claude'} · ${session.nom} · ${session.titre || session.id}` : 'Nouvelle conversation'} · 📎 ${images.length} pièce(s) jointe(s)`, couleur: theme.accent };
         if (t.startsWith('/')) return { texte: 'commande du CLI', couleur: 'gray' };
         if (modeMaitre) {
@@ -704,7 +715,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
             choisirSugg={(i) => (suggestions[i]?.executer ? (remplacer(''), void lancer(suggestions[i].texte)) : remplacer(suggestions[i].texte))}
             indication={indication()} actif={!demande && quelleTouche === undefined && (!session?.terminalExterne || recherche || modeMaitre)}
             raisonPause={!demande && session?.terminalExterne && !recherche && !modeMaitre ? 'Lecture seule : cette conversation est ouverte dans le terminal Codex.' : undefined}
-            placeholder={barreDansChat ? `Écrire à ${session.fournisseur ?? 'Claude'} · Entrée pour envoyer` : undefined} maitre={modeMaitre} />
+            placeholder={recherche ? 'Rechercher dans les messages · Entrée / ↑ ↓ pour parcourir' : barreDansChat ? `Écrire à ${session.fournisseur ?? 'Claude'} · Entrée pour envoyer` : undefined} maitre={modeMaitre} />
     </>;
 
     let zone;
@@ -720,8 +731,9 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false }:
     else if (session) {
         zone = (
             <box flexGrow={1} onMouseDown={(e: any) => droit(e) && ouvrirMenu(menuSession(session, () => undefined))}>
-                <Conversation s={session} largeur={principal} cout={d.cout.parSession[session.sessionId]} agir={agir} position={disp.actions}
-                    recherche={recherche ? valeur.trim() : ''} occurrence={occurrence} surTrouvees={setTrouvees} diff={diffDirect} saisie={barreDansChat ? saisie : undefined} />
+                <Conversation key={session.cle} s={session} largeur={principal} cout={d.cout.parSession[session.sessionId]} agir={agir} position={disp.actions}
+                    recherche={recherche ? valeur.trim() : ''} occurrence={occurrence} surTrouvees={setTrouvees} diff={diffDirect} saisie={barreDansChat ? saisie : undefined}
+                    navigationActive={!modeMaitre && quelleTouche === undefined} />
             </box>
         );
     } else if (vueZone === 'grille') zone = <Grille d={d} largeur={principal} hauteur={corps} tic={tic} ouvrir={setSelection} />;
