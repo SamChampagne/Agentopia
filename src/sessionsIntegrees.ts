@@ -1,5 +1,4 @@
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -10,24 +9,20 @@ import { commencerUsage, sauverUsage } from './utilisation.js';
 import type { Fournisseur, SessionIntegree, ReponsePermission, EvenementAgent } from './providers/types.js';
 import { prendreVerrou, sousVerrou, processusVivant, demarragePoste } from './verrou.js';
 import { ecrireAtomique } from './stockageAtomique.js';
+import { RACINE_SESSIONS, estIdentifiantSession, dossierSession, fichierSession, lireEtatSession, sauverEtatSession,
+    estIdentifiantPermission, fichierReponsePermission, validerReponsePermission } from './stockageSessions.js';
 export { ecrireAtomique } from './stockageAtomique.js';
+export { RACINE_SESSIONS, fichierSession as fichierIntegre, lireEtatSession as lireIntegreeStrict } from './stockageSessions.js';
 
-export const RACINE_SESSIONS = path.resolve(process.env.CLAUDETOPIA_DATA_DIR || path.join(os.homedir(), '.claudetopia-agents'));
-export const estIntegree = (id: string) => /^ct-[0-9a-f-]{36}$/.test(id);
-export function dossierIntegre(id: string): string {
-    if (!estIntegree(id)) throw new Error('Identifiant de session invalide');
-    return path.join(RACINE_SESSIONS, id);
-}
+export const estIntegree = estIdentifiantSession;
+export const dossierIntegre = dossierSession;
 export function lireIntegree(id: string): SessionIntegree | undefined {
-    try { return JSON.parse(fs.readFileSync(path.join(dossierIntegre(id), 'etat.json'), 'utf8')); }
+    try { return lireEtatSession(id); }
     catch { return undefined; }
 }
-export function sauverIntegree(s: SessionIntegree): void {
-    s.maj = Date.now();
-    ecrireAtomique(path.join(dossierIntegre(s.id), 'etat.json'), s);
-}
-const operation = (id: string) => path.join(dossierIntegre(id), 'operation');
-const execution = (id: string) => path.join(dossierIntegre(id), 'execution');
+export const sauverIntegree = sauverEtatSession;
+const operation = (id: string) => fichierSession(id, 'operation');
+const execution = (id: string) => fichierSession(id, 'execution');
 const active = (s: SessionIntegree) => ['travaille', 'bloquee'].includes(s.etat);
 const DELAI_LANCEMENT = 120_000;
 
@@ -35,7 +30,7 @@ const DELAI_LANCEMENT = 120_000;
 // celui d'exécution protège aussi la fenêtre entre l'état final et le nettoyage.
 function recupererOrpheline(s: SessionIntegree): SessionIntegree {
     if (s.pid && processusVivant(s.pid, s.demarragePoste)) return s; // Compatibilité avec les anciens workers.
-    const verrou = path.join(dossierIntegre(s.id), 'verrou');
+    const verrou = fichierSession(s.id, 'verrou');
     let date = s.maj, proprietaire: { pid?: number; demarragePoste?: number } = {};
     try {
         date = fs.statSync(verrou).mtimeMs;
@@ -59,13 +54,13 @@ function recupererOrpheline(s: SessionIntegree): SessionIntegree {
 /** Le worker revendique son tour avant toute écriture ou appel au fournisseur. */
 export function prendreExecution(id: string, tour: string): { session: SessionIntegree; liberer: () => void } | undefined {
     return sousVerrou(operation(id), () => {
-        const s = lireIntegree(id);
+        const s = lireEtatSession(id);
         if (!s || s.tour !== tour || s.etat !== 'travaille' || (s.pid && processusVivant(s.pid, s.demarragePoste))) return;
         const liberer = prendreVerrou(execution(id));
         if (!liberer) return;
         try {
             s.pid = process.pid; s.demarragePoste = demarragePoste();
-            ecrireAtomique(path.join(dossierIntegre(id), 'verrou'), { tour, pid: process.pid, demarragePoste: s.demarragePoste });
+            ecrireAtomique(fichierSession(id, 'verrou'), { tour, pid: process.pid, demarragePoste: s.demarragePoste });
             sauverIntegree(s);
             return { session: s, liberer };
         } catch (e) { liberer(); throw e; }
@@ -73,28 +68,30 @@ export function prendreExecution(id: string, tour: string): { session: SessionIn
 }
 export function terminerExecution(s: SessionIntegree): void {
     sousVerrou(operation(s.id), () => {
-        if (lireIntegree(s.id)?.tour !== s.tour) return;
+        if (lireEtatSession(s.id)?.tour !== s.tour) return;
         sauverIntegree(s);
-        fs.rmSync(path.join(dossierIntegre(s.id), 'requete.json'), { force: true });
-        fs.rmSync(path.join(dossierIntegre(s.id), 'verrou'), { force: true });
+        fs.rmSync(fichierSession(s.id, 'requete.json'), { force: true });
+        fs.rmSync(fichierSession(s.id, 'verrou'), { force: true });
     });
 }
 export function listerIntegrees(avecArchives = false): SessionIntegree[] {
     try {
         return fs.readdirSync(RACINE_SESSIONS).filter(estIntegree).flatMap((id) => {
-            let s = lireIntegree(id);
-            if (!s || (!avecArchives && (s.archivee || fs.existsSync(path.join(dossierIntegre(id), 'archive'))))) return [];
-            if (!active(s) && !fs.existsSync(path.join(dossierIntegre(id), 'verrou'))) return [s];
-            // Une session défectueuse ne doit pas masquer toutes les autres.
             try {
-                const finOperation = prendreVerrou(operation(id));
-                if (finOperation) try {
-                    const finExecution = prendreVerrou(execution(id));
-                    if (finExecution) try { const actuelle = lireIntegree(id); if (actuelle) s = recupererOrpheline(actuelle); }
-                    finally { finExecution(); }
-                } finally { finOperation(); }
-            } catch { /* Lecture seule si le disque est temporairement indisponible. */ }
-            return [s];
+                let s = lireIntegree(id);
+                if (!s || (!avecArchives && (s.archivee || fs.existsSync(fichierSession(id, 'archive'))))) return [];
+                if (!active(s) && !fs.existsSync(fichierSession(id, 'verrou'))) return [s];
+                // Une session défectueuse ne doit pas masquer toutes les autres.
+                try {
+                    const finOperation = prendreVerrou(operation(id));
+                    if (finOperation) try {
+                        const finExecution = prendreVerrou(execution(id));
+                        if (finExecution) try { const actuelle = lireIntegree(id); if (actuelle) s = recupererOrpheline(actuelle); }
+                        finally { finExecution(); }
+                    } finally { finOperation(); }
+                } catch { /* Lecture seule si le disque est temporairement indisponible. */ }
+                return [s];
+            } catch { return []; } // Un lien ou fichier invalide ne masque pas les autres sessions.
         });
     } catch { return []; }
 }
@@ -110,14 +107,14 @@ export function ajouterMessage(id: string, role: 'user' | 'assistant' | 'outil',
     const content = role === 'user' ? texte : role === 'outil'
         ? [{ type: 'tool_use', name: texte, input: fichier ? { file_path: fichier } : {} }]
         : [{ type: 'text', text: texte }];
-    fs.appendFileSync(path.join(dossierIntegre(id), 'conversation.jsonl'), JSON.stringify({
+    fs.appendFileSync(fichierSession(id, 'conversation.jsonl'), JSON.stringify({
         type: role === 'user' ? 'user' : 'assistant', timestamp: new Date().toISOString(), message: { content },
     }) + '\n', { mode: 0o600 });
 }
 export function ajouterEvenement(id: string, tour: string, evenement: EvenementAgent): void {
     if (!evenement.id) return ajouterMessage(id, evenement.role, evenement.texte, evenement.fichier);
     const e = { ...evenement, id: `${tour}/${evenement.id}` };
-    fs.appendFileSync(path.join(dossierIntegre(id), 'conversation.jsonl'), JSON.stringify({ type: 'assistant',
+    fs.appendFileSync(fichierSession(id, 'conversation.jsonl'), JSON.stringify({ type: 'assistant',
         timestamp: new Date().toISOString(), agentopia: e,
         message: { content: e.role === 'assistant' ? [{ type: 'text', text: e.texte }] : e.fichiers?.length
             ? e.fichiers.map((f) => ({ type: 'tool_use', name: 'Edit', input: { file_path: f } }))
@@ -125,20 +122,20 @@ export function ajouterEvenement(id: string, tour: string, evenement: EvenementA
     }) + '\n', { mode: 0o600 });
 }
 export async function envoyerIntegree(id: string, prompt: string): Promise<void> {
-    let s = lireIntegree(id);
+    let s = lireEtatSession(id);
     if (!s) throw new Error('Session introuvable');
     if (!prompt.trim()) throw new Error('Le message est vide');
     const pret = disponibilite(s.fournisseur);
     if (!pret.pret) throw new Error(pret.texte);
-    const dossier = dossierIntegre(id);
-    if (fs.existsSync(path.join(dossier, 'archive'))) throw new Error('Cette session est archivée');
-    const verrou = path.join(dossier, 'verrou');
+    if (fs.existsSync(fichierSession(id, 'archive'))) throw new Error('Cette session est archivée');
+    const verrou = fichierSession(id, 'verrou');
     const lancement = sousVerrou(operation(id), () => {
         const finExecution = prendreVerrou(execution(id));
         if (!finExecution) throw new Error('Un tour est déjà en cours. Attends la réponse ou utilise Interrompre.');
         try {
-            s = lireIntegree(id);
+            s = lireEtatSession(id);
             if (!s) throw new Error('Session introuvable');
+            if (fs.existsSync(fichierSession(id, 'archive'))) throw new Error('Cette session est archivée');
             s = recupererOrpheline(s);
             if (active(s) || fs.existsSync(verrou)) throw new Error('Un tour est déjà en cours. Attends la réponse ou utilise Interrompre.');
             try {
@@ -147,8 +144,8 @@ export async function envoyerIntegree(id: string, prompt: string): Promise<void>
                 s.permission = undefined; s.resultat = undefined; s.pid = undefined; s.demarragePoste = undefined;
                 s.dernierPrompt = prompt; s.utilisation = undefined; s.bilan = undefined; s.recuUsage = undefined;
                 s.recuUsage = commencerUsage(s.id, s.fournisseur);
-                fs.rmSync(path.join(dossier, 'arret'), { force: true });
-                ecrireAtomique(path.join(dossier, 'requete.json'), { tour: s.tour, prompt });
+                fs.rmSync(fichierSession(id, 'arret'), { force: true });
+                ecrireAtomique(fichierSession(id, 'requete.json'), { tour: s.tour, prompt });
                 sauverIntegree(s);
                 const node = surPath('node.exe') || surPath('node');
                 if (!node) throw new Error('Node.js est requis pour les sessions intégrées');
@@ -167,7 +164,7 @@ export async function envoyerIntegree(id: string, prompt: string): Promise<void>
     try { await lancement; }
     catch (e) {
         sousVerrou(operation(id), () => {
-            const actuelle = lireIntegree(id);
+            const actuelle = lireEtatSession(id);
             if (!actuelle || actuelle.tour !== s!.tour || actuelle.pid) return;
             actuelle.etat = 'erreur'; actuelle.issue = 'error'; actuelle.erreur = (e as Error).message;
             try { sauverIntegree(actuelle); if (actuelle.recuUsage) sauverUsage(actuelle.recuUsage, {}, 'error'); }
@@ -177,20 +174,24 @@ export async function envoyerIntegree(id: string, prompt: string): Promise<void>
     }
 }
 export function interrompreIntegree(id: string): void {
-    const s = lireIntegree(id);
-    if (s && ['travaille', 'bloquee'].includes(s.etat)) ecrireAtomique(path.join(dossierIntegre(id), 'arret'), { tour: s.tour });
+    const s = lireEtatSession(id);
+    if (s && ['travaille', 'bloquee'].includes(s.etat)) ecrireAtomique(fichierSession(id, 'arret'), { tour: s.tour });
 }
 export function archiverIntegree(id: string): void {
     interrompreIntegree(id);
     // Un marqueur indépendant évite d'écraser l'état que le worker est en train de sauver.
-    fs.writeFileSync(path.join(dossierIntegre(id), 'archive'), '');
+    fs.writeFileSync(fichierSession(id, 'archive'), '');
 }
 export function restaurerIntegree(id: string): void {
-    if (!lireIntegree(id)) throw new Error('Session introuvable');
-    fs.rmSync(path.join(dossierIntegre(id), 'archive'), { force: true });
+    if (!lireEtatSession(id)) throw new Error('Session introuvable');
+    fs.rmSync(fichierSession(id, 'archive'), { force: true });
 }
 export function repondrePermission(id: string, permissionId: string, reponse: ReponsePermission): void {
-    const s = lireIntegree(id);
-    if (!s?.permission || s.permission.id !== permissionId) throw new Error('Cette demande a expiré');
-    ecrireAtomique(path.join(dossierIntegre(id), `reponse-${permissionId}.json`), { tour: s.tour, ...reponse });
+    if (!estIdentifiantPermission(permissionId)) throw new Error('Identifiant de permission invalide');
+    const valeur = validerReponsePermission(reponse);
+    sousVerrou(operation(id), () => {
+        const s = lireEtatSession(id);
+        if (!s?.permission || s.etat !== 'bloquee' || s.permission.id !== permissionId) throw new Error('Cette demande a expiré');
+        ecrireAtomique(fichierReponsePermission(dossierIntegre(id), permissionId), { session: id, permission: permissionId, tour: s.tour, ...valeur });
+    });
 }

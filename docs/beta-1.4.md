@@ -1,5 +1,13 @@
 # Agentopia 1.4 — bêta Windows
 
+La bêta **1.4.0-beta.12** renforce la sécurité des sessions, des lancements Windows et de l’installation, tout en conservant les écrans actuels. [Audit détaillé, preuves et limites](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.12/docs/audit-securite-2026-10-30.md).
+
+- **Sessions** : les identités incohérentes, réponses de permission invalides et fichiers redirigés sont refusés. Un réimport Codex ne vide plus un historique dont l’état est corrompu ou absent.
+- **Windows** : fichiers, URL et chemins de terminal sont transmis comme arguments ; les lanceurs graphiques ne passent plus ces valeurs à cmd.exe. Les apostrophes typographiques sont traitées dans les chaînes PowerShell.
+- **SFTP** : un serveur inconnu demande une confirmation explicite de son empreinte avant l’authentification. Une clé connue qui change reste bloquée. Les noms de fichiers distants dangereux sont refusés et un téléchargement ne remplace pas un fichier local existant.
+- **Installation et mises à jour** : tailles bornées, extraction ZIP contrôlée, refus des jonctions et des collisions de chemins, vérification de la version réutilisée et des redirections de téléchargement.
+- **Structure du code** : règles communes pour le stockage des sessions, les invocations Windows, les téléchargements et la connexion SFTP des deux interfaces.
+
 La bêta **1.4.0-beta.11** ajoute un parcours de vérification dans **Équipes → Relire** : choisir un script réellement présent, lire la commande et le dossier, confirmer son exécution, puis consulter le résultat et son journal. Les preuves sont séparées des résumés des agents et deviennent périmées si le contenu du projet change. [Guide des vérifications et des améliorations de confort](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.11/docs/verifier-un-resultat.md).
 
 - **Avis et erreurs** : `/avis`, **Alt+N** ou le bouton près de la saisie permettent de retrouver le texte complet des 100 derniers messages du lancement, y compris les causes des échecs.

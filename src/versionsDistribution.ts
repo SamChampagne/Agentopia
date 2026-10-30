@@ -1,3 +1,5 @@
+import { obtenirDistribution, lireJsonDistribution } from './telechargementDistribution.js';
+
 export const DEPOT_DISTRIBUTION = 'SamChampagne/Agentopia';
 type Release = { tag_name: string; draft?: boolean; prerelease?: boolean; assets?: { name: string; browser_download_url: string }[] };
 function version(s: string) {
@@ -33,11 +35,9 @@ export function choisirRelease(releases: Release[], actuelle: string): Release |
     }).sort((a, b) => comparerVersions(b.tag_name.replace(/^agentopia-/, ''), a.tag_name.replace(/^agentopia-/, '')))[0];
 }
 export async function chercherMiseAJour(actuelle: string, obtenir: typeof fetch = fetch) {
-    const reponse = await obtenir(`https://api.github.com/repos/${DEPOT_DISTRIBUTION}/releases?per_page=100`, {
-        headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(20_000),
-    });
+    const reponse = await obtenirDistribution(`https://api.github.com/repos/${DEPOT_DISTRIBUTION}/releases?per_page=100`, obtenir);
     if (!reponse.ok) throw new Error('Vérification des mises à jour indisponible. Réessaie plus tard.');
-    const releases = await reponse.json();
+    const releases = await lireJsonDistribution(reponse, 4 * 1024 * 1024);
     if (!Array.isArray(releases)) throw new Error('Réponse de mise à jour invalide');
     const release = choisirRelease(releases, actuelle); if (!release) return;
     const prefixe = `https://github.com/${DEPOT_DISTRIBUTION}/releases/download/${release.tag_name}/`;
@@ -46,12 +46,14 @@ export async function chercherMiseAJour(actuelle: string, obtenir: typeof fetch 
         if (url !== prefixe + nom) throw new Error('Téléchargement Windows incompatible');
         return url;
     };
-    const mr = await obtenir(urlAsset('agentopia-release.json'), { signal: AbortSignal.timeout(20_000) });
+    const mr = await obtenirDistribution(urlAsset('agentopia-release.json'), obtenir);
     if (!mr.ok) throw new Error('Manifeste de mise à jour inaccessible');
-    const manifeste = await mr.json();
-    if (manifeste.format !== 'agentopia-release-v1' || manifeste.plateforme !== 'win32-x64'
+    const lu = await lireJsonDistribution(mr, 64 * 1024);
+    const manifeste = lu as Record<string, any>;
+    if (!manifeste || typeof manifeste !== 'object' || manifeste.format !== 'agentopia-release-v1' || manifeste.plateforme !== 'win32-x64'
         || manifeste.asset !== 'Agentopia-Windows-x64.zip' || typeof manifeste.id !== 'string'
-        || !/^[a-f0-9]{64}$/.test(manifeste.sha256) || manifeste.version !== release.tag_name.replace(/^agentopia-/, '')) {
+        || manifeste.id.length > 160 || !/^[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9_-])?$/.test(manifeste.id)
+        || typeof manifeste.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(manifeste.sha256) || manifeste.version !== release.tag_name.replace(/^agentopia-/, '')) {
         throw new Error('Manifeste de mise à jour invalide');
     }
     return { manifeste, url: urlAsset(manifeste.asset) };

@@ -1,12 +1,12 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
 import type { PermissionAgent, ReponsePermission } from './providers/types.js';
+import { fichierReponsePermission, validerReponsePermission } from './stockageSessions.js';
 
 /** Sérialise les demandes d'un tour, indépendamment du transport du fournisseur. */
 export function creerDemandesPermission(options: {
-    dossier: string; tour: string; signal: AbortSignal;
+    dossier: string; tour: string; signal: AbortSignal; session?: string;
     suspendre(): () => void;
     publier(permission?: PermissionAgent): void;
 }) {
@@ -21,13 +21,15 @@ export function creerDemandesPermission(options: {
             options.signal.throwIfAborted();
             const permission = { ...p, id: randomUUID() };
             options.publier(permission); publiee = true;
-            const fichier = path.join(options.dossier, `reponse-${permission.id}.json`);
             while (true) {
                 options.signal.throwIfAborted();
+                const fichier = fichierReponsePermission(options.dossier, permission.id);
                 if (fs.existsSync(fichier)) {
-                    const r = JSON.parse(fs.readFileSync(fichier, 'utf8'));
+                    if (fs.statSync(fichier).size > 1024 * 1024) throw new Error('Réponse de permission trop volumineuse');
+                    let r: any, valeur: ReponsePermission | undefined;
+                    try { r = JSON.parse(fs.readFileSync(fichier, 'utf8')); valeur = validerReponsePermission(r); } catch { /* Une réponse illisible n'accorde aucune permission. */ }
                     fs.rmSync(fichier, { force: true });
-                    if (r.tour === options.tour && typeof r.accepte === 'boolean') return r;
+                    if (valeur && r.tour === options.tour && (!options.session || r.session === options.session && r.permission === permission.id)) return valeur;
                 }
                 await pause(250, undefined, { signal: options.signal });
             }

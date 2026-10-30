@@ -51,9 +51,17 @@ export function commandesExport(config: Config): Commande[] {
                 const fichier = (reste || await saisir('Fichier à importer', path.join(process.env.CLAUDETOPIA_DOSSIER_EXPORT ?? bureau(), 'claudetopia-export.json'))).trim().replace(/^"|"$/g, '');
                 let lu: unknown;
                 try {
-                    lu = JSON.parse(fs.readFileSync(fichier, 'utf-8'));
+                    const fd = fs.openSync(fichier, 'r');
+                    try {
+                        const st = fs.fstatSync(fd);
+                        if (!st.isFile() || st.size > 4 * 1024 * 1024) throw new Error('Fichier d’import limité à 4 Mo');
+                        const contenu = Buffer.alloc(st.size + 1);
+                        const lus = fs.readSync(fd, contenu, 0, contenu.length, 0);
+                        if (lus > st.size) throw new Error('Le fichier d’import a changé pendant la lecture');
+                        lu = JSON.parse(contenu.subarray(0, lus).toString('utf8'));
+                    } finally { fs.closeSync(fd); }
                 } catch {
-                    return console.log(c.erreur(`✕ Fichier illisible : ${fichier}`));
+                    return console.log(c.erreur(`✕ Fichier illisible ou supérieur à 4 Mo : ${fichier}`));
                 }
                 const d = validerExportConfiguration(lu);
                 const resume = `${Object.keys(d.config.prompts ?? {}).length} prompts, ${(d.config.planifications ?? []).length} tâche(s) planifiée(s), ${d.ssh.length} serveur(s) SSH, ${(d.config.sftp ?? []).length} connexion(s) SFTP`;

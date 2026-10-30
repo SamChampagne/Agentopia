@@ -1,11 +1,11 @@
-import { spawn } from 'child_process';
 import type { Commande } from './commandes.js';
 import { AIDE_JETONS, Hebergeur, pageJeton, jetonsConfigures, enregistrerJeton, oublierJeton } from './jetons.js';
 import { OUTILS, DOCKER_DESKTOP, identiteJeton, oublierIdentite, remotesDuPoste, lirePressePapiers, viderPressePapiers, existe } from './connexions.js';
 import { assurerCle } from './sshConfig.js';
 import { lireSynchro } from './synchro.js';
 import { choisir, saisir, confirmer, afficherVue, tache } from './ui/bus.js';
-import { lancerDetache } from './lanceurs.js';
+import { lancerDetache, ouvrirUrlWeb, ouvrirFenetrePowerShell } from './lanceurs.js';
+import { scriptInstallationWinget } from './lancementsWindows.js';
 import { c } from './theme.js';
 
 // Tout connecter depuis l'application, en le moins d'étapes possible
@@ -17,10 +17,7 @@ const ressembleAUnJeton = (t: string) => t.length >= 20 && t.length <= 400 && !/
 
 // Programme d'installation dans une fenêtre PowerShell visible (winget peut demander une confirmation Windows)
 function installerAvecWinget(nom: string, id: string): void {
-    const script = `Write-Host 'Installation de ${nom}…' -ForegroundColor Cyan; `
-        + `winget install -e --id ${id} --accept-source-agreements --accept-package-agreements; `
-        + `Write-Host ''; Write-Host 'Terminé : ferme cette fenêtre. Relance Agentopia pour qu''il voie ${nom}.' -ForegroundColor Green`;
-    spawn('cmd.exe', ['/c', 'start', '""', 'powershell', '-NoExit', '-NoProfile', '-Command', script], { detached: true, stdio: 'ignore', windowsVerbatimArguments: false }).unref();
+    ouvrirFenetrePowerShell(scriptInstallationWinget(nom, id));
 }
 
 export function commandesConnexions(): Commande[] {
@@ -59,7 +56,7 @@ export function commandesConnexions(): Commande[] {
                     }
                 }
                 const remotes = remotesDuPoste();
-                lancerDetache('start', ['', pageJeton(site, remotes)]);
+                ouvrirUrlWeb(pageJeton(site, remotes));
                 console.log(c.discret(`Page ${site} ouverte dans le navigateur : ${AIDE_JETONS[site].consigne}, puis copie le jeton.`));
                 const comment = await choisir(`Jeton ${site}`, [
                     { label: '⎘ Je l\'ai copié : le prendre dans le presse-papiers', valeur: 'presse', description: 'rien à coller, le presse-papiers est vidé après' },

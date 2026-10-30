@@ -38,6 +38,18 @@ const importer = async (d, reponse = true) => {
     return demandes;
 };
 
+test('import : fichier supérieur à 4 Mo refusé avant confirmation, réglages conservés', async () => {
+    const fichier = path.join(racine, 'import-trop-grand.json');
+    fs.writeFileSync(fichier, Buffer.alloc(4 * 1024 * 1024 + 1, 32));
+    const avant = fs.readFileSync(CHEMIN_CONFIG, 'utf8');
+    let demandes = 0;
+    const observer = (d) => { if (d) { demandes++; d.resoudre(false); } };
+    bus.on('demande', observer);
+    try { await commandesExport(config).find((c) => c.nom === 'importer').executer({ reste: fichier }); }
+    finally { bus.off('demande', observer); }
+    assert.equal(demandes, 0); assert.equal(fs.readFileSync(CHEMIN_CONFIG, 'utf8'), avant);
+});
+
 test('scan : chemins répétés dédupliqués, fichiers/disques absents ignorés, homonymes conservés', () => {
     const projets = listerProjets(config);
     assert.deepEqual(projets.map((p) => p.chemin), [a, b]);

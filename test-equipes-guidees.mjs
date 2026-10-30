@@ -141,7 +141,7 @@ test('reprise : pause, dépendances actives, session active et erreur au démarr
 });
 test('bilan : résultats distincts des preuves, blocages et coûts cumulés de la session sur plusieurs jours', () => {
     const s = sessions.creerIntegree('codex', depot, 'Bilan');
-    s.bilan = { commandes: [{ commande: 'npm test', codeSortie: 1 }, { commande: 'verification interrompue' }], fichiers: [] }; sessions.sauverIntegree(s);
+    s.bilan = { commandes: [{ commande: 'npm test', codeSortie: 1 }, { commande: 'verification interrompue' }], fichiers: '' }; sessions.sauverIntegree(s);
     const a = commencerUsage(s.id, 'codex'), b = commencerUsage(s.id, 'codex');
     sauverUsage(a, { coutUSD: 0.5 }, 'success'); sauverUsage(b, {}, 'error');
     const f = path.join(CHEMINS.utilisation, `${a}.json`), recu = JSON.parse(fs.readFileSync(f, 'utf8'));

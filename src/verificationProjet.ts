@@ -6,6 +6,7 @@ import { CHEMINS, surPath } from './chemins.js';
 import { ecrireAtomique, lireIntegree } from './sessionsIntegrees.js';
 import { equipeDe, rechargerEquipes, type Equipe } from './equipe.js';
 import { prendreVerrou, processusVivant, demarragePoste } from './verrou.js';
+import { citerPowerShell } from './lancementsWindows.js';
 
 export const LIMITE_VERIFICATION_MS = 5 * 60_000;
 export const LIMITE_JOURNAL = 512 * 1024;
@@ -169,8 +170,7 @@ function surveillerSortieApplication(enfant: ChildProcess, confirmer: () => void
 
 export function invocationVerification(c: CommandeVerification): { programme: string; args: string[] } {
     if (process.platform !== 'win32' || /\.exe$/i.test(c.executable)) return { programme: c.executable, args: ['run', c.script] };
-    const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
-    const script = `& ${q(c.executable)} 'run' ${q(c.script)}; exit $LASTEXITCODE`;
+    const script = `& ${citerPowerShell(c.executable)} 'run' ${citerPowerShell(c.script)}; exit $LASTEXITCODE`;
     return { programme: path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
         args: ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')] };
 }

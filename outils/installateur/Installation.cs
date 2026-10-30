@@ -23,7 +23,7 @@ namespace Agentopia.Installation {
         public bool OuvrirApres { get { return !options.sansLancer; } }
         public Installation(Configuration config, Options options) {
             this.config = config; this.options = options;
-            if (config.taille <= 0 || config.sha256 == null || !System.Text.RegularExpressions.Regex.IsMatch(config.sha256, "^[a-f0-9]{64}$")) throw new Exception("Configuration de l’installateur invalide.");
+            if (config.taille <= 0 || config.taille > Paquet.ArchiveMax || config.sha256 == null || !System.Text.RegularExpressions.Regex.IsMatch(config.sha256, "^[a-f0-9]{64}$")) throw new Exception("Configuration de l’installateur invalide.");
             Journal = options.journal ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Agentopia", "installation", DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N") + ".log");
             Directory.CreateDirectory(Path.GetDirectoryName(Journal));
         }
@@ -49,14 +49,7 @@ namespace Agentopia.Installation {
                 token.ThrowIfCancellationRequested();
                 Signaler(progression, "installation", "Installation d’Agentopia", "Préparation des composants…", null, false);
                 // Extraire uniquement le moteur et les deux modules connus, après contrôle du ZIP.
-                using (var zip = ZipFile.OpenRead(archive)) {
-                    foreach (string nom in new[] { "runtime/node.exe", "outils/installation-windows.mjs", "outils/installer-worker.mjs" }) {
-                        var entrees = zip.Entries.Where(e => e.FullName.Replace('\\', '/') == nom).ToArray();
-                        if (entrees.Length != 1) throw new IOException("Composant d’installation manquant ou dupliqué : " + nom);
-                        string cible = Path.Combine(temporaire, nom.Replace('/', Path.DirectorySeparatorChar));
-                        Directory.CreateDirectory(Path.GetDirectoryName(cible)); entrees[0].ExtractToFile(cible);
-                    }
-                }
+                Paquet.ExtraireComposants(archive, temporaire);
                 string parametres = Path.Combine(temporaire, "options.json");
                 File.WriteAllText(parametres, new JavaScriptSerializer().Serialize(new { archive, hash = config.sha256, destination = options.destination, raccourci = !options.sansRaccourci, idAttendu = config.id, versionAttendue = config.version }), new UTF8Encoding(false));
                 string destination = await Installer(temporaire, parametres, progression);

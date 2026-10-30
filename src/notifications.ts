@@ -7,6 +7,7 @@ import { EventEmitter } from 'events';
 import { fileURLToPath } from 'url';
 import { sessionsActives } from './systeme.js';
 import { CHEMINS } from './chemins.js';
+import { citerPowerShell } from './lancementsWindows.js';
 
 // ─── Lien claudetopia: (clic sur une notification) ───────────────────────────
 // Enregistré pour ce compte Windows seulement (HKCU, sans droits admin) : il lance outils/protocole.vbs,
@@ -78,13 +79,14 @@ export function jouerSon(son: Son): void {
 }
 
 export function toast(titre: string, message: string, lien?: string, son: Son = 'fini'): void {
-    const echapper = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, "''");
+    const echapperXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const audio = sonsActifs() ? `<audio src="${SONS_TOAST[son]}"/>` : '<audio silent="true"/>';
+    const xml = `<toast${lien ? ` activationType="protocol" launch="${echapperXml(lien)}"` : ''}><visual><binding template="ToastGeneric"><text>${echapperXml(titre)}</text><text>${echapperXml(message)}</text></binding></visual>${audio}</toast>`;
     const script = `
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
 $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-$xml.LoadXml('<toast${lien ? ` activationType="protocol" launch="${echapper(lien)}"` : ''}><visual><binding template="ToastGeneric"><text>${echapper(titre)}</text><text>${echapper(message)}</text></binding></visual>${audio}</toast>')
+$xml.LoadXml(${citerPowerShell(xml)})
 $app = 'Microsoft.WindowsTerminal_8wekyb3d8bbwe!App'
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($app).Show([Windows.UI.Notifications.ToastNotification]::new($xml))
 `;

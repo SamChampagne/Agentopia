@@ -7,7 +7,7 @@ import { binaireCodex } from './providers/config.js';
 import { listerProjets } from './projets.js';
 import { chargerConfig } from './config.js';
 import { listerSessions } from './sessions.js';
-import { dossierIntegre, lireIntegree, ecrireAtomique, ajouterMessage, restaurerIntegree } from './sessionsIntegrees.js';
+import { dossierIntegre, fichierIntegre, lireIntegreeStrict, sauverIntegree, ecrireAtomique, ajouterMessage, restaurerIntegree } from './sessionsIntegrees.js';
 import type { SessionIntegree } from './providers/types.js';
 
 export interface ConversationNative { fournisseur: 'codex' | 'claude-cli'; id: string; titre: string; cwd: string; maj: number }
@@ -82,24 +82,26 @@ export async function importerCodex(c: ConversationNative, rpcFourni?: Pick<Code
     if (c.fournisseur !== 'codex' || !fs.statSync(c.cwd).isDirectory()) throw new Error('Le dossier de cette conversation n’est plus accessible');
     const hash = createHash('sha256').update(`${process.env.CODEX_HOME || ''}\n${c.id}`).digest('hex').slice(0, 32);
     const id = `ct-${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20)}`;
-    const existante = lireIntegree(id);
+    const existante = lireIntegreeStrict(id);
     if (existante) { restaurerIntegree(id); return existante; }
+    if (fs.existsSync(fichierIntegre(id, 'conversation.jsonl'))) throw new Error('Une conversation existe déjà sans état valide. Fichiers conservés ; restaure son état avant de réimporter.');
     const rpc = rpcFourni ?? new CodexRpc();
     try {
         if (!rpcFourni) await (rpc as CodexRpc).initialiser();
         const messages = await messagesCodex(c.id, rpc);
         const dossier = dossierIntegre(id); fs.mkdirSync(dossier, { recursive: true });
         // Verrou de création partagé entre fenêtres ; jamais de deuxième transcript identique.
-        const verrou = path.join(dossier, 'importation');
+        const verrou = fichierIntegre(id, 'importation');
         const fd = fs.openSync(verrou, 'wx'); fs.closeSync(fd);
         try {
-            if (lireIntegree(id)) return lireIntegree(id)!;
-            fs.writeFileSync(path.join(dossier, 'conversation.jsonl'), '');
+            const actuelle = lireIntegreeStrict(id); if (actuelle) return actuelle;
+            // Une reprise ne doit jamais vider un transcript dont l'état a disparu ou été abîmé.
+            fs.writeFileSync(fichierIntegre(id, 'conversation.jsonl'), '', { flag: 'wx', mode: 0o600 });
             for (const m of messages) ajouterMessage(id, m.role, m.texte);
             const s: SessionIntegree = { id, fournisseur: 'codex', cwd: c.cwd, titre: `${c.titre} · reprise`,
                 creee: Date.now(), maj: c.maj, tour: '', etat: 'attend', threadId: c.id,
                 origine: { threadId: c.id, fournisseur: 'codex', copieAuProchainMessage: true } };
-            ecrireAtomique(path.join(dossier, 'etat.json'), s); return s;
+            sauverIntegree(s); return s;
         } finally { fs.rmSync(verrou, { force: true }); }
     } finally { if (!rpcFourni) (rpc as CodexRpc).fermer(); }
 }

@@ -6,7 +6,7 @@ import { sha256 } from './installation-windows.mjs';
 import { construireInstallateur } from './construire-installateur.mjs';
 
 const racine = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ps = (s) => `'${s.replaceAll("'", "''")}'`;
+const ps = (s) => `'${s.replace(/['\u2018-\u201b]/g, (c) => c + c)}'`;
 function executer(programme, args, cwd = racine) {
     const r = spawnSync(programme, args, { cwd, encoding: 'utf8', windowsHide: true, shell: programme === 'npm', maxBuffer: 16_000_000, timeout: 300_000 });
     if (r.error || r.status !== 0) throw new Error(`${programme} : ${r.stderr || r.stdout || r.error?.message}`);

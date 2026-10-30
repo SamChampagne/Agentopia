@@ -1,7 +1,6 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { ajouterMessage, ajouterEvenement, dossierIntegre, sauverIntegree, prendreExecution, terminerExecution } from './sessionsIntegrees.js';
+import { ajouterMessage, ajouterEvenement, dossierIntegre, fichierIntegre, sauverIntegree, prendreExecution, terminerExecution } from './sessionsIntegrees.js';
 import type { ContexteAgent, SessionIntegree } from './providers/types.js';
 import { executerClaude } from './providers/claude.js';
 import { executerCodex } from './providers/codex.js';
@@ -20,7 +19,7 @@ export async function travailler(id: string, tour: string, executer?: (c: Contex
 }
 async function executerTour(s: SessionIntegree, executer?: (c: ContexteAgent) => Promise<string>): Promise<void> {
     const { id, tour } = s;
-    const dossier = dossierIntegre(id), fichier = (nom: string) => path.join(dossier, nom);
+    const dossier = dossierIntegre(id), fichier = (nom: string) => fichierIntegre(id, nom);
     const controller = new AbortController();
     let termine = false;
     s.pid = process.pid;
@@ -30,7 +29,7 @@ async function executerTour(s: SessionIntegree, executer?: (c: ContexteAgent) =>
     const minutes = Math.max(1, Math.min(180, chargerConfig().limitesAgents?.dureeMinutes || 60));
     let delaiAtteint = false;
     const horloge = new HorlogeTravail(minutes * 60_000, () => { delaiAtteint = true; controller.abort(); });
-    const demander = creerDemandesPermission({ dossier, tour, signal: controller.signal,
+    const demander = creerDemandesPermission({ dossier, tour, session: id, signal: controller.signal,
         suspendre: () => horloge.suspendre(),
         publier: (permission) => {
             if (termine) return;
@@ -46,12 +45,15 @@ async function executerTour(s: SessionIntegree, executer?: (c: ContexteAgent) =>
     const arreter = () => controller.abort();
     process.once('SIGTERM', arreter); process.once('SIGINT', arreter);
     try {
+        if (fs.statSync(fichier('requete.json')).size > 8 * 1024 * 1024) throw new Error('Requête trop volumineuse');
         const r = JSON.parse(fs.readFileSync(fichier('requete.json'), 'utf8'));
-        if (r.tour !== tour) throw new Error('Requête périmée');
+        if (!r || r.tour !== tour) throw new Error('Requête périmée');
+        if (typeof r.prompt !== 'string' || !r.prompt.trim()) throw new Error('Message de la requête invalide');
         const historique: ContexteAgent['historique'] = [];
         if (s.fournisseur === 'perplexity' && fs.existsSync(fichier('conversation.jsonl'))) {
             for (const l of fs.readFileSync(fichier('conversation.jsonl'), 'utf8').split('\n').filter(Boolean)) {
                 const m = JSON.parse(l);
+                if (!['user', 'assistant'].includes(m.type)) continue;
                 const texte = typeof m.message.content === 'string' ? m.message.content : m.message.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n');
                 if (texte) historique.push({ role: m.type, content: texte });
             }

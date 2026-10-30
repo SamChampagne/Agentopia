@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { randomUUID } from 'node:crypto';
+import { citerPowerShell } from '../lancementsWindows.js';
 
 const DOSSIER = path.join(os.tmpdir(), 'claudetopia-images');
 
@@ -19,7 +20,7 @@ export async function imageDuPressePapiers(options: {
     const script = `
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 $img = [Windows.Forms.Clipboard]::GetImage()
-if ($img) { $img.Save('${cible.replace(/'/g, "''")}', [Drawing.Imaging.ImageFormat]::Png); 'ok'; exit }
+if ($img) { $img.Save(${citerPowerShell(cible)}, [Drawing.Imaging.ImageFormat]::Png); 'ok'; exit }
 $f = [Windows.Forms.Clipboard]::GetFileDropList() | Where-Object { $_ -match '\\.(png|jpe?g|gif|webp|bmp)$' } | Select-Object -First 1
 if ($f) { "fichier:$f" }`;
     const executer = options.executer ?? ((args: string[], signal?: AbortSignal) => new Promise<string>((ok, ko) => {

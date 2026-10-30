@@ -18,6 +18,7 @@ import { surPath } from './chemins.js';
 import { maintenirInstallation, versionInstallation } from './miseAJour.js';
 import { cheminProfilTerminal, migrerProfilTerminal, GUID_PROFIL } from './profilTerminal.js';
 import { estDistribution } from './distribution.js';
+import { scriptRaccourciWindows } from './lancementsWindows.js';
 
 // Dossier du CLI (dist/ est un niveau sous la racine du projet)
 export const RACINE_CLI =path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -127,10 +128,7 @@ export function creerRaccourci(): { ok: boolean; message: string } {
     const [cible, args] = wt
         ? [wt, profil ? `-p "${GUID_PROFIL}"` : `-d "${RACINE_CLI}" --title "Agentopia" cmd /k "${lanceur}"`]
         : [path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe'), `/k "${lanceur}"`];
-    const echapper = (s: string) => s.replace(/'/g, "''");
-    const script = `$s = (New-Object -ComObject WScript.Shell).CreateShortcut('${echapper(cheminRaccourci())}');`
-        + `$s.TargetPath = '${echapper(cible)}'; $s.Arguments = '${echapper(args)}'; $s.WorkingDirectory = '${echapper(RACINE_CLI)}';`
-        + `$s.IconLocation = '${echapper(wt ? wt : cible)},0'; $s.Description = 'Agentopia : sessions et equipes multi-agents, projets, Git, Docker, SSH'; $s.Save()`;
+    const script = scriptRaccourciWindows(cheminRaccourci(), cible, args, RACINE_CLI, wt || cible);
     const res = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf-8' });
     return res.status === 0 && fs.existsSync(cheminRaccourci())
         ? { ok: true, message: `Raccourci créé : ${cheminRaccourci()}${wt ? ' (ouvre Windows Terminal)' : ''}` }

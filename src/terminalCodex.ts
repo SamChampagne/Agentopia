@@ -1,9 +1,8 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
-import { dossierIntegre, lireIntegree, sauverIntegree, ajouterMessage, ajouterEvenement, terminerExecution } from './sessionsIntegrees.js';
+import { fichierIntegre, lireIntegreeStrict, sauverIntegree, ajouterMessage, ajouterEvenement, terminerExecution } from './sessionsIntegrees.js';
 import { prendreVerrou, sousVerrou, demarragePoste } from './verrou.js';
 import { CodexRpc } from './providers/codexRpc.js';
 import { binaireCodex } from './providers/config.js';
@@ -14,7 +13,7 @@ import type { SessionIntegree } from './providers/types.js';
 
 export function verifierRepriseTerminal(s: SessionIntegree | undefined) {
     if (!s || s.fournisseur !== 'codex') throw new Error('Cette action demande une session Codex.');
-    if (s.archivee || fs.existsSync(path.join(dossierIntegre(s.id), 'archive'))) throw new Error('Cette session est archivée.');
+    if (s.archivee || fs.existsSync(fichierIntegre(s.id, 'archive'))) throw new Error('Cette session est archivée.');
     if (s.terminalExterne) throw new Error('Cette conversation est déjà ouverte dans un terminal Codex.');
     if (['travaille', 'bloquee'].includes(s.etat)) throw new Error('Attends la fin du tour, ou interromps-le, avant de reprendre dans le terminal.');
     if (!s.threadId || !/^[0-9a-f-]{36}$/i.test(s.threadId)) throw new Error('Envoie un premier message dans Agentopia pour créer la conversation Codex.');
@@ -22,7 +21,7 @@ export function verifierRepriseTerminal(s: SessionIntegree | undefined) {
     return s;
 }
 export async function ouvrirCodexTerminal(id: string, aCote = false) {
-    const s = verifierRepriseTerminal(lireIntegree(id));
+    const s = verifierRepriseTerminal(lireIntegreeStrict(id));
     if (!binaireCodex()) throw new Error('Codex CLI est introuvable · /fournisseurs codex');
     const node = surPath('node.exe') || surPath('node');
     if (!node) throw new Error('Node est introuvable pour ouvrir la session.');
@@ -46,15 +45,14 @@ export async function ouvrirCodexTerminal(id: string, aCote = false) {
 }
 type Services = { rpc?: Pick<CodexRpc, 'demander'>; lancer?: (s: SessionIntegree) => Promise<number> };
 export async function executerTerminalCodex(id: string, services: Services = {}) {
-    const dossier = dossierIntegre(id);
-    const { s, liberer } = sousVerrou(path.join(dossier, 'operation'), () => {
-        const s = verifierRepriseTerminal(lireIntegree(id));
-        const liberer = prendreVerrou(path.join(dossier, 'execution'));
+    const { s, liberer } = sousVerrou(fichierIntegre(id, 'operation'), () => {
+        const s = verifierRepriseTerminal(lireIntegreeStrict(id));
+        const liberer = prendreVerrou(fichierIntegre(id, 'execution'));
         if (!liberer) throw new Error('Un autre tour ou terminal contrôle cette conversation.');
         try {
             s.tour = randomUUID(); s.terminalExterne = true; s.etat = 'travaille'; s.permission = undefined;
             s.pid = process.pid; s.demarragePoste = demarragePoste(); s.erreur = undefined;
-            fs.rmSync(path.join(dossier, 'arret'), { force: true }); sauverIntegree(s);
+            fs.rmSync(fichierIntegre(id, 'arret'), { force: true }); sauverIntegree(s);
             return { s, liberer };
         } catch (e) { liberer(); throw e; }
     });
@@ -131,7 +129,7 @@ function lancerCli(s: SessionIntegree): Promise<number> {
         const p = spawn(binaire, ['resume', s.threadId!, '-C', s.cwd, '-s', s.lectureSeule ? 'read-only' : 'workspace-write', '-a', 'on-request'], { cwd: s.cwd, stdio: 'inherit' });
         p.once('spawn', () => { s.pid = p.pid; sauverIntegree(s); });
         const arret = setInterval(() => {
-            try { if (JSON.parse(fs.readFileSync(path.join(dossierIntegre(s.id), 'arret'), 'utf8')).tour === s.tour) p.kill(); } catch { /* Pas de demande d'arrêt. */ }
+            try { if (JSON.parse(fs.readFileSync(fichierIntegre(s.id, 'arret'), 'utf8')).tour === s.tour) p.kill(); } catch { /* Pas de demande d'arrêt. */ }
         }, 500);
         p.once('error', (e) => { clearInterval(arret); ko(e); });
         p.once('exit', (code) => { clearInterval(arret); ok(code ?? 1); });

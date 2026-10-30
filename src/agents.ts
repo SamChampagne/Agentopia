@@ -4,7 +4,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { CLAUDE } from './claude.js';
 import { dossierSessions } from './sessions.js';
-import { listerIntegrees, dossierIntegre, estIntegree, envoyerIntegree, interrompreIntegree, archiverIntegree } from './sessionsIntegrees.js';
+import { listerIntegrees, fichierIntegre, estIntegree, envoyerIntegree, interrompreIntegree, archiverIntegree } from './sessionsIntegrees.js';
 import type { Fournisseur, PermissionAgent } from './providers/types.js';
 
 // Toutes les sessions Claude actives (onglets interactifs + arrière-plan)
@@ -116,13 +116,13 @@ function lireFichiersAgents(): SessionVue[] | undefined {
 }
 
 export async function listerAgents(): Promise<SessionVue[]> {
-    const integrees: SessionVue[] = listerIntegrees().map((s) => ({
+    const integrees = listerIntegrees().flatMap<SessionVue>((s) => { try { return [{
         cle: s.id, id: s.id, sessionId: s.id, arrierePlan: true, cwd: s.cwd, nom: path.basename(s.cwd),
         titre: s.titre, statut: s.etat === 'erreur' || s.etat === 'arretee' ? 'attend' : s.etat,
-        debut: new Date(s.creee), fichier: path.join(dossierIntegre(s.id), 'conversation.jsonl'),
+        debut: new Date(s.creee), fichier: fichierIntegre(s.id, 'conversation.jsonl'),
         fournisseur: s.fournisseur, integree: true, terminalExterne: s.terminalExterne, permission: s.permission, question: s.permission?.titre,
         issue: s.issue, erreur: s.erreur, resultat: s.resultat,
-    }));
+    }]; } catch { return []; } });
     try {
         const parFichiers = lireFichiersAgents();
         if (parFichiers) return [...parFichiers, ...integrees];
