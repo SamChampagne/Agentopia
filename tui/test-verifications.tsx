@@ -105,7 +105,9 @@ try {
         assert.match(ui.captureCharFrame(), /Réussi · npm run check/); assert.match(ui.captureCharFrame(), /Code de sortie : 0/);
         await lireDetail(/FIXTURE_JOURNAL_FIN/);
         const marqueur = JSON.parse(fs.readFileSync(process.env.AGENTOPIA_FIXTURE_MARKER, 'utf8'));
-        assert.equal(marqueur.cwd.toLowerCase(), projet.toLowerCase()); assert.equal(marqueur.ci, '1');
+        // Le TEMP Windows du runner peut être en notation courte (RUNNER~1).
+        // Comparer les dossiers réels, comme le moteur, plutôt que leurs alias.
+        assert.equal(fs.realpathSync.native(marqueur.cwd).toLowerCase(), fs.realpathSync.native(projet).toLowerCase()); assert.equal(marqueur.ci, '1');
         const preuves = lirePreuvesVerification(equipe.id);
         assert.equal(preuves.length, preuvesAvant + 1); assert.equal(preuves[0].codeSortie, 0); assert.equal(preuves[0].resultat, 'reussi');
         assert.match(lireJournalVerification(preuves[0]), /FIXTURE_CHECK_OK/);

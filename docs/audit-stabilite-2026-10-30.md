@@ -94,7 +94,7 @@ La publication Windows exige en plus la construction et les tests du vrai Setup 
 
 ## Suite recommandée
 
-**Avancement en bêta 10 :** un parcours de vérification explicite depuis Relire, un historique des avis, le collage asynchrone et la révision des choix reportés ont été ajoutés. [Fonctionnement et limites](verifier-un-resultat.md). La récupération des métadonnées de sessions, les comptes réels Claude/Perplexity, les opérations distantes et la signature Windows restent des chantiers distincts.
+**Avancement en bêta 11 :** un parcours de vérification explicite depuis Relire, un historique des avis, le collage asynchrone et la révision des choix reportés ont été ajoutés. [Fonctionnement et limites](verifier-un-resultat.md). La récupération des métadonnées de sessions, les comptes réels Claude/Perplexity, les opérations distantes et la signature Windows restent des chantiers distincts.
 
 1. Utiliser cette version sur des projets réels, en notant les erreurs de reprise, de permission et d’affichage ; corriger les régressions avant d’augmenter le périmètre.
 2. Ajouter aux bilans d’équipe une preuve des vérifications réellement exécutées, avec un statut distinct pour « non vérifié ».

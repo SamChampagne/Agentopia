@@ -1,13 +1,13 @@
 # Agentopia 1.4 — bêta Windows
 
-La bêta **1.4.0-beta.10** ajoute un parcours de vérification dans **Équipes → Relire** : choisir un script réellement présent, lire la commande et le dossier, confirmer son exécution, puis consulter le résultat et son journal. Les preuves sont séparées des résumés des agents et deviennent périmées si le contenu du projet change. [Guide des vérifications et des améliorations de confort](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.10/docs/verifier-un-resultat.md).
+La bêta **1.4.0-beta.11** ajoute un parcours de vérification dans **Équipes → Relire** : choisir un script réellement présent, lire la commande et le dossier, confirmer son exécution, puis consulter le résultat et son journal. Les preuves sont séparées des résumés des agents et deviennent périmées si le contenu du projet change. [Guide des vérifications et des améliorations de confort](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.11/docs/verifier-un-resultat.md).
 
 - **Avis et erreurs** : `/avis`, **Alt+N** ou le bouton près de la saisie permettent de retrouver le texte complet des 100 derniers messages du lancement, y compris les causes des échecs.
 - **Collage d’image** : **Alt+V** reste réactif pendant la capture. Le texte retapé et la conversation d’origine sont préservés ; un envoi attend la fin de l’ajout.
 - **Préparation** : Config permet de revoir les projets ignorés et les agents reportés. Annuler `/choisir-agents` conserve les choix. `/scan` garde son filtre, affiche un bilan et ne prépare pas les fournisseurs.
 - **Vérifications** : scripts JavaScript/TypeScript existants, journal et durée bornés, annulation, refus des agents encore actifs et protection contre un lancement concurrent. Une réussite de commande ne marque pas l’équipe intégrée et ne certifie pas la qualité fonctionnelle.
 
-La bêta **1.4.0-beta.9** corrige les défauts reproduits pendant un audit multi-agent. [Rapport complet, critiques et prochaines priorités](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.10/docs/audit-stabilite-2026-10-30.md).
+La bêta **1.4.0-beta.9** corrige les défauts reproduits pendant un audit multi-agent. [Rapport complet, critiques et prochaines priorités](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.11/docs/audit-stabilite-2026-10-30.md).
 
 - **Équipes** : relancer une tâche préserve les autres échecs ; une exclusion incompatible avec les dépendances est expliquée et refusée ; la fin d’intégration est vérifiée dans Git au lieu de dépendre uniquement du résumé de l’agent.
 - **Conversations** : cliquer sur les pièces jointes ou utiliser **Alt+I** pour les retirer ; un fichier inaccessible est signalé avant envoi ; le brouillon du maître est restauré après erreur.
