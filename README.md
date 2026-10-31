@@ -1,5 +1,7 @@
 # Agentopia
 
+[Documentation](docs/README.md) · [État du dépôt](docs/etat-du-projet.md) · [Projet GitHub](https://github.com/users/SamChampagne/projects/4) · [Contribuer](CONTRIBUTING.md)
+
 Poste de pilotage pour travailler avec Claude, Codex, Perplexity et des **équipes d’agents** : conversations, projets, Git, Docker et serveurs SSH.
 
 Dans une session, le champ de message se trouve directement sous le chat et reste visible pendant le défilement. Chaque conversation conserve son brouillon.

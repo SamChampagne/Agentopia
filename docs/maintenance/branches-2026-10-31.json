@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-31",
+  "repository": "SamChampagne/Agentopia",
+  "baseSha": "63b08986fc04a757d222b9dd0aaafc90be70caae",
+  "branches": [
+    {
+      "name": "codex/fix-demarrage-production",
+      "sha": "e9f856df872b99de434dd87a8401d8bd4c0c7c2d",
+      "aheadOfMain": 3,
+      "behindMain": 0,
+      "integrated": false,
+      "decision": "preserve-divergent"
+    },
+    {
+      "name": "codex/sessions-multi-agents",
+      "sha": "26274e64503aff41745347e69808e739ca659f41",
+      "aheadOfMain": 0,
+      "behindMain": 1,
+      "integrated": true,
+      "decision": "deleted-remote"
+    },
+    {
+      "name": "opentui",
+      "sha": "3b19e666c1d8ba02556a86206eadf927ded89827",
+      "aheadOfMain": 0,
+      "behindMain": 35,
+      "integrated": true,
+      "decision": "deleted-remote"
+    }
+  ],
+  "cleanupStatus": "completed",
+  "authorization": "Explicit user approval on 2026-10-31",
+  "deletedLocalBranches": [
+    {
+      "name": "codex/sessions-multi-agents",
+      "sha": "26274e64503aff41745347e69808e739ca659f41"
+    }
+  ]
+}
