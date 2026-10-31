@@ -7,4 +7,4 @@ fichier = sh.ExpandEnvironmentStrings("%USERPROFILE%") & "\.claudetopia-ouvrir"
 Set t = fso.CreateTextFile(fichier, True)
 t.Write WScript.Arguments(0)
 t.Close
-sh.AppActivate "Claudetopia"
+If Not sh.AppActivate("Agentopia") Then sh.AppActivate "Claudetopia"

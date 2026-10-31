@@ -1,11 +1,12 @@
-import { spawn } from 'child_process';
 import type { Commande } from './commandes.js';
-import { AIDE_JETONS, Hebergeur, pageJeton, jetonsConfigures, enregistrerJeton, oublierJeton } from './jetons.js';
+import { AIDE_JETONS, Hebergeur, pageJeton, jetonsConfigures, enregistrerJeton, oublierJeton, originesGitLab, ancienGitLabPresent, ancienJetonGitLab, associerAncienGitLab } from './jetons.js';
+import { origineGitLab } from './originesGit.js';
 import { OUTILS, DOCKER_DESKTOP, identiteJeton, oublierIdentite, remotesDuPoste, lirePressePapiers, viderPressePapiers, existe } from './connexions.js';
 import { assurerCle } from './sshConfig.js';
 import { lireSynchro } from './synchro.js';
 import { choisir, saisir, confirmer, afficherVue, tache } from './ui/bus.js';
-import { lancerDetache } from './lanceurs.js';
+import { lancerDetache, ouvrirUrlWeb, ouvrirFenetrePowerShell } from './lanceurs.js';
+import { scriptInstallationWinget } from './lancementsWindows.js';
 import { c } from './theme.js';
 
 // Tout connecter depuis l'application, en le moins d'étapes possible
@@ -15,12 +16,41 @@ const SITES: Record<string, Hebergeur> = { github: 'GitHub', azure: 'Azure DevOp
 // Un jeton ressemble à une longue suite sans espace (évite d'enregistrer un texte copié par erreur)
 const ressembleAUnJeton = (t: string) => t.length >= 20 && t.length <= 400 && !/\s/.test(t);
 
+async function connecterGitLab(): Promise<void> {
+    const existantes = originesGitLab();
+    let origine = existantes.length ? await choisir('Quel serveur GitLab ?', [...existantes.map(o => ({ label: o, valeur: o })), { label: 'Connecter un autre serveur', valeur: '' }], false) : '';
+    if (!origine) origine = origineGitLab((await saisir('Adresse HTTPS de ton serveur GitLab', 'https://gitlab.com')).trim());
+    if (!await confirmer(`Les requêtes et le jeton seront envoyés uniquement à ${origine}. Est-ce bien ton serveur GitLab ?`)) return;
+    const ancien = ancienGitLabPresent();
+    const action = await choisir(`Compte ${origine}`, [
+        { label: existantes.includes(origine) ? 'Reconnecter avec un nouveau jeton' : 'Connecter un nouveau jeton', valeur: 'nouveau' },
+        ...(ancien && !existantes.includes(origine) ? [{ label: 'Associer l’ancien jeton à cette adresse', valeur: 'ancien', description: 'Le vérifier sur cette adresse avant de l’associer' }] : []),
+        ...(existantes.includes(origine) ? [{ label: 'Déconnecter ce serveur uniquement', valeur: 'oublier' }] : []),
+        ...(ancien ? [{ label: 'Oublier l’ancien jeton sans adresse', valeur: 'oublier-ancien' }] : []),
+    ], false);
+    if (action.startsWith('oublier')) {
+        oublierJeton('GitLab', action === 'oublier' ? origine : undefined); oublierIdentite('GitLab');
+        console.log(c.succes('Compte GitLab déconnecté. Les autres comptes sont conservés.')); return;
+    }
+    let secret: string | undefined;
+    if (action === 'ancien') secret = ancienJetonGitLab();
+    else {
+        ouvrirUrlWeb(pageJeton('GitLab', [], origine));
+        secret = (await saisir(`Jeton pour ${origine} (scope read_api)`, '', true)).trim();
+    }
+    if (!secret) return;
+    const id = await tache(`Vérification sur ${origine}`, () => identiteJeton('GitLab', secret!, [], origine));
+    if (!id.ok) { console.log(c.erreur(`GitLab : ${id.texte}. Aucun compte modifié.`)); return; }
+    if (action === 'ancien') associerAncienGitLab(origine, secret);
+    else if (!enregistrerJeton('GitLab', secret, origine)) throw new Error('Impossible de chiffrer le jeton. Aucun compte modifié.');
+    oublierIdentite('GitLab');
+    console.log(c.succes(`Connecté à ${origine} · ${id.texte}`));
+    const synchro = await import('./synchro.js'); void synchro.rafraichirDistants();
+}
+
 // Programme d'installation dans une fenêtre PowerShell visible (winget peut demander une confirmation Windows)
 function installerAvecWinget(nom: string, id: string): void {
-    const script = `Write-Host 'Installation de ${nom}…' -ForegroundColor Cyan; `
-        + `winget install -e --id ${id} --accept-source-agreements --accept-package-agreements; `
-        + `Write-Host ''; Write-Host 'Terminé : ferme cette fenêtre. Relance Claudetopia pour qu''il voie ${nom}.' -ForegroundColor Green`;
-    spawn('cmd.exe', ['/c', 'start', '""', 'powershell', '-NoExit', '-NoProfile', '-Command', script], { detached: true, stdio: 'ignore', windowsVerbatimArguments: false }).unref();
+    ouvrirFenetrePowerShell(scriptInstallationWinget(nom, id));
 }
 
 export function commandesConnexions(): Commande[] {
@@ -47,6 +77,7 @@ export function commandesConnexions(): Commande[] {
                         label: `${deja.includes(h) ? '✓' : '○'} ${h}`, valeur: h,
                         description: `${nb(h) ? `${nb(h)} dépôt${nb(h) > 1 ? 's' : ''} sur ce poste` : 'aucun dépôt détecté'}${deja.includes(h) ? ' · déjà connecté' : ''}`,
                     })), false);
+                if (site === 'GitLab') return connecterGitLab();
                 if (deja.includes(site)) {
                     const quoi = await choisir(`${site} est déjà connecté`, [
                         { label: '⇄ Le reconnecter avec un nouveau jeton', valeur: 'nouveau' },
@@ -59,7 +90,7 @@ export function commandesConnexions(): Commande[] {
                     }
                 }
                 const remotes = remotesDuPoste();
-                lancerDetache('start', ['', pageJeton(site, remotes)]);
+                ouvrirUrlWeb(pageJeton(site, remotes));
                 console.log(c.discret(`Page ${site} ouverte dans le navigateur : ${AIDE_JETONS[site].consigne}, puis copie le jeton.`));
                 const comment = await choisir(`Jeton ${site}`, [
                     { label: '⎘ Je l\'ai copié : le prendre dans le presse-papiers', valeur: 'presse', description: 'rien à coller, le presse-papiers est vidé après' },

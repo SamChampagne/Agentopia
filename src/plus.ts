@@ -1,3 +1,4 @@
+import { citerArgument } from './ligneCommande.js';
 import type { Commande } from './commandes.js';
 import { Config } from './config.js';
 import { afficherVue } from './ui/bus.js';
@@ -15,8 +16,8 @@ async function vue<P extends object>(module: Promise<Record<string, unknown>>, n
 // ─── Palette (Ctrl+K) : tout ce qu'on peut faire, une recherche floue ────────
 
 const ACTIONS_PROJET: [string, string][] = [
-    ['✻ Session Claude', '/claude'], ['✓ Commit', '/commit'], ['⌕ Revue du diff', '/revue'], ['⇣ Pull', '/pull'],
-    ['◧ VS Code', '/code'], ['❯ Terminal', '/terminal defaut'], ['◆ Équipe', '/equipe nouvelle'], ['▤ Explorateur', '/ouvrir'], ['≡ Toutes les actions', '/actions'],
+    ['✦ Mission guidée', '/mission'], ['✻ Nouvelle conversation', '/session'], ['✓ Commit avec un agent', '/commit'], ['⌕ Revue du diff', '/revue'], ['⇣ Pull', '/pull'],
+    ['◧ VS Code', '/code'], ['❯ Terminal', '/terminal defaut'], ['◆ Équipe guidée', '/equipe nouvelle'], ['▤ Explorateur', '/ouvrir'], ['≡ Toutes les actions', '/actions'],
 ];
 
 async function palette(): Promise<void> {
@@ -31,7 +32,7 @@ async function palette(): Promise<void> {
         ...COMMANDES.filter((c) => !c.cache).map((c) => ({ label: `/${c.nom}`, valeur: `/${c.nom}`, description: c.description })),
         ...d.serveurs.map((s) => ({ label: `⇄ ${s.nom}`, valeur: `/ssh ${s.nom}`, description: `se connecter · ${s.hote}` })),
         ...d.serveurs.filter((s) => s.configure).map((s) => ({ label: `⇅ Fichiers ${s.nom}`, valeur: `/sftp ${s.nom}`, description: 'SFTP' })),
-        ...getProjets().flatMap((p) => ACTIONS_PROJET.map(([action, cmd]) => ({ label: `${action} · ${p.nom}`, valeur: `${cmd} ${p.chemin}`, description: p.racine }))),
+        ...getProjets().flatMap((p) => ACTIONS_PROJET.map(([action, cmd]) => ({ label: `${action} · ${p.nom}`, valeur: `${cmd} ${citerArgument(p.chemin)}`, description: p.racine }))),
     ];
     const commande = await choisir('⌘ Que veux-tu faire ? (plusieurs mots : « proj com » → Commit · mon-projet)', choix, true);
     await executerLigne(commande);
@@ -57,8 +58,8 @@ export function commandesPlus(config: Config): Commande[] {
     const sauver = async () => (await import('./config.js')).sauverConfig(config);
     return [
         {
-            nom: 'planifier', groupe: 'Claude',
-            description: 'Planifier une session Claude chaque jour à une heure donnée (ex. revue des PR à 8 h)',
+            nom: 'planifier', groupe: 'Agents',
+            description: 'Planifier un agent chaque jour à une heure donnée, même la fenêtre fermée',
             executer: async () => {
                 const { getProjets } = await import('./commandes.js');
                 const { choisir, saisir } = await import('./ui/bus.js');
@@ -73,34 +74,45 @@ export function commandesPlus(config: Config): Commande[] {
                     { label: '⇣ Tirer et vérifier le build', valeur: 'Fais git pull, installe les dépendances, lance la compilation et les tests, et corrige ce qui casse.' },
                     ...Object.entries(config.prompts).map(([n, t]) => ({ label: `★ @${n}`, valeur: t, description: t })),
                 ], false);
-                const consigne = (await saisir('Consigne pour Claude', depart)).trim();
+                const consigne = (await saisir('Consigne pour l’agent', depart)).trim();
                 if (!consigne) return;
+                const { choisirAgent } = await import('./choixAgent.js');
+                const fournisseur = await choisirAgent(true);
                 const heure = (await saisir('Heure (HH:MM)', '08:00')).trim().replace('h', ':').padStart(5, '0');
-                if (!/^\d\d:\d\d$/.test(heure)) return console.log(c.alerte('Heure invalide (ex. 08:00)'));
+                const { heureValide } = await import('./planificateur.js');
+                if (!heureValide(heure)) return console.log(c.alerte('Heure invalide (ex. 08:00)'));
                 const jours = await choisir('Quels jours ?', [
                     { label: 'Du lundi au vendredi', valeur: [1, 2, 3, 4, 5] },
                     { label: 'Tous les jours', valeur: [] as number[] },
                     { label: 'Le lundi seulement', valeur: [1] },
                     { label: 'Le vendredi seulement', valeur: [5] },
                 ], false);
-                config.planifications = [...(config.planifications ?? []), { id: Math.random().toString(16).slice(2, 8), nom, heure, jours, projet, consigne, actif: true }];
+                config.planifications = [...(config.planifications ?? []), { id: crypto.randomUUID(), nom, heure, jours, projet, consigne, actif: true, fournisseur }];
                 await sauver();
                 const { decrireJours } = await import('./planificateur.js');
                 console.log(c.succes(`◴ « ${nom} » : ${decrireJours(jours)} à ${heure} · /planifications pour gérer`));
-                console.log(c.discret('Elle tourne pendant que Claudetopia est ouvert ; si l\'heure est passée pendant qu\'il était fermé, elle part au lancement suivant (le même jour).'));
+                await (await import('./moteurClient.js')).assurerMoteur();
+                console.log(c.discret('Le moteur continue après fermeture de la fenêtre. Après redémarrage du PC, ouvre Agentopia. Une tâche manquée est rattrapée le même jour.'));
             },
         },
         {
-            nom: 'planifications', groupe: 'Claude',
+            nom: 'planifications', groupe: 'Agents',
             description: 'Tâches planifiées : lancer maintenant, activer / désactiver, supprimer',
             executer: async () => {
                 const { choisir } = await import('./ui/bus.js');
                 const { c } = await import('./theme.js');
                 const { decrireJours, dernierLancement, lancerPlanification } = await import('./planificateur.js');
+                const { diagnosticPlanifications } = await import('./stockagePlanifications.js');
+                const diagnostic = diagnosticPlanifications();
+                if (diagnostic.erreur) {
+                    const action = await choisir('Historique des planifications à récupérer', [{ label: 'Ouvrir la récupération', valeur: 'recuperer' }, { label: 'Retour', valeur: 'retour' }], false, diagnostic.erreur);
+                    if (action === 'recuperer') { const { COMMANDES } = await import('./commandes.js'); return COMMANDES.find((c) => c.nom === 'planifications-recuperer')!.executer({ args: [], reste: '', apresProjet: '' }); }
+                    return;
+                }
                 const liste = config.planifications ?? [];
                 const p = await choisir<import('./planificateur.js').Planification | 'nouvelle'>('Tâches planifiées', [
                     { label: '+ Nouvelle tâche planifiée', valeur: 'nouvelle' },
-                    ...liste.map((x) => ({ label: `${x.actif ? '◴' : '○'} ${x.nom}`, valeur: x, description: `${decrireJours(x.jours)} à ${x.heure} · ${x.projet.split(/[\\/]/).pop()} · dernier : ${dernierLancement(x.id) ?? 'jamais'}` })),
+                    ...liste.map((x) => ({ label: `${x.actif ? '◴' : '○'} ${x.nom}`, valeur: x, description: `${x.fournisseur ?? 'Claude CLI (ancienne tâche)'} · ${decrireJours(x.jours)} à ${x.heure} · ${x.projet.split(/[\\/]/).pop()} · dernier : ${dernierLancement(x.id) ?? 'jamais'}` })),
                 ], false);
                 if (p === 'nouvelle') {
                     const { COMMANDES } = await import('./commandes.js');
@@ -164,13 +176,13 @@ export function commandesPlus(config: Config): Commande[] {
             },
         },
         {
-            nom: 'copier-code', args: '<session>', groupe: 'Claude', cache: true,
-            description: 'Copier le dernier bloc de code de Claude (sinon sa dernière réponse)',
+            nom: 'copier-code', args: '<session>', groupe: 'Agents', cache: true,
+            description: 'Copier le dernier bloc de code de l’agent (sinon sa dernière réponse)',
             executer: ({ args }) => copierDe(args[0], 'code'),
         },
         {
-            nom: 'copier-reponse', args: '<session>', groupe: 'Claude', cache: true,
-            description: 'Copier la dernière réponse de Claude',
+            nom: 'copier-reponse', args: '<session>', groupe: 'Agents', cache: true,
+            description: 'Copier la dernière réponse de l’agent',
             executer: ({ args }) => copierDe(args[0], 'reponse'),
         },
         {
@@ -179,7 +191,7 @@ export function commandesPlus(config: Config): Commande[] {
             executer: palette,
         },
         {
-            nom: 'equipe-diff', args: '<équipe> <tâche>', groupe: 'Claude', cache: true,
+            nom: 'equipe-diff', args: '<équipe> <tâche>', groupe: 'Agents', cache: true,
             description: 'Ce que la branche d\'une tâche d\'équipe change (avant de fusionner)',
             executer: async ({ args }) => {
                 const { diffTache, equipeDe } = await import('./equipe.js');
@@ -252,7 +264,7 @@ export function commandesPlus(config: Config): Commande[] {
             },
         },
         {
-            nom: 'questions', alias: ['attente', 'todo'], groupe: 'Claude',
+            nom: 'questions', alias: ['attente', 'todo'], groupe: 'Agents',
             description: 'Ce que les sessions attendent de toi : leurs questions, la réponse proposée, répondre en un clic',
             executer: () => vue(import('./ui/VueQuestions.js'), 'VueQuestions'),
         },

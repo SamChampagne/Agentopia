@@ -19,8 +19,8 @@ const ANIM = ['✻', '✼', '✽', '✾', '✿', '❀'];
 export function etatTache(t: Tache, tic: number): { texte: string; couleur: string } {
     const depuis = t.debut ? ` · ${ilYa(new Date(t.debut))}` : '';
     switch (t.etat) {
-        case 'attente': return { texte: t.dependances.length ? `○ attend ${t.dependances.join(', ')}` : '○ en attente', couleur: 'gray' };
-        case 'en cours': return { texte: `${ANIM[tic % ANIM.length]} travaille${depuis}`, couleur: '#4ade80' };
+        case 'attente': return { texte: t.attenteFile ? '○ dans la file du poste' : t.dependances.length ? `○ attend ${t.dependances.join(', ')}` : '○ en attente', couleur: 'gray' };
+        case 'en cours': return { texte: t.preparation?.etat === 'en cours' ? '◷ prépare le dossier' : `${ANIM[tic % ANIM.length]} travaille${depuis}`, couleur: '#4ade80' };
         case 'bloquee': return { texte: '! attend ta permission', couleur: '#fb923c' };
         case 'faite': return t.ecartee ? { texte: '✕ écartée (pas fusionnée)', couleur: '#f87171' } : { texte: '✓ faite', couleur: '#94a3b8' };
         case 'arretee': return { texte: '■ arrêtée', couleur: '#facc15' };
@@ -39,7 +39,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
         const e = lignes[i];
         if (e) return ouvrir(e.id);
         fermer();
-        bus.emit('lancer', '/equipe nouvelle');
+        bus.emit('lancer', d.erreurEquipes ? '/equipes-recuperer' : '/equipe nouvelle');
     };
     useClicsVue((_, y) => {
         const i = y - 4;
@@ -55,7 +55,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
         <Box flexDirection="column" width={largeur} height={hauteur} paddingLeft={1}>
             <Titre texte="ÉQUIPES D'AGENTS" droite="clic = ouvrir · Échap fermer" />
             <Box height={2} flexShrink={0}>
-                <Text color="gray" wrap="wrap">Un chef d'équipe découpe ton objectif en tâches, puis plusieurs agents Claude les font en parallèle, chacun sur sa branche. À la fin, un intégrateur fusionne tout.</Text>
+                <Text color={d.erreurEquipes ? '#facc15' : 'gray'} wrap="wrap">{d.erreurEquipes || 'Choisis un parcours ou un modèle, puis les agents réalisent les tâches selon leurs dépendances. Chaque agent de code a sa branche. Tu relis le résultat avant l’intégration.'}</Text>
             </Box>
             <Separateur largeur={largeur - 2} />
             {lignes.slice(0, hauteur - 4).map((e, i) => {
@@ -72,7 +72,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
                                     <Text color={etat!.couleur}>{ajuste(etat!.texte, 24)}</Text>
                                     <Text color="gray">{ajuste(`${avancement(e).faites}/${avancement(e).total}`, 6)}{e.objectif}</Text>
                                 </>
-                            ) : <Text color={theme.accent} bold>+ Nouvelle équipe sur un projet…</Text>}
+                            ) : <Text color={theme.accent} bold>{d.erreurEquipes ? '↻ Récupérer les équipes…' : '+ Nouvelle équipe sur un projet…'}</Text>}
                         </Text>
                     </Box>
                 );
@@ -83,7 +83,7 @@ function ListeEquipes({ fermer, ouvrir }: { fermer: () => void; ouvrir: (id: str
 
 // ─── Une équipe ──────────────────────────────────────────────────────────────
 
-export function boutonsEquipe(e: Equipe, t?: Tache) {
+function boutonsEquipeBase(e: Equipe, t?: Tache) {
     const fermer = { label: '✕ Fermer', action: 'fermer' };
     // Une tâche finie avec sa branche : lire son diff avant de fusionner, et l'écarter si besoin
     const revue = t?.branche && t.etat === 'faite' && (e.etat === 'prete' || e.etat === 'erreur')
@@ -91,13 +91,38 @@ export function boutonsEquipe(e: Equipe, t?: Tache) {
     const ouvrirAgent = t?.agentId ? [{ label: '↵ Voir l\'agent', action: 'agent' }] : [];
     switch (e.etat) {
         case 'planification': return [{ label: '− Abandonner', action: 'ranger' }, fermer];
-        case 'plan': return [...(estDeConfiance(e.projet) ? [] : [{ label: '▭ Accepter le dossier', action: 'confiance' }]), { label: '▶ Lancer l\'équipe', action: 'lancer' }, { label: '↻ Refaire le plan', action: 'replan' }, { label: '− Retirer la tâche', action: 'retirer' }, { label: '− Abandonner', action: 'ranger' }, fermer];
+        case 'plan': return [...(e.mixte || estDeConfiance(e.projet) ? [] : [{ label: '▭ Accepter le dossier', action: 'confiance' }]), { label: '▶ Lancer l\'équipe', action: 'lancer' }, ...(e.mixte ? [] : [{ label: '↻ Refaire le plan', action: 'replan' }]), { label: '− Retirer la tâche', action: 'retirer' }, { label: '− Abandonner', action: 'ranger' }, fermer];
         case 'en cours': return [...ouvrirAgent, { label: '■ Arrêter', action: 'arreter' }, fermer];
-        case 'erreur': return [{ label: '↻ Relancer', action: 'lancer' }, ...ouvrirAgent, ...revue, { label: '⇄ Intégrer ce qui est fait', action: 'integrer' }, { label: '↻ Refaire le plan', action: 'replan' }, { label: '− Ranger', action: 'ranger' }, fermer];
+        case 'erreur': return [{ label: '↻ Relancer', action: 'lancer' }, ...ouvrirAgent, ...revue, { label: '⇄ Intégrer ce qui est fait', action: 'integrer' }, ...(e.mixte ? [] : [{ label: '↻ Refaire le plan', action: 'replan' }]), { label: '− Ranger', action: 'ranger' }, fermer];
         case 'prete': return [{ label: '⇄ Intégrer', action: 'integrer' }, ...revue, ...ouvrirAgent, { label: '✓ Ranger l\'équipe', action: 'ranger' }, fermer];
         case 'integration': return [{ label: '↵ Voir l\'intégrateur', action: 'integrateur' }, { label: '■ Arrêter', action: 'arreter' }, fermer];
         default: return [{ label: '↵ Voir l\'intégrateur', action: 'integrateur' }, ...ouvrirAgent, { label: '✓ Ranger l\'équipe', action: 'ranger' }, fermer];
     }
+}
+
+export function boutonsEquipe(e: Equipe, t?: Tache) {
+    let boutons = boutonsEquipeBase(e, t);
+    if (['prete', 'finie', 'erreur'].includes(e.etat)) {
+        // Les diffs et le choix des branches sont regroupés dans Relire.
+        boutons = boutons.filter((b) => !['diff', 'ecarter', 'agent', 'integrateur'].includes(b.action));
+        boutons.unshift({ label: '≡ Relire (b)', action: 'bilan-equipe' });
+    }
+    if (e.mixte && e.etat === 'prete' && e.integrateur?.agentId && ['erreur', 'arretee'].includes(e.integrateur.etat)) {
+        boutons = boutons.map((b) => b.action === 'integrer' ? { label: '↻ Reprendre l’intégration (a)', action: 'actions-equipe' } : b);
+    }
+    if (e.mixte && e.etat === 'prete' && !e.integrateur && !e.taches.some((t) => t.branche && !t.ecartee)) {
+        boutons = boutons.filter((b) => b.action !== 'integrer');
+    }
+    if (e.mixte && ['plan', 'erreur'].includes(e.etat) && e.taches.some((t) => ['erreur', 'arretee'].includes(t.etat))) {
+        const i = boutons.findIndex((b) => b.action === 'lancer');
+        if (i >= 0) boutons[i] = { label: '↻ Débloquer (a)', action: 'actions-equipe' };
+    }
+    if (e.etat === 'prete' && boutons.some((b) => ['integrer', 'actions-equipe'].includes(b.action))) {
+        boutons = boutons.filter((b) => b.action !== 'ranger'); // Toujours accessible depuis Relire.
+    }
+    boutons = boutons.map((b) => b.action === 'ranger' ? { ...b, label: '✓ Ranger' } : b);
+    if (boutons.some((b) => b.action === 'actions-equipe')) return boutons;
+    return [boutons[0], { label: '⋯ Actions (a)', action: 'actions-equipe' }, ...boutons.slice(1)];
 }
 
 function DetailEquipe({ id, fermer, retour }: { id: string; fermer: () => void; retour?: () => void }) {
@@ -136,9 +161,18 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
     };
 
     async function agir(action: string) {
+        try { await appliquer(action); } catch (e) { setMessage(`✕ ${(e as Error).message}`); }
+    }
+    async function appliquer(action: string) {
         setMessage('');
         if (action !== aConfirmer) setAConfirmer(undefined);
         if (action === 'fermer') return retour ? retour() : fermer();
+        if (action === 'bilan-equipe') { fermer(); return void bus.emit('lancer', `/equipe-bilan ${e.id}`); }
+        if (action === 'actions-equipe' || (action === 'lancer' && e.mixte)) {
+            fermer();
+            const commande = action === 'actions-equipe' || e.taches.some((t) => ['erreur', 'arretee'].includes(t.etat)) ? 'equipe-actions' : 'equipe-lancer';
+            return void bus.emit('lancer', `/${commande} ${e.id}`);
+        }
         if (action === 'agent') return ouvrirSession(courante?.agentId);
         if (action === 'integrateur') return ouvrirSession(e.integrateur?.agentId);
         if (action === 'diff' && courante) {
@@ -146,12 +180,12 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
             return void bus.emit('lancer', `/equipe-diff ${e.id} ${courante.id}`);
         }
         if (action === 'ecarter' && courante) {
-            const ecartee = basculerEcart(e.id, courante.id);
+            const ecartee = await basculerEcart(e.id, courante.id);
             return setMessage(ecartee ? `✕ ${courante.titre} est écartée : l'intégrateur ne fusionnera pas sa branche` : `↺ ${courante.titre} sera fusionnée`);
         }
         if (action === 'lancer') {
             const erreur = courante && (courante.etat === 'erreur' || courante.etat === 'arretee') && e.etat !== 'erreur'
-                ? relancerTache(e.id, courante.id) : lancerEquipe(e.id);
+                ? await relancerTache(e.id, courante.id) : await lancerEquipe(e.id);
             return setMessage(erreur ?? `▶ Équipe lancée : ${Math.min(taches.length, 3)} agents démarrent · suis-les ici ou sur la carte ◆`);
         }
         if (action === 'replan') {
@@ -162,17 +196,17 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
             fermer();
             return void bus.emit('lancer', `/onglet ${e.projet}`);
         }
-        if (action === 'retirer' && courante) return retirerTache(e.id, courante.id);
+        if (action === 'retirer' && courante) return setMessage(await retirerTache(e.id, courante.id) ?? 'Tâche retirée');
         if (action === 'arreter') {
             setMessage('Arrêt des agents…');
             await arreterEquipe(e.id);
-            return setMessage('Agents arrêtés · « Relancer » reprend les tâches non finies');
+            return setMessage(e.mixte ? 'Agents arrêtés · Débloquer → Reprendre conserve le travail en cours' : 'Agents arrêtés · Relancer redémarre les tâches non finies');
         }
         if (action === 'integrer') {
             const modifs = modifsLocales(e);
-            if (modifs && aConfirmer !== 'integrer') {
+            if (modifs) {
                 setAConfirmer('integrer');
-                return setMessage(`! ${e.nomProjet} a ${modifs} fichier(s) modifié(s) non commité(s) : la fusion peut les gêner · reclique pour intégrer quand même`);
+                return setMessage(`! ${e.nomProjet} a ${modifs} fichier(s) non commité(s) : commite-les ou range-les avant d’intégrer`);
             }
             setAConfirmer(undefined);
             setMessage('Démarrage de l\'intégrateur…');
@@ -208,6 +242,8 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
         if (key.downArrow) setChoix(taches[Math.min(taches.length - 1, index + 1)]?.id);
         if (key.return) ouvrirSession(courante?.agentId);
         if (input === 'l' && (e.etat === 'plan' || e.etat === 'erreur')) void agir('lancer');
+        if (input === 'a') void agir('actions-equipe');
+        if (input === 'b') void agir('bilan-equipe');
     });
 
     const etat = etatEquipe(e, t0);
@@ -220,7 +256,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
             courante.resultat ? `Résultat : ${courante.resultat}` : courante.consigne,
         ].join('\n');
     const lignesDetail = wrapAnsi(texteDetail, Math.max(20, largeur - 3), { hard: true }).split('\n').slice(0, detail);
-    const info = message || e.message || (e.resume ? `Plan : ${e.resume}` : '');
+    const info = message || courante?.preparation?.message || courante?.attenteFile || e.message || (e.resume ? `Plan : ${e.resume}` : '');
 
     return (
         <Box flexDirection="column" width={largeur} height={hauteur} paddingLeft={1}>

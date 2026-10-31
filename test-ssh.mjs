@@ -6,6 +6,7 @@ import os from 'os';
 import path from 'path';
 
 const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-test-'));
+process.env.CLAUDETOPIA_DATA_DIR = dossier;
 const configTest = path.join(dossier, 'config');
 fs.writeFileSync(configTest, '# mes réglages\nHost prod\n    HostName 10.0.0.5\n    User admin\n\nHost *\n    ServerAliveInterval 30\n');
 process.env.CLAUDETOPIA_SSH_CONFIG = configTest;
@@ -86,8 +87,13 @@ const { Sftp, cleSecret } = await import('./dist/sftp.js');
 const { CHEMINS } = await import('./dist/chemins.js');
 const cible = { nom: 'test-local', hote: '127.0.0.1', port, utilisateur: 'sam', auth: 'motdepasse' };
 ok(enregistrerSecret(cleSecret('test-local'), 'secret'), 'mot de passe chiffré (DPAPI)');
-const s = new Sftp(cible);
-await s.connecter();
+let s = new Sftp(cible);
+try { await s.connecter(); throw new Error('La première clé doit demander confirmation'); }
+catch (e) {
+    if (e.name !== 'EmpreinteSftpInconnue') throw e;
+    s.fermer(); s = new Sftp(cible);
+    await s.connecter({ empreinteAcceptee: e.empreinte });
+}
 ok(!!s.nouvelleEmpreinte, `connexion par mot de passe · empreinte enregistrée ${s.nouvelleEmpreinte?.slice(0, 20)}…`);
 ok((await s.lister('/www')).some((e) => e.nom === 'index.php'), 'liste du dossier /www');
 const copie = path.join(dossier, 'copie.php');

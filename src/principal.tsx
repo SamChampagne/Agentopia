@@ -6,6 +6,7 @@ import { definirCycle, demarrerEcran } from './ui/ecran.js';
 import { capturerConsole } from './ui/journal.js';
 import { demarrerNotifications } from './commandes.js';
 import { premierLancement, chargerConfig } from './config.js';
+import { preparationAReprendre } from './preparation.js';
 import { choisirLargeurLaterale, choisirTailleCartes } from './ui/mise.js';
 import './chemins.js';
 import { remplacerAncienRaccourci, prechargerBureau } from './configCommandes.js';
@@ -14,13 +15,13 @@ import { remplacerAncienRaccourci, prechargerBureau } from './configCommandes.js
 const commandeInitiale = process.argv.slice(2).join(' ').trim() || undefined;
 // Première fois sur ce poste : l'assistant demande l'essentiel (prénom, disposition, thème, sessions, projets, connexions)
 // Juste après l'installation (CLAUDETOPIA_SCAN) : le scan du poste
-let auDemarrage = premierLancement ? '/bienvenue' : process.env.CLAUDETOPIA_SCAN ? '/scan' : undefined;
+let auDemarrage = premierLancement || preparationAReprendre() ? '/preparer' : process.env.CLAUDETOPIA_SCAN ? '/scan' : undefined;
 
 capturerConsole();
 choisirLargeurLaterale(chargerConfig().largeurLaterale);
 choisirTailleCartes(!!chargerConfig().cartesDetaillees);
 if (!commandeInitiale) demarrerNotifications();
-// Premier lancement après le changement de nom : le raccourci « CLI Perso » devient « Claudetopia »
+// Premier lancement après le changement de nom : le raccourci « CLI Perso » devient « Agentopia »
 setTimeout(remplacerAncienRaccourci, 3000);
 // Dossier du bureau lu en fond : la vue Config s'ouvre sans attendre PowerShell
 setTimeout(prechargerBureau, 3500);

@@ -1,15 +1,17 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
+import { pipeline } from 'node:stream/promises';
 import { Client, SFTPWrapper, ConnectConfig } from 'ssh2';
 import { CHEMINS } from './chemins.js';
 import { chargerConfig } from './config.js';
 import { lireHotes, DOSSIER_SSH } from './sshConfig.js';
 import { secret } from './jetons.js';
+import { empreinteSftp, verifierEmpreinteSftp, nomFichierSftp } from './confianceSftp.js';
 
 // Parcourir les fichiers d'un serveur (SFTP) : les serveurs de ~/.ssh/config, et les connexions SFTP
-// configurées dans Claudetopia (avec clé ou mot de passe, chiffré par Windows). Bibliothèque ssh2 :
+// configurées dans Agentopia (avec clé ou mot de passe, chiffré par Windows). Bibliothèque ssh2 :
 // pas de programme externe, et le mot de passe n'apparaît jamais dans une ligne de commande.
 
 export interface ConnexionSftp {
@@ -41,17 +43,9 @@ export function ciblesSftp(): ConnexionSftp[] {
     return [...config, ...ssh];
 }
 
-// ─── Empreintes des serveurs : enregistrées à la 1re connexion, refus si elles changent ───
+// ─── Empreintes des serveurs : accord explicite à la première connexion, refus si elles changent ───
 
 const FICHIER_EMPREINTES = CHEMINS.sftpEmpreintes;
-function empreintes(): Record<string, string> {
-    try {
-        return JSON.parse(fs.readFileSync(FICHIER_EMPREINTES, 'utf-8'));
-    } catch {
-        return {};
-    }
-}
-
 // ─── Connexion ───────────────────────────────────────────────────────────────
 
 function clePrivee(c: ConnexionSftp): Buffer | undefined {
@@ -67,13 +61,13 @@ export class Sftp {
     private sftp?: SFTPWrapper;
     nouvelleEmpreinte?: string;     // renseignée si c'est la première connexion à ce serveur
 
-    constructor(readonly cible: ConnexionSftp) {}
+    constructor(readonly cible: ConnexionSftp, private services = { lireSecret: secret, fichierEmpreintes: FICHIER_EMPREINTES }) {}
 
-    connecter(): Promise<void> {
+    connecter(options: { empreinteAcceptee?: string } = {}): Promise<void> {
         const c = this.cible;
         const config: ConnectConfig = { host: c.hote, port: c.port, username: c.utilisateur, readyTimeout: 15_000, keepaliveInterval: 20_000 };
         if (c.auth === 'motdepasse') {
-            const mdp = secret(cleSecret(c.nom));
+            const mdp = this.services.lireSecret(cleSecret(c.nom));
             if (!mdp) return Promise.reject(new Error('mot de passe introuvable : modifie la connexion pour le saisir de nouveau'));
             config.password = mdp;
         } else {
@@ -84,25 +78,19 @@ export class Sftp {
             if (!cle && !config.agent) return Promise.reject(new Error('aucune clé SSH trouvée : « ⚿ Installer ma clé » dans la vue SSH, ou une connexion par mot de passe'));
         }
         const id = `${c.hote}:${c.port}`;
-        const connues = empreintes();
-        let refusee = '';
+        let refusee: Error | undefined;
         config.hostVerifier = (cle: Buffer) => {
-            const empreinte = 'SHA256:' + createHash('sha256').update(cle).digest('base64').replace(/=+$/, '');
-            if (!connues[id]) {
-                this.nouvelleEmpreinte = empreinte;
-                connues[id] = empreinte;
-                fs.writeFileSync(FICHIER_EMPREINTES, JSON.stringify(connues, null, 2), 'utf-8');
+            try {
+                const empreinte = empreinteSftp(cle);
+                if (verifierEmpreinteSftp(this.services.fichierEmpreintes, id, empreinte, options.empreinteAcceptee)) this.nouvelleEmpreinte = empreinte;
                 return true;
-            }
-            if (connues[id] === empreinte) return true;
-            refusee = `l'empreinte de ${id} a changé (${empreinte} au lieu de ${connues[id]}) : connexion refusée par sécurité. `
-                + `Si le serveur a été réinstallé, retire-le de ${FICHIER_EMPREINTES}.`;
-            return false;
+            } catch (e) { refusee = e as Error; return false; }
         };
         return new Promise((ok, ko) => {
             this.client
-                .on('ready', () => this.client.sftp((err, sftp) => (err ? ko(err) : ((this.sftp = sftp), ok()))))
-                .on('error', (e) => ko(refusee ? new Error(refusee) : traduire(e)))
+                .on('ready', () => this.client.sftp((err, sftp) => { if (err) { this.fermer(); ko(err); } else { this.sftp = sftp; ok(); } }))
+                .on('error', (e) => { this.fermer(); ko(refusee ?? traduire(e)); })
+                .once('close', () => ko(new Error('Connexion SFTP fermée avant sa préparation.')))
                 .connect(config);
         });
     }
@@ -119,13 +107,14 @@ export class Sftp {
     lister(dossier: string): Promise<Entree[]> {
         return new Promise((ok, ko) => this.s.readdir(dossier, (e, liste) => {
             if (e) return ko(traduire(e));
-            ok(liste.map((f) => ({
-                nom: f.filename,
+            try { ok(liste.filter((f) => f.filename !== '.' && f.filename !== '..').map((f) => ({
+                nom: nomFichierSftp(f.filename),
                 dossier: f.attrs.isDirectory(),
                 lien: f.attrs.isSymbolicLink(),
                 taille: f.attrs.size,
                 date: new Date(f.attrs.mtime * 1000),
-            })).sort((a, b) => Number(b.dossier) - Number(a.dossier) || a.nom.localeCompare(b.nom)));
+            })).sort((a, b) => Number(b.dossier) - Number(a.dossier) || a.nom.localeCompare(b.nom))); }
+            catch (e) { ko(e); }
         }));
     }
 
@@ -133,9 +122,22 @@ export class Sftp {
         return new Promise((ok) => this.s.stat(chemin, (e, st) => ok(!e && st.isDirectory())));
     }
 
-    telecharger(distant: string, local: string): Promise<void> {
+    async telecharger(distant: string, local: string): Promise<void> {
+        const sftp = this.s;
+        nomFichierSftp(path.basename(local));
         fs.mkdirSync(path.dirname(local), { recursive: true });
-        return new Promise((ok, ko) => this.s.fastGet(distant, local, (e) => (e ? ko(traduire(e)) : ok())));
+        let fd: number;
+        try { fd = fs.openSync(local, 'wx', 0o600); }
+        catch (e) { if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new Error('Un fichier existe déjà à cet emplacement. Il est conservé ; renomme-le ou déplace-le avant de télécharger.'); throw e; }
+        const identite = fs.fstatSync(fd);
+        const sortie = fs.createWriteStream(local, { fd, autoClose: true });
+        try { await pipeline(sftp.createReadStream(distant), sortie); }
+        catch (e) {
+            sortie.destroy();
+            // Ne retirer que le fichier créé par ce transfert, jamais un remplacement tiers.
+            try { const st = fs.lstatSync(local); if (!st.isSymbolicLink() && st.ino === identite.ino && st.dev === identite.dev) fs.unlinkSync(local); } catch { /* Une erreur de nettoyage ne masque pas celle du transfert. */ }
+            throw traduire(e as Error);
+        }
     }
 
     envoyer(local: string, distant: string): Promise<void> {
@@ -168,7 +170,11 @@ function traduire(e: Error & { code?: string | number; level?: string }): Error 
     return new Error(m);
 }
 
-export const dossierTemporaire = (nom: string) => path.join(os.tmpdir(), 'claudetopia-sftp', nom.replace(/[^\w.-]/g, '_'));
+export const dossierTemporaire = (nom: string) => path.join(os.tmpdir(), 'claudetopia-sftp', createHash('sha256').update(nom).digest('hex'));
+export function cheminCopieSftp(nom: string, distant: string): string {
+    // Une copie propre par ouverture : un chemin distant ne devient jamais un chemin local.
+    return path.join(dossierTemporaire(nom), randomUUID(), nomFichierSftp(path.posix.basename(distant)));
+}
 
 export function tailleLisible(n: number): string {
     if (n < 1024) return `${n} o`;

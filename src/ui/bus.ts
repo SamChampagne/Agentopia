@@ -12,7 +12,7 @@ export interface Choix<T> {
 }
 
 export type Demande =
-    | { type: 'choix'; message: string; choix: Choix<unknown>[]; recherche: boolean; multiple: boolean; resoudre: (v: unknown) => void }
+    | { type: 'choix'; message: string; detail?: string; choix: Choix<unknown>[]; recherche: boolean; multiple: boolean; resoudre: (v: unknown) => void }
     | { type: 'saisie'; message: string; defaut: string; masque?: boolean; resoudre: (v: string | undefined) => void }
     | { type: 'vue'; rendu: (fermer: () => void) => ReactNode; resoudre: () => void };
 
@@ -24,7 +24,10 @@ export const bus = new EventEmitter();
 
 function demander<T>(construire: (resoudre: (v: T | undefined) => void) => Demande): Promise<T> {
     return new Promise((ok, ko) => {
+        let terminee = false;
         bus.emit('demande', construire((v) => {
+            if (terminee) return;
+            terminee = true;
             bus.emit('demande', undefined);
             if (v === undefined) ko(new Annule());
             else ok(v);
@@ -32,9 +35,9 @@ function demander<T>(construire: (resoudre: (v: T | undefined) => void) => Deman
     });
 }
 
-export function choisir<T>(message: string, choix: Choix<T>[], recherche = choix.length > 8): Promise<T> {
+export function choisir<T>(message: string, choix: Choix<T>[], recherche = choix.length > 8, detail?: string): Promise<T> {
     return demander<T>((resoudre) => ({
-        type: 'choix', message, choix: choix as Choix<unknown>[], recherche, multiple: false,
+        type: 'choix', message, detail, choix: choix as Choix<unknown>[], recherche, multiple: false,
         resoudre: resoudre as (v: unknown) => void,
     }));
 }
@@ -62,8 +65,11 @@ export async function confirmer(message: string): Promise<boolean> {
 // Vue plein écran (moniteur) : la promesse se résout quand la vue appelle fermer()
 export function afficherVue(rendu: (fermer: () => void) => ReactNode): Promise<void> {
     return new Promise((ok) => {
+        let fermee = false;
         bus.emit('demande', {
             type: 'vue', rendu, resoudre: () => {
+                if (fermee) return;
+                fermee = true;
                 bus.emit('demande', undefined);
                 ok();
             },

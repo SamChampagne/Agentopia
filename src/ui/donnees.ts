@@ -12,8 +12,8 @@ import { toast, jouerSon } from '../notifications.js';
 import { bus } from './bus.js';
 import { mettreAJourCout, dollars } from '../cout.js';
 import { fichiersChauds } from '../modifications.js';
-import { verifierPlanifications } from '../planificateur.js';
-import { Equipe, equipes, lireEquipes, avancerEquipes, agentsDesEquipes, suivreFichierEquipes } from '../equipe.js';
+import { assurerMoteur, moteurEnPause } from '../moteurClient.js';
+import { Equipe, equipes, lireEquipes, agentsDesEquipes, suivreFichierEquipes, erreurStockageEquipes } from '../equipe.js';
 import {
     Serveur, UsageProjet, ConnexionActive, Acces, inventaire, usageParServeur, joignable, connexionsActives, lireAcces,
 } from '../ssh.js';
@@ -33,12 +33,14 @@ export interface Donnees {
     activites: Map<string, Activite>;       // ce qui se passe dans chacune (fin du transcript)
     docker: Hote[];                         // local d'abord, puis les serveurs surveillés
     equipes: Equipe[];                      // équipes d'agents (une carte chacune)
+    erreurEquipes?: string;
     cout: { total: number; jetons: number; parSession: Record<string, number> };   // équivalent API du jour ($)
 }
 
 const donnees: Donnees = {
     cout: { total: 0, jetons: 0, parSession: {} },
     equipes: lireEquipes(),
+    erreurEquipes: erreurStockageEquipes(),
     agents: [],
     activites: new Map(),
     docker: [],
@@ -139,6 +141,8 @@ function signalerChangements(avant: Map<string, string>): void {
             if (notifier) toast(`⚠ ${a.nom} attend ${a.question ? 'ta réponse' : 'ta permission'}`, a.question || a.titre || 'Clique pour ouvrir la session', `claudetopia:session/${a.id ?? a.sessionId}`, 'alerte');
             else jouerSon('alerte');
             bus.emit('notice', `! ${a.nom} attend ta permission · clique sa carte`);
+        } else if (a.integree && a.issue && a.issue !== 'success') {
+            if (notifier) toast(`! ${a.nom} : tour interrompu`, a.erreur || 'Ouvre la conversation pour voir le détail', `claudetopia:session/${a.id}`, 'alerte');
         } else if (duree >= 15_000 && !membres.has(a.id ?? '')) {
             const minutes = Math.round(duree / 60_000);
             if (notifier) toast(`✓ ${a.nom} a fini`, `${a.titre || 'Claude t\'attend'}${minutes ? ` · ${minutes} min de travail` : ''} · clic pour ouvrir`, `claudetopia:session/${a.id ?? a.sessionId}`);
@@ -148,12 +152,15 @@ function signalerChangements(avant: Map<string, string>): void {
     }
 }
 
+let derniereErreurMoteur: string | undefined;
 async function lireAgents(): Promise<void> {
     const avant = new Map(donnees.agents.map((a) => [a.sessionId, a.statut]));
     // Le maître est un Claude comme les autres : il n'a pas de carte
     donnees.agents = (await listerAgents()).filter((a) => path.resolve(a.cwd).toLowerCase() !== DOSSIER_MAITRE && !estFermee(a.cle));
     donnees.activites = new Map(donnees.agents.map((a) => [a.sessionId, activiteDe(a.fichier)]));
-    avancerEquipes(donnees.agents);
+    if (!moteurEnPause() && process.env.CLAUDETOPIA_TEST_UI !== '1') void assurerMoteur()
+        .then(() => { derniereErreurMoteur = undefined; })
+        .catch((e) => { const message = (e as Error).message; if (message !== derniereErreurMoteur) bus.emit('notice', message); derniereErreurMoteur = message; });
     donnees.equipes = lireEquipes();
     signalerChangements(avant);
     signalerConflits();
@@ -209,8 +216,6 @@ export function demarrerCollecte(): void {
         donnees.joignables = new Map(donnees.serveurs.map((s, i) => [s, etats[i]]));
     }, 60_000);
     boucle(async () => { donnees.connexions = await connexionsActives(); }, 15_000);
-    // Tâches planifiées : vérifiées toutes les minutes
-    setTimeout(() => boucle(() => verifierPlanifications(), 60_000), 15_000);
     // Coût du jour (équivalent API) et alerte de budget, une fois par jour
     let alerteBudget = '';
     setTimeout(() => boucle(async () => {
@@ -229,6 +234,7 @@ export function demarrerCollecte(): void {
     suivreFichierEquipes();
     equipes.on('maj', () => {
         donnees.equipes = lireEquipes();
+        donnees.erreurEquipes = erreurStockageEquipes();
         publier();
     });
     // Les « il y a 3 min » avancent même quand rien d'autre ne bouge

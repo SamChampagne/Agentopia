@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useKeyboard, useTerminalDimensions } from '@opentui/react';
+import { useSelectionVisible } from '../listeClavier.ts';
+import { metriquesLive } from '../../dist/ui/metriquesLive.js';
 import { GRAS, ANIM, une, couper } from '../style.ts';
 import { useDonnees } from '../donnees.ts';
 import { Toile, RenduToile } from '../toile.tsx';
@@ -83,9 +85,9 @@ function Pouls({ d, largeur, hauteur, tic }: { d: any; largeur: number; hauteur:
             toile.point(x, y, crete ? theme.accent : melange(NOIR, theme.primaire, 0.25 + 0.5 * (1 - y / toile.hauteurPx)), crete ? 2 : 1);
         }
     }
-    // Le « maintenant » pulse au bout de la courbe
+    // Le point « maintenant » reste fixe ; seules les données évoluent.
     const yFin = Math.round((1 - valeur(toile.largeurPx - 1)) * (toile.hauteurPx - 1));
-    for (let dy = -1; dy <= 1; dy++) toile.point(toile.largeurPx - 1 - (tic % 2), yFin + dy, '#ffffff', 3);
+    for (let dy = -1; dy <= 1; dy++) toile.point(toile.largeurPx - 1, yFin + dy, '#ffffff', 3);
     const parMinute = total[minutes - 1];
     return (
         <box flexDirection="column" flexShrink={0}>
@@ -133,31 +135,29 @@ function Activite({ horaires, largeur, hauteur, couleur, vif }: { horaires?: num
 
 // Une session en carte : son état, sa courbe d'activité, son contexte, ce qu'elle fait ;
 // au survol ou à la sélection (flèches), ses actions apparaissent en bas
-function CarteSession({ s, a, cout, largeur, tic, choisie, survolee, agir, survoler }: {
+export function CarteSession({ s, a, cout, largeur, tic, choisie, survolee, agir, survoler, id }: {
     s: any; a: any; cout?: number; largeur: number; tic: number; choisie: boolean; survolee: boolean; agir: (action: string) => void; survoler: (oui: boolean) => void;
+    id?: string;
 }) {
     const [bouton, setBouton] = useState<string>();
     const st = STATUTS[s.statut] ?? STATUTS.terminee;
     const projet = couleurProjet(s.nom);
     const travaille = s.statut === 'travaille', bloquee = s.statut === 'bloquee';
-    // Le bord : accent si choisie, pulse aux couleurs du projet si elle travaille, orange qui clignote si elle t'attend
-    const bord = choisie || survolee ? theme.accent : bloquee ? (tic % 2 ? ORANGE : '#7c2d12') : travaille ? (tic % 2 ? projet : melange(NOIR, projet, 0.5)) : melange(NOIR, projet, 0.4);
+    // Couleurs stables : le statut reste lisible sans faire clignoter les cartes.
+    const bord = choisie || survolee ? theme.accent : bloquee ? ORANGE : travaille ? melange(NOIR, projet, 0.65) : melange(NOIR, projet, 0.4);
     const iw = largeur - 4;
     const action = s.question ? `? ${une(s.question)}` : a?.outil ? `▸ ${une(a.outil)}` : une(a?.dernierTexte ?? s.titre ?? 'pas encore d’activité');
     const ctx = a?.contexte;
-    const limite = ctx ? (ctx > 200_000 ? 1_000_000 : 200_000) : 0;
-    const part = ctx ? Math.min(1, ctx / limite) : 0;
-    const lc = Math.max(4, Math.min(12, iw - 24));
-    const repondable = bloquee && s.arrierePlan && s.question && !/permission/i.test(s.question);
+    const repondable = !s.integree && bloquee && s.arrierePlan && s.question && !/permission/i.test(s.question);
     const boutons = [
         { cle: 'ouvrir', t: ' ↵ Ouvrir ' },
         ...(repondable ? [{ cle: 'repondre', t: ' ✎ Répondre ' }] : []),
-        ...(s.arrierePlan ? [{ cle: 'cote', t: ' ⫿ À côté ' }] : []),
+        ...(s.arrierePlan && !s.integree ? [{ cle: 'cote', t: ' ⫿ À côté ' }] : []),
         { cle: 'changements', t: ' ± Diff ' },
     ];
     const depuis = a?.date ? Math.round((Date.now() - a.date.getTime()) / 60_000) : undefined;
     return (
-        <box width={largeur} height={9} flexShrink={0} border borderStyle="rounded" borderColor={bord} flexDirection="column" paddingLeft={1} paddingRight={1}
+        <box id={id} width={largeur} height={9} flexShrink={0} border borderStyle="rounded" borderColor={bord} flexDirection="column" paddingLeft={1} paddingRight={1}
             backgroundColor={choisie ? '#111827' : undefined}
             onMouseOver={() => survoler(true)} onMouseOut={() => survoler(false)} onMouseDown={() => agir('ouvrir')}>
             <box height={1} flexDirection="row">
@@ -166,12 +166,9 @@ function CarteSession({ s, a, cout, largeur, tic, choisie, survolee, agir, survo
                 <text flexShrink={0} fg={st.c} attributes={bloquee ? GRAS : 0}>{` ${st.t}`}</text>
             </box>
             <text fg={fond.eteint} wrapMode="none">{couper(`${s.titre || s.id || ''} · ${s.arrierePlan ? 'arrière-plan' : 'onglet'}${cout ? ` · ${dollars(cout)}` : ''}`, iw)}</text>
-            <Activite horaires={a?.horaires} largeur={iw} hauteur={2} couleur={projet} vif={travaille && tic % 2 === 0} />
+            <Activite horaires={a?.horaires} largeur={iw} hauteur={2} couleur={projet} vif={travaille} />
             <text wrapMode="none">
-                <span fg="gray">ctx </span>
-                <span fg={part > 0.8 ? ROUGE : part > 0.5 ? JAUNE : VERT}>{'▰'.repeat(Math.round(part * lc))}</span>
-                <span fg={fond.bordure}>{'▱'.repeat(lc - Math.round(part * lc))}</span>
-                <span fg="gray">{ctx ? ` ${Math.round(ctx / 1000)}k` : ' ?'}</span>
+                <span fg="gray">{ctx ? `ctx ${Math.round(ctx / 1000)}k · limite inconnue` : 'contexte non fourni'}</span>
                 <span fg={fond.discret}>{depuis === undefined ? '' : depuis < 1 ? '  · à l’instant' : `  · il y a ${depuis} min`}</span>
             </text>
             <text fg={s.question ? '#fdba74' : '#cbd5e1'} wrapMode="none">{couper(action, iw)}</text>
@@ -216,13 +213,17 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
     }, []);
     // Flèches : choisir une carte · Entrée : l'ouvrir · j : à côté · d : ses changements
     const [choix, setChoix] = useState(-1);
+    const defilement = useSelectionVisible(choix >= 0 ? `session-live-${choix}` : undefined);
+    const [usage, setUsage] = useState(() => metriquesLive());
+    useEffect(() => { const t = setInterval(() => setUsage(metriquesLive()), 5000); return () => clearInterval(t); }, []);
     const ordre = useRef<any[]>([]);
     const parLigne = useRef(1);
     useKeyboard((k) => {
         if (k.name === 'escape' || k.sequence === 'q') return fermer();
         const n = ordre.current.length;
         if (!n) return;
-        const pas = k.name === 'right' ? 1 : k.name === 'left' ? -1 : k.name === 'down' ? parLigne.current : k.name === 'up' ? -parLigne.current : 0;
+        const pas = k.name === 'right' ? 1 : k.name === 'left' ? -1 : k.name === 'down' ? parLigne.current : k.name === 'up' ? -parLigne.current
+            : k.name === 'pagedown' ? parLigne.current * 2 : k.name === 'pageup' ? -parLigne.current * 2 : 0;
         if (pas) return setChoix((c) => (c < 0 ? 0 : Math.max(0, Math.min(n - 1, c + pas))));
         const s = ordre.current[choix];
         if (!s) return;
@@ -267,21 +268,17 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
     const testes = serveurs.filter((s: any) => d.joignables.get(s) !== undefined).length;
     const muets = testes - repondent;
     const noms = (liste: any[], couleur: (s: any) => string) => liste.slice(0, 3).map((s: any) => [{ t: '● ', c: couleurProjet(s.nom) }, { t: couper(s.titre || s.nom, 24), c: couleur(s) }]);
-    const coutsTries = Object.entries(d.cout.parSession as Record<string, number>).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const tuiles = [
-        <Tuile key="t" titre="AU TRAVAIL" n={String(travaillent)} sous={travaillent ? `${ANIM[tic % ANIM.length]} Claude écrit en ce moment` : 'tout est calme'} couleur={VERT} vif={travaillent > 0} largeur={lt}
+        <Tuile key="t" titre="AU TRAVAIL" n={String(travaillent)} sous={travaillent ? 'Agents en cours de travail' : 'tout est calme'} couleur={VERT} vif={travaillent > 0} largeur={lt}
             extra={noms(sessions.filter((s: any) => s.statut === 'travaille'), () => '#cbd5e1')} />,
         <Tuile key="a" titre="T’ATTENDENT" n={String(attendent)} sous={bloquees ? `! ${bloquees} bloquée${bloquees > 1 ? 's' : ''}, à toi de jouer` : attendent ? 'ont fini, à toi de répondre' : 'personne ne t’attend'}
-            couleur={bloquees ? ORANGE : JAUNE} vif={!!bloquees && tic % 2 === 0} largeur={lt}
+            couleur={bloquees ? ORANGE : JAUNE} vif={!!bloquees} largeur={lt}
             extra={noms(sessions.filter((s: any) => s.statut === 'bloquee' || s.statut === 'attend'), (s) => (s.statut === 'bloquee' ? ORANGE : '#cbd5e1'))} />,
-        <Tuile key="c" titre="COÛT DU JOUR" n={`${entier},${centimes}`} suite="$" sous={`${(d.cout.jetons / 1000).toFixed(0)} k jetons (équiv. API)`} couleur={theme.accent} largeur={lt}
-            extra={coutsTries.map(([id, cout]) => {
-                const s = d.agents.find((a: any) => a.sessionId === id);
-                return [{ t: `${dollars(cout).padStart(8)} `, c: 'gray' }, { t: couper(s ? s.nom : 'session fermée', 18), c: s ? couleurProjet(s.nom) : fond.discret }];
-            })} />,
+        <Tuile key="c" titre="TOURS IA · AUJOURD’HUI" n={String(usage.tours)} sous={usage.cout === undefined ? 'coût non fourni' : `${usage.cout.toFixed(2)} $ US${usage.inconnus ? ' · partiel' : ' rapportés'}`} couleur={theme.accent} largeur={lt}
+            extra={usage.fournisseurs.map((f) => [{ t: `${f.nom} · ${f.tours}`, c: 'gray' }])} />,
         <Tuile key="s" titre="SERVEURS" n={`${repondent}/${serveurs.length}`}
             sous={testes < serveurs.length && !muets ? 'test en cours…' : muets ? `${muets} ne répond${muets > 1 ? 'ent' : ''} pas` : 'tous répondent'}
-            couleur={muets ? ROUGE : theme.secondaire} vif={muets > 0 && tic % 2 === 0} largeur={lt}
+            couleur={muets ? ROUGE : theme.secondaire} vif={muets > 0} largeur={lt}
             extra={[serveurs.slice(0, 8).map((s: any) => {
                 const ok = d.joignables.get(s);
                 return { t: ok === undefined ? '○ ' : '● ', c: ok === undefined ? 'gray' : ok ? VERT : ROUGE };
@@ -301,7 +298,7 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
     ordre.current = actives;
     parLigne.current = nbParLigne;
     const cartesSessions = actives.map((s: any, i: number) => (
-        <CarteSession key={s.cle} s={s} a={d.activites.get(s.sessionId)} cout={d.cout.parSession[s.sessionId]} largeur={lc} tic={tic}
+        <CarteSession key={s.cle} id={`session-live-${i}`} s={s} a={d.activites.get(s.sessionId)} cout={d.cout.parSession[s.sessionId]} largeur={lc} tic={tic}
             choisie={i === choix} survolee={survol === s.cle} survoler={(oui) => setSurvol(oui ? s.cle : undefined)}
             agir={(action) => agirSession(s, action)} />
     ));
@@ -318,7 +315,7 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
         return (
             <box key={s.nom} flexDirection="column" flexShrink={0} backgroundColor={survol === cle ? fond.selection : undefined} {...survoler(cle)} onMouseDown={() => ouvrirDetail({ type: 'serveur', cle: s.nom })}>
                 <text truncate>
-                    <span fg={ok === undefined ? 'gray' : ok ? VERT : ROUGE}>{ok === false && tic % 2 ? ' ◌ ' : ' ● '}</span>
+                    <span fg={ok === undefined ? 'gray' : ok ? VERT : ROUGE}>{' ● '}</span>
                     <span fg={fond.texte} attributes={GRAS}>{couper(s.nom, 22)}</span>
                     <span fg={fond.discret}>{`  ${s.ip ?? s.hote}${m?.depuis ? ` · ${m.depuis}` : ''}`}</span>
                     {connecte > 0 && <span fg={theme.accent}>{`  ⇄ ${connecte}`}</span>}
@@ -374,13 +371,15 @@ export function VueGlobale({ fermer }: { fermer: () => void }) {
     return (
         <box flexGrow={1} flexDirection="column" paddingLeft={1}>
             <box height={1} flexDirection="row" paddingRight={1}>
-                <text flexGrow={1}><span fg={theme.accent} attributes={GRAS}>{`${tic % 2 ? '◉' : '○'} VUE GLOBALE `}</span><span fg={fond.discret}>en direct · clic pour ouvrir · Échap pour revenir</span></text>
+                <text flexGrow={1}><span fg={theme.accent} attributes={GRAS}>◉ VUE GLOBALE </span><span fg={fond.discret}>en direct · clic pour ouvrir · Échap pour revenir</span></text>
                 <text fg="gray">{new Date().toTimeString().slice(0, 8)}</text>
             </box>
-            <box flexDirection="row" flexShrink={0}>{tuiles}</box>
-            <Pouls d={d} largeur={largeur - 2} hauteur={height >= 50 ? 8 : height >= 40 ? 6 : 4} tic={tic} />
+            {height >= 30 ? <box flexDirection="row" flexShrink={0}>{tuiles}</box>
+                : <text height={1} truncate fg={theme.accent}>{`${travaillent} au travail · ${attendent} t’attendent · ${usage.tours} tours IA aujourd’hui`}</text>}
+            <text height={1} truncate fg={fond.eteint} onMouseDown={() => { fermer(); bus.emit('lancer', '/utilisation'); }}>{`Utilisation des agents : ${usage.cout === undefined ? 'coût non fourni' : `${usage.cout.toFixed(4)} $ US rapportés`}${usage.inconnus ? ` · ${usage.inconnus} coût(s) inconnu(s)` : ''} · Claude CLI séparé ≈ ${entier},${centimes} $ · /utilisation`}</text>
+            {height >= 32 && <Pouls d={d} largeur={largeur - 2} hauteur={height >= 50 ? 8 : height >= 40 ? 6 : 4} tic={tic} />}
             <box height={1} border={['bottom']} borderColor={fond.bordure} />
-            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
+            <scrollbox ref={defilement} verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 <box flexDirection={deuxColonnes ? 'row' : 'column'}>
                     <box flexDirection="column" width={deuxColonnes ? lg : undefined} flexShrink={0} marginRight={deuxColonnes ? 2 : 0}>
                         <box flexDirection="row">

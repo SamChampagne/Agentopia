@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useKeyboard } from '@opentui/react';
+import { useKeyboard, useTerminalDimensions } from '@opentui/react';
+import { useSelectionVisible } from '../listeClavier.ts';
 import { GRAS, couper } from '../style.ts';
 import { useDonnees } from '../donnees.ts';
 import { Titre, Boutons } from './commun.tsx';
@@ -18,6 +19,8 @@ const BOUTONS = [
 const colonne = (s: string, n: number) => couper(s, n - 1).padEnd(n);
 
 export function VueDocker({ fermer }: { fermer: () => void }) {
+    const { width, height } = useTerminalDimensions();
+    const compact = width < 110;
     const d = useDonnees();
     const [choix, setChoix] = useState<string>();
     const [survol, setSurvol] = useState<string>();
@@ -32,6 +35,7 @@ export function VueDocker({ fermer }: { fermer: () => void }) {
     }
     const conteneurs = lignes.filter((l) => l.type === 'conteneur');
     const courant = conteneurs.find((l) => l.c.id === choix) ?? conteneurs[0];
+    const defilement = useSelectionVisible(courant ? `docker-${conteneurs.indexOf(courant)}` : undefined);
     const actifs = new Set(['fermer', ...(courant ? (courant.c.enMarche ? ['stop', 'restart', 'logs', 'shell', 'surveiller'] : ['start', 'logs']) : [])]);
 
     async function agir(action: string) {
@@ -46,6 +50,7 @@ export function VueDocker({ fermer }: { fermer: () => void }) {
             const [programme, args] = commandeInteractive(action, c.id, hote.serveur);
             return void passerLaMain(programme, args);
         }
+        if (action !== 'start' && action !== 'stop' && action !== 'restart') return;
         setMessage(`${action === 'start' ? 'Démarrage' : action === 'stop' ? 'Arrêt' : 'Redémarrage'} de ${c.nom}…`);
         const res = await actionConteneur(action, c.id, hote.serveur);
         setMessage(res.ok ? `✓ ${c.nom} : ${action === 'start' ? 'démarré' : action === 'stop' ? 'arrêté' : 'redémarré'}` : `✕ ${res.sortie.split('\n')[0]}`);
@@ -60,6 +65,8 @@ export function VueDocker({ fermer }: { fermer: () => void }) {
         if (k.name === 'escape' || k.sequence === 'q') return fermer();
         if (k.name === 'up') deplacer(-1);
         if (k.name === 'down') deplacer(1);
+        if (k.name === 'pageup') deplacer(-Math.max(1, Math.floor((height - 7) / (compact ? 2 : 1))));
+        if (k.name === 'pagedown') deplacer(Math.max(1, Math.floor((height - 7) / (compact ? 2 : 1))));
         if (k.name === 'return') void agir('logs');
         if (k.sequence === 's') void agir(courant?.c.enMarche ? 'stop' : 'start');
         if (k.sequence === 'r') void agir('restart');
@@ -72,7 +79,7 @@ export function VueDocker({ fermer }: { fermer: () => void }) {
             <Titre texte="DOCKER" droite={d.docker.length ? `${enMarche} en marche · ${total} conteneurs` : 'lecture…'} />
             <Boutons boutons={BOUTONS} actifs={actifs} agir={(a) => void agir(a)} />
             <text> </text>
-            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
+            <scrollbox ref={defilement} verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {lignes.map((l, i) => {
                     if (l.type === 'hote') {
                         return (
@@ -95,17 +102,20 @@ export function VueDocker({ fermer }: { fermer: () => void }) {
                     const actif = c.id === courant?.c.id;
                     const etat = c.enMarche ? (c.sante === 'unhealthy' ? '#facc15' : '#4ade80') : fond.eteint;
                     return (
-                        <box key={cle} height={1} backgroundColor={actif ? fond.selection : survol === cle ? fond.panneau : undefined}
+                        <box key={cle} id={`docker-${conteneurs.indexOf(l)}`} height={compact ? 2 : 1} flexDirection="column" backgroundColor={actif ? fond.selection : survol === cle ? fond.panneau : undefined}
                             onMouseOver={() => setSurvol(cle)} onMouseOut={() => setSurvol(undefined)} onMouseDown={() => setChoix(c.id)}>
                             <text truncate>
                                 <span fg={actif ? theme.accent : 'gray'}>{actif ? '  ❯ ' : '    '}</span>
                                 <span fg={etat}>● </span>
-                                <span>{colonne(c.service ?? c.nom, 22)}</span>
+                                <span>{compact ? c.service ?? c.nom : colonne(c.service ?? c.nom, 22)}</span>
+                                {!compact && <>
                                 <span fg="gray">{colonne(c.image, 24)}</span>
                                 <span fg={theme.accent}>{colonne(portsCourts(c.ports), 12)}</span>
                                 <span fg={c.enMarche ? theme.secondaire : 'gray'}>{colonne(c.enMarche ? `${c.cpu ?? ''} ${c.memoire ?? ''}`.trim() : '', 20)}</span>
                                 <span fg="gray">{`${c.sante ? `${c.sante} · ` : ''}${c.statut}`}</span>
+                                </>}
                             </text>
+                            {compact && <text truncate fg={etat}>{`      ${c.enMarche ? 'en marche' : 'arrêté'}${c.sante ? ` · ${c.sante}` : ''} · ${portsCourts(c.ports) || 'aucun port publié'}`}</text>}
                         </box>
                     );
                 })}

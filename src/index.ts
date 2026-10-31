@@ -5,6 +5,14 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { CHEMINS, surPath } from './chemins.js';
+import { installerDiagnostics } from './diagnostics.js';
+installerDiagnostics();
+
+if (process.argv.includes('--verifier-installation')) {
+    try { const { verifierInstallation } = await import('./verifierInstallation.js'); await verifierInstallation(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')); }
+    catch (e) { console.error((e as Error).message); process.exitCode = 1; }
+    process.exit(process.exitCode ?? 0);
+}
 
 // Nouvelle interface (OpenTUI, sous Bun) : utilisée dès que Bun et ses dépendances sont là.
 // CLAUDETOPIA_INK=1 garde l'ancienne interface (Ink) ; si Bun ne démarre pas, on y revient aussi.

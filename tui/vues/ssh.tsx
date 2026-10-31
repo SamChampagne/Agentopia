@@ -1,6 +1,7 @@
 import * as os from 'os';
 import { useState } from 'react';
 import { useKeyboard } from '@opentui/react';
+import { useSelectionVisible } from '../listeClavier.ts';
 import { GRAS } from '../style.ts';
 import { useDonnees } from '../donnees.ts';
 import { Titre, Boutons } from './commun.tsx';
@@ -9,7 +10,8 @@ import { decrireConnexion, rafraichirAcces, rafraichirDocker, lireDonnees } from
 import { serveursPertinents, ilYa } from '../../dist/ui/Panneau.js';
 import { testerAcces, lireAcces, sauverAcces } from '../../dist/ssh.js';
 import { sauverConfig } from '../../dist/config.js';
-import { config, getProjets } from '../../dist/commandes.js';
+import { config } from '../../dist/commandes.js';
+import { useProjets } from '../projets.ts';
 import { nomDossierClaude } from '../../dist/usage.js';
 import { ouvrirOnglet } from '../../dist/lanceurs.js';
 import { theme, fond } from '../../dist/theme.js';
@@ -38,6 +40,7 @@ export function VueServeurs({ fermer, initial }: { fermer: () => void; initial?:
     const liste: any[] = tous ? d.serveurs : serveursPertinents(d);
     const courant = liste.find((s) => s.nom === choix) ?? liste[0];
     const index = Math.max(0, liste.indexOf(courant));
+    const defilement = useSelectionVisible(courant ? `ssh-${index}` : undefined);
 
     async function agir(action: string) {
         if (action === 'fermer') return fermer();
@@ -78,19 +81,21 @@ export function VueServeurs({ fermer, initial }: { fermer: () => void; initial?:
         if (k.name === 'escape' || k.sequence === 'q') return fermer();
         if (k.name === 'up') setChoix(liste[Math.max(0, index - 1)]?.nom);
         if (k.name === 'down') setChoix(liste[Math.min(liste.length - 1, index + 1)]?.nom);
+        if (k.name === 'pageup') setChoix(liste[Math.max(0, index - 3)]?.nom);
+        if (k.name === 'pagedown') setChoix(liste[Math.min(liste.length - 1, index + 3)]?.nom);
         if (k.name === 'return') void agir('connecter');
         if (k.sequence === 't') void agir('tester');
         if (k.sequence === 'f') void agir('fichiers');
     });
 
-    const projets = getProjets();
+    const projets = useProjets();
     const caches = d.serveurs.length - liste.length;
     return (
         <box flexGrow={1} flexDirection="column" paddingLeft={1}>
             <Titre texte="SERVEURS SSH" droite={`${liste.length} serveur${liste.length > 1 ? 's' : ''}`} />
             <Boutons boutons={BOUTONS} agir={(a) => void agir(a)} />
             <text> </text>
-            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
+            <scrollbox ref={defilement} verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {!liste.length && <text fg="gray">Aucun serveur dans ~/.ssh/config ni known_hosts</text>}
                 {liste.map((s) => {
                     const actif = s === courant;
@@ -102,7 +107,7 @@ export function VueServeurs({ fermer, initial }: { fermer: () => void; initial?:
                     const bord = <span fg={actif ? theme.accent : fond.bordure}>{actif ? '▌ ' : '  '}</span>;
                     const couleurEtat = ok === undefined ? 'gray' : ok ? '#4ade80' : '#f87171';
                     return (
-                        <box key={s.nom} flexDirection="column" flexShrink={0} marginBottom={1} onMouseDown={() => setChoix(s.nom)}>
+                        <box key={s.nom} id={`ssh-${liste.indexOf(s)}`} flexDirection="column" flexShrink={0} marginBottom={1} onMouseDown={() => setChoix(s.nom)}>
                             <text truncate>
                                 {bord}<span fg={couleurEtat}>● </span>
                                 <span fg={actif ? fond.texte : undefined} attributes={GRAS}>{s.nom}</span>

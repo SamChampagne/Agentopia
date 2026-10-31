@@ -184,18 +184,6 @@ const exemples = (projet = 'mon-projet') => ['« ferme les sessions finies »', 
 function Maitre({ etat, actif, hauteur, largeur, tic, claude, projet }: { etat: EtatMaitre; actif: boolean; hauteur: number; largeur: number; tic: number; claude: string; projet?: string }) {
     const dernier = etat.historique.at(-1);
     const corps: { texte: string; couleur?: string }[] = [];
-    // Claude Code absent ou pas connecté : rien ne marchera sans lui, on le dit ici (clic = corriger)
-    if (claude === 'absent' || claude === 'deconnecte') {
-        const lignes = claude === 'absent'
-            ? [{ texte: '! Claude Code n\'est pas installé', couleur: '#fb923c' }, { texte: '▸ clic ici pour l\'installer', couleur: theme.accent }]
-            : [{ texte: '! Pas connecté à Claude', couleur: '#fb923c' }, { texte: '▸ clic ici pour te connecter', couleur: theme.accent }];
-        return (
-            <Box flexDirection="column" height={hauteur} overflow="hidden">
-                <Entete titre="◇ MAÎTRE" largeur={largeur} couleur={VIOLET} />
-                {lignes.slice(0, hauteur - 1).map((l, i) => <Box key={i} height={1} overflow="hidden" paddingX={1}><Text wrap="truncate-end" color={l.couleur}>{l.texte}</Text></Box>)}
-            </Box>
-        );
-    }
     if (!dernier) {
         // Au repos, une seule ligne : l'invitation (les exemples tournent, un à la fois)
         corps.push(actif ? { texte: 'Écris ta demande en bas ↓', couleur: VIOLET } : { texte: `ex. ${exemples(projet)[Math.floor(Date.now() / 20_000) % 3]}`, couleur: fond.eteint });
@@ -209,10 +197,10 @@ function Maitre({ etat, actif, hauteur, largeur, tic, claude, projet }: { etat: 
     // Peu de place : la réponse passe avant le rappel de la question, et on dit où lire la suite
     if (dernier && corps.length > hauteur - 1 && !etat.enCours) corps.shift();
     if (dernier && corps.length > hauteur - 1) corps.splice(hauteur - 2, corps.length, { texte: '… suite dans le journal →', couleur: 'gray' });
-    const droite = etat.enCours ? `${ANIM[tic % ANIM.length]}` : actif ? '● à l\'écoute' : etat.pret ? 'Alt+M' : etat.enVeille ? 'en veille' : etat.erreur ? '!' : 'démarre…';
+    const droite = etat.enCours ? `${ANIM[tic % ANIM.length]}` : actif ? '● à l\'écoute' : etat.pret ? 'Alt+M' : etat.enVeille ? 'en veille' : etat.erreur ? '!' : 'à la demande';
     return (
         <Box flexDirection="column" height={hauteur} overflow="hidden">
-            <Entete titre={actif ? '◈ MAÎTRE' : '◇ MAÎTRE'} droite={droite} largeur={largeur} couleur={VIOLET} couleurDroite={actif ? VIOLET : 'gray'} />
+            <Entete titre={`${actif ? '◈' : '◇'} MAÎTRE · ${etat.fournisseur}`} droite={droite} largeur={largeur} couleur={VIOLET} couleurDroite={actif ? VIOLET : 'gray'} />
             {corps.slice(0, hauteur - 1).map((l, i) => (
                 <Box key={i} height={1} overflow="hidden" paddingX={1}><Text wrap="truncate-end" color={l.couleur}>{l.texte || ' '}</Text></Box>
             ))}

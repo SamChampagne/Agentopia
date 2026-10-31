@@ -30,6 +30,9 @@ export function VueQuestions({ fermer }: { fermer: () => void }) {
     function agir(action: string) {
         if (action === 'fermer') return fermer();
         if (!courante) return;
+        if (courante.permission && (action === 'suggestion' || action === 'repondre')) {
+            fermer(); bus.emit('lancer', `/autorisation ${courante.id}`); return;
+        }
         if (action === 'suggestion' && courante.suggestion) return envoyer(courante.suggestion);
         if (action === 'repondre' || action === 'suggestion') return setReponse(action === 'suggestion' ? '' : courante.suggestion ?? '');
         if (action === 'voir') {
@@ -55,7 +58,7 @@ export function VueQuestions({ fermer }: { fermer: () => void }) {
             {reponse !== undefined ? (
                 <box height={1} flexDirection="row">
                     <text fg={theme.accent}>{`Réponse à ${courante?.nom} : `}</text>
-                    <input flexGrow={1} focused value={reponse} onInput={setReponse} onSubmit={(v: string) => envoyer(v)} />
+                    <input flexGrow={1} focused value={reponse} onInput={setReponse} onSubmit={(v: unknown) => { if (typeof v === 'string') envoyer(v); }} />
                     <text fg="gray">  Entrée envoyer · Échap annuler</text>
                 </box>
             ) : <text fg="gray">Entrée = envoyer la suggestion (ou répondre) · r répondre · Échap fermer</text>}

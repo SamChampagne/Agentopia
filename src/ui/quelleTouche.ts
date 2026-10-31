@@ -7,7 +7,7 @@ export type Noeud = Feuille | Groupe;
 
 export const estGroupe = (n: Noeud): n is Groupe => 'enfants' in n;
 
-// commande : une commande Claudetopia, ou « espace:… » / « maitre » (gérés par l'interface)
+// commande : une commande Agentopia, ou « espace:… » / « maitre » (gérés par l'interface)
 export const ARBRE: Groupe = {
     nom: 'Actions',
     enfants: {
@@ -20,11 +20,14 @@ export const ARBRE: Groupe = {
         },
         s: {
             nom: 'Sessions', enfants: {
-                n: { nom: 'Nouvelle session', commande: '/nouvelle' },
+                n: { nom: 'Nouvelle conversation', commande: '/session' },
+                h: { nom: 'Historique des agents', commande: '/historique-agents' },
+                f: { nom: 'Fournisseurs IA', commande: '/fournisseurs' },
+                a: { nom: 'Créer une équipe mixte', commande: '/equipe-mixte' },
                 q: { nom: 'Ce qu\'elles attendent', commande: '/questions' },
                 m: { nom: 'Parler au maître', commande: 'maitre' },
                 e: { nom: 'Équipe d\'agents', commande: '/equipe' },
-                c: { nom: 'Coût du jour', commande: '/cout' },
+                c: { nom: 'Coût Claude CLI', commande: '/cout' },
                 t: { nom: 'Tâches planifiées', commande: '/planifications' },
             },
         },

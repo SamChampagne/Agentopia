@@ -1,5 +1,7 @@
+import { citerArgument } from '../../dist/ligneCommande.js';
 import { useEffect, useState } from 'react';
-import { useKeyboard } from '@opentui/react';
+import { useKeyboard, useTerminalDimensions } from '@opentui/react';
+import { useSelectionVisible } from '../listeClavier.ts';
 import { GRAS, couper } from '../style.ts';
 import { Titre, Boutons } from './commun.tsx';
 import { ilYa } from '../../dist/ui/Panneau.js';
@@ -31,6 +33,8 @@ export function useSynchro() {
 }
 
 export function VueGit({ fermer }: { fermer: () => void }) {
+    const { width, height } = useTerminalDimensions();
+    const compact = width < 110;
     const s = useSynchro();
     const [choix, setChoix] = useState<string>();
     const [survol, setSurvol] = useState<string>();
@@ -49,6 +53,7 @@ export function VueGit({ fermer }: { fermer: () => void }) {
     const cle = (l: any) => (l.type === 'local' ? l.d.projet.chemin : l.type === 'distant' ? l.r.url : '');
     const choisissables = lignes.filter((l) => l.type !== 'titre');
     const courant = choisissables.find((l) => cle(l) === choix) ?? choisissables[0];
+    const defilement = useSelectionVisible(courant ? `git-${choisissables.indexOf(courant)}` : undefined);
     const local = courant?.type === 'local' ? courant.d : undefined;
     const distant = courant?.type === 'distant' ? courant.r : undefined;
 
@@ -69,7 +74,7 @@ export function VueGit({ fermer }: { fermer: () => void }) {
         if (!actifs.has(action)) return;
         if (action === 'pr-corriger' || action === 'ci') {
             fermer();
-            return void bus.emit('lancer', `/${action === 'ci' ? 'ci-reparer' : 'pr-corriger'} ${local.projet.chemin}`);
+            return void bus.emit('lancer', `/${action === 'ci' ? 'ci-reparer' : 'pr-corriger'} ${citerArgument(local.projet.chemin)}`);
         }
         if (action === 'fetch') {
             setMessage('git fetch sur tous les dépôts…');
@@ -116,6 +121,8 @@ export function VueGit({ fermer }: { fermer: () => void }) {
         if (k.name === 'escape' || k.sequence === 'q') return fermer();
         if (k.name === 'up') deplacer(-1);
         if (k.name === 'down') deplacer(1);
+        if (k.name === 'pageup') deplacer(-Math.max(1, Math.floor((height - 10) / (compact ? 2 : 1))));
+        if (k.name === 'pagedown') deplacer(Math.max(1, Math.floor((height - 10) / (compact ? 2 : 1))));
         if (k.sequence === 'f') void agir('fetch');
         if (k.sequence === 'p') void agir('push');
         if (k.sequence === 'l') void agir('pull');
@@ -130,7 +137,7 @@ export function VueGit({ fermer }: { fermer: () => void }) {
         if (local.prs?.length) return <span fg={theme.accent}>{local.prs.slice(0, 3).map((p: any) => `#${p.numero} ${p.titre} (${p.auteur}${p.brouillon ? ', brouillon' : ''})`).join('  ·  ')}</span>;
         if (!local.hebergeur || !['GitHub', 'Azure DevOps', 'GitLab'].includes(local.hebergeur)) return <span fg="gray">« ◷ PR » ouvre la page du dépôt</span>;
         if (!jetons.includes(local.hebergeur)) return <span fg="gray">{`ajoute un jeton ${local.hebergeur} (⚿ Jetons) : PR et nouveaux dépôts visibles ici`}</span>;
-        const e = etatPR[local.hebergeur];
+        const e = etatPR[local.hebergeur as keyof typeof etatPR];
         return e && e !== 'ok' ? <span fg="#f87171">{`${local.hebergeur} : ${e} (⚿ Jetons pour le remplacer)`}</span> : <span fg="gray">aucune ouverte</span>;
     };
 
@@ -139,7 +146,7 @@ export function VueGit({ fermer }: { fermer: () => void }) {
             <Titre texte="GIT" droite={resume} />
             <Boutons boutons={BOUTONS} actifs={actifs} agir={(a) => void agir(a)} />
             <text> </text>
-            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
+            <scrollbox ref={defilement} verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {lignes.map((l, i) => {
                     if (l.type === 'titre') return <text key={`t${i}`} fg={theme.primaire} attributes={GRAS}>{`  ${l.texte}`}</text>;
                     const c = cle(l);
@@ -148,7 +155,7 @@ export function VueGit({ fermer }: { fermer: () => void }) {
                     const evenements = { onMouseOver: () => setSurvol(c), onMouseOut: () => setSurvol(undefined), onMouseDown: () => choisir(l) };
                     if (l.type === 'distant') {
                         return (
-                            <box key={c} height={1} backgroundColor={fondLigne} {...evenements}>
+                            <box key={c} id={`git-${choisissables.indexOf(l)}`} height={1} backgroundColor={fondLigne} {...evenements}>
                                 <text truncate>
                                     <span fg={actif ? theme.accent : 'gray'}>{actif ? '❯ ' : '  '}</span>
                                     <span fg={fond.eteint}>☁ </span><span>{colonne(l.r.nom, 34)}</span>
@@ -163,16 +170,19 @@ export function VueGit({ fermer }: { fermer: () => void }) {
                     const etat = [d.retard ? `↓${d.retard}` : '', d.avance ? `↑${d.avance}` : '', d.modifs ? `✎${d.modifs}` : '',
                         !d.remote ? 'local' : !d.amont ? 'pas suivie' : ''].filter(Boolean).join(' ') || 'à jour';
                     return (
-                        <box key={c} height={1} backgroundColor={fondLigne} {...evenements}>
+                        <box key={c} id={`git-${choisissables.indexOf(l)}`} height={compact ? 2 : 1} flexDirection="column" backgroundColor={fondLigne} {...evenements}>
                             <text truncate>
                                 <span fg={actif ? theme.accent : 'gray'}>{actif ? '❯ ' : '  '}</span>
                                 <span fg={couleur}>● </span>
-                                <span fg={couleurProjet(d.projet.nom)}>{colonne(d.projet.nom, 24)}</span>
+                                <span fg={couleurProjet(d.projet.nom)}>{compact ? d.projet.nom : colonne(d.projet.nom, 24)}</span>
+                                {!compact && <>
                                 <span fg={theme.secondaire}>{colonne(`⎇ ${d.branche}`, 30)}</span>
                                 <span fg={couleur}>{colonne(etat, 14)}</span>
                                 <span fg={d.prs?.length ? theme.accent : 'gray'}>{colonne(d.prs?.length ? `${d.prs.length} PR` : '', 6)}</span>
                                 <span fg="gray">{d.dernierCommit ? `il y a ${ilYa(d.dernierCommit.date)} · ${d.dernierCommit.sujet}` : ''}</span>
+                                </>}
                             </text>
+                            {compact && <text truncate fg={couleur}>{`    ${etat} · ⎇ ${d.branche}${d.prs?.length ? ` · ${d.prs.length} PR` : ''}`}</text>}
                         </box>
                     );
                 })}

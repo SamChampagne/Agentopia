@@ -8,7 +8,7 @@ import { choisir, saisir, confirmer, afficherVue } from './ui/bus.js';
 import { passerLaMain } from './ui/ecran.js';
 import { c } from './theme.js';
 
-// Gérer ses serveurs depuis Claudetopia : ~/.ssh/config (ajouter, modifier, supprimer, installer sa clé)
+// Gérer ses serveurs depuis Agentopia : ~/.ssh/config (ajouter, modifier, supprimer, installer sa clé)
 // et des connexions SFTP (clé ou mot de passe) pour parcourir les fichiers d'un serveur.
 
 const AUCUNE = '(clé par défaut)';

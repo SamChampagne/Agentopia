@@ -8,6 +8,7 @@ import { creerEquipe, equipeDe, lancerEquipe, avancerEquipes, avancement, equipe
 import { CHEMINS } from './dist/chemins.js';
 
 const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'equipe-'));
+process.env.AGENTOPIA_SANS_MOTEUR = '1';
 const git = (cmd) => execSync(`git -c user.name=t -c user.email=t@t ${cmd}`, { cwd: dossier, stdio: 'pipe' });
 fs.writeFileSync(path.join(dossier, 'calc.js'), 'export const additionner = (a, b) => a + b;\n');
 fs.writeFileSync(path.join(dossier, 'README.md'), '# Calc\n\nPetite bibliothèque de calcul.\n');
@@ -22,17 +23,17 @@ console.log(`plan en ${Math.round((Date.now() - t0) / 1000)} s · état ${plan.e
 console.log('résumé :', plan.resume);
 for (const t of plan.taches) console.log(` ${t.id} [${t.role}] ${t.titre}${t.dependances.length ? ' ← ' + t.dependances.join(',') : ''}`);
 
-console.log('lancement sur un dossier non accepté :', lancerEquipe(e.id) ?? 'lancé (inattendu)');
+console.log('lancement sur un dossier non accepté :', await lancerEquipe(e.id) ?? 'lancé (inattendu)');
 
 // Suivi simulé : chaque tâche a une session qui travaille, puis qui s'arrête
 for (const t of plan.taches) Object.assign(t, { etat: 'en cours', agentId: `faux-${t.id}`, debut: Date.now() });
 plan.etat = 'en cours';
 const agent = (t, statut) => ({ cle: t.agentId, id: t.agentId, sessionId: t.agentId, arrierePlan: true, cwd: dossier, nom: 'jetable', titre: t.titre, statut, debut: new Date(), fichier: path.join(dossier, 'absent.jsonl') });
-avancerEquipes(plan.taches.map((t) => agent(t, 'travaille')));
+await avancerEquipes(plan.taches.map((t) => agent(t, 'travaille')));
 console.log('après « travaille » :', JSON.stringify(avancement(plan)), plan.etat);
-avancerEquipes(plan.taches.map((t, i) => agent(t, i === 0 ? 'bloquee' : 'attend')));
+await avancerEquipes(plan.taches.map((t, i) => agent(t, i === 0 ? 'bloquee' : 'attend')));
 console.log('une bloquée, les autres finies :', JSON.stringify(avancement(plan)), plan.etat);
-avancerEquipes(plan.taches.map((t) => agent(t, 'attend')));
+await avancerEquipes(plan.taches.map((t) => agent(t, 'attend')));
 console.log('toutes finies :', JSON.stringify(avancement(plan)), plan.etat, '· branche', plan.taches[0].branche);
 
 // Nettoyage : on retire l'équipe de test du fichier

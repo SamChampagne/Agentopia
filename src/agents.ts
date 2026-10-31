@@ -4,6 +4,8 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { CLAUDE } from './claude.js';
 import { dossierSessions } from './sessions.js';
+import { listerIntegrees, fichierIntegre, estIntegree, envoyerIntegree, interrompreIntegree, archiverIntegree } from './sessionsIntegrees.js';
+import type { Fournisseur, PermissionAgent } from './providers/types.js';
 
 // Toutes les sessions Claude actives (onglets interactifs + arrière-plan)
 
@@ -23,6 +25,13 @@ export interface SessionVue {
     fichier: string;               // transcript .jsonl
     question?: string;             // arrière-plan bloquée : ce que Claude attend de toi (Claude Code l'enregistre)
     suggestion?: string;           // et la réponse qu'il propose
+    fournisseur?: Fournisseur;
+    integree?: boolean;
+    terminalExterne?: boolean;
+    permission?: PermissionAgent;
+    issue?: 'success' | 'error' | 'cancelled';
+    erreur?: string;
+    resultat?: string;
 }
 
 interface BrutAgent {
@@ -107,23 +116,32 @@ function lireFichiersAgents(): SessionVue[] | undefined {
 }
 
 export async function listerAgents(): Promise<SessionVue[]> {
+    const integrees = listerIntegrees().flatMap<SessionVue>((s) => { try { return [{
+        cle: s.id, id: s.id, sessionId: s.id, arrierePlan: true, cwd: s.cwd, nom: path.basename(s.cwd),
+        titre: s.titre, statut: s.etat === 'erreur' || s.etat === 'arretee' ? 'attend' : s.etat,
+        debut: new Date(s.creee), fichier: fichierIntegre(s.id, 'conversation.jsonl'),
+        fournisseur: s.fournisseur, integree: true, terminalExterne: s.terminalExterne, permission: s.permission, question: s.permission?.titre,
+        issue: s.issue, erreur: s.erreur, resultat: s.resultat,
+    }]; } catch { return []; } });
     try {
         const parFichiers = lireFichiersAgents();
-        if (parFichiers) return parFichiers;
+        if (parFichiers) return [...parFichiers, ...integrees];
     } catch {
         // on passe par la commande
     }
-    return listerAgentsCommande();
+    return [...await listerAgentsCommande(), ...integrees];
 }
 
 export function listerAgentsCommande(): Promise<SessionVue[]> {
     return new Promise((ok) => {
         const proc = spawn(CLAUDE, ['agents', '--json'], { shell: CLAUDE === 'claude' });
+        const delai = setTimeout(() => { proc.kill(); ok([]); }, 5000);
         let sortie = '';
         proc.stdout.setEncoding('utf-8');
         proc.stdout.on('data', (d: string) => (sortie += d));
-        proc.on('error', () => ok([]));
+        proc.on('error', () => { clearTimeout(delai); ok([]); });
         proc.on('close', () => {
+            clearTimeout(delai);
             try {
                 const brut = JSON.parse(sortie) as BrutAgent[];
                 ok(brut.map(vue).sort((a, b) => a.debut.getTime() - b.debut.getTime()));
@@ -155,6 +173,18 @@ export interface Message {
     role: 'user' | 'assistant' | 'outil' | 'resultat';
     texte: string;
     date?: Date;
+    id?: string; etat?: 'en_cours' | 'termine' | 'erreur' | 'interrompu';
+    commande?: string; fichier?: string; sortie?: string; sortieTronquee?: boolean; dureeMs?: number; codeSortie?: number;
+}
+function fusionnerMessages(anciens: Message[], ajouts: Message[]): Message[] {
+    const resultat = [...anciens];
+    const index = new Map(resultat.flatMap((m, i) => m.id ? [[m.id, i] as const] : []));
+    for (const m of ajouts) {
+        const i = m.id ? index.get(m.id) : undefined;
+        if (i !== undefined) resultat[i] = m;
+        else { if (m.id) index.set(m.id, resultat.length); resultat.push(m); }
+    }
+    return resultat.slice(-MESSAGES_MAX);
 }
 
 // Résumé d'un appel d'outil : "Bash  npm test", "Edit  App.tsx"…
@@ -178,21 +208,27 @@ function lireLignes(fichier: string, debut: number, fin: number): { texte: strin
     }
 }
 
-// Lecture incrémentale : une session ouverte est relue chaque seconde, seules les lignes ajoutées depuis sont décodées
-const transcripts = new Map<string, { jusqua: number; messages: Message[] }>();
+// Seules les lignes complètes ajoutées sont décodées. L'identité et la date du fichier
+// distinguent un ajout d'un remplacement (import, réparation ou rotation d'historique).
+const transcripts = new Map<string, { jusqua: number; taille: number; modification: number; identite: string; messages: Message[] }>();
 const MESSAGES_MAX = 5000;
 
 // Les sessions commencent par un gros contexte (~450 Ko) : on lit assez loin pour garder le début de la conversation
 export function lireTranscript(fichier: string, octets = 2_000_000): Message[] {
     const cle = `${octets}|${fichier}`;
+    const connu = transcripts.get(cle);
     try {
-        const taille = fs.statSync(fichier).size;
-        const connu = transcripts.get(cle);
-        if (connu && taille >= connu.jusqua) {
+        const stat = fs.statSync(fichier);
+        const taille = stat.size, modification = stat.mtimeMs;
+        const identite = `${stat.dev}:${stat.ino}:${stat.birthtimeMs}`;
+        if (connu && identite === connu.identite && taille >= connu.taille
+            && (taille > connu.taille || modification === connu.modification)) {
             if (taille === connu.jusqua) return connu.messages;
             const { texte, jusqua } = lireLignes(fichier, connu.jusqua, taille);
-            if (texte) connu.messages = [...connu.messages, ...decoderTranscript(texte)].slice(-MESSAGES_MAX);
+            if (texte) connu.messages = fusionnerMessages(connu.messages, decoderTranscript(texte));
             connu.jusqua = jusqua;
+            connu.taille = taille;
+            connu.modification = modification;
             return connu.messages;
         }
         // Première lecture (ou fichier réécrit) : la fin seulement, sans la ligne coupée au début
@@ -200,18 +236,19 @@ export function lireTranscript(fichier: string, octets = 2_000_000): Message[] {
         let { texte, jusqua } = lireLignes(fichier, debut, taille);
         if (debut > 0) texte = texte.slice(texte.indexOf('\n') + 1);
         if (transcripts.size > 60) transcripts.clear();
-        const messages = decoderTranscript(texte);
-        transcripts.set(cle, { jusqua, messages });
+        const messages = fusionnerMessages([], decoderTranscript(texte));
+        transcripts.set(cle, { jusqua, taille, modification, identite, messages });
         return messages;
     } catch {
-        return [];
+        // Un fichier temporairement verrouillé ou absent ne fait pas disparaître le chat.
+        return connu?.messages ?? [];
     }
 }
 
-function decoderTranscript(texte: string): Message[] {
+export function decoderTranscript(texte: string): Message[] {
     const messages: Message[] = [];
     for (const ligne of texte.split('\n')) {
-        if (!ligne.includes('"type":"user"') && !ligne.includes('"type":"assistant"')) continue;
+        if (!/"type"\s*:\s*"(?:user|assistant)"/.test(ligne)) continue;
         let o;
         try {
             o = JSON.parse(ligne);
@@ -220,6 +257,9 @@ function decoderTranscript(texte: string): Message[] {
         }
         if (o.isMeta || o.isSidechain) continue;
         const date = o.timestamp ? new Date(o.timestamp) : undefined;
+        if (o.agentopia?.id && typeof o.agentopia.texte === 'string') {
+            messages.push({ ...o.agentopia, date }); continue;
+        }
         const contenu = o.message?.content;
         if (o.type === 'user') {
             if (typeof contenu === 'string') {
@@ -238,7 +278,8 @@ function decoderTranscript(texte: string): Message[] {
         } else {
             for (const bloc of contenu ?? []) {
                 if (bloc.type === 'text' && bloc.text.trim()) messages.push({ role: 'assistant', texte: bloc.text.trim(), date });
-                if (bloc.type === 'tool_use') messages.push({ role: 'outil', texte: resumerOutil(bloc.name, bloc.input), date });
+                if (bloc.type === 'tool_use') messages.push({ role: 'outil', texte: resumerOutil(bloc.name, bloc.input),
+                    commande: bloc.input?.command || (/^(?:"[^"\n]*(?:powershell|pwsh)\.exe"|(?:powershell|pwsh)(?:\.exe)?)\s/i.test(bloc.name) ? bloc.name : undefined), date });
             }
         }
     }
@@ -391,11 +432,13 @@ export async function lancerArrierePlan(cwd: string, nom: string, prompt?: strin
 }
 
 export function arreterArrierePlan(id: string): Promise<string> {
+    if (estIntegree(id)) { interrompreIntegree(id); return Promise.resolve('Interruption demandée'); }
     return claude(['stop', id]);
 }
 
 // Retire la session de la liste (la conversation reste) ; Claude supprime son worktree quand c'est sans risque
 export function retirerArrierePlan(id: string): Promise<string> {
+    if (estIntegree(id)) { archiverIntegree(id); return Promise.resolve('removed · conversation conservée'); }
     return claude(['rm', id]);
 }
 
@@ -428,6 +471,10 @@ export async function fermerArrierePlan(id: string): Promise<{ ok: boolean; mess
 // sous le même id. Vérifié : l'historique est conservé.
 // Attention : la reprise peut créer un nouveau fichier de conversation (historique recopié) → nouvel id, renvoyé.
 export async function envoyerMessage(s: SessionVue, texte: string): Promise<{ ok: boolean; message: string; id?: string }> {
+    if (s.integree) {
+        try { await envoyerIntegree(s.sessionId, texte); return { ok: true, message: 'message envoyé', id: s.sessionId }; }
+        catch (e) { return { ok: false, message: (e as Error).message }; }
+    }
     if (!s.arrierePlan || !s.id) return { ok: false, message: 'cette session est dans un onglet : écris-y directement, ou « Continuer ici »' };
     if (s.statut === 'travaille') return { ok: false, message: 'Claude est en train de travailler : attends qu\'il ait fini, ou « Rejoindre »' };
     if (s.statut === 'bloquee' && (!s.question || /permission/i.test(s.question))) return { ok: false, message: 'Claude attend une permission : « Rejoindre » pour répondre' };

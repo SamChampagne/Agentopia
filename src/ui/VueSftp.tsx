@@ -1,12 +1,13 @@
+import { useConnexionSftp } from './connexionSftp.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { useTailleVue, useClicsVue, LigneBoutons, Separateur, Titre } from './Vues.js';
 import { placerBoutons, boutonA } from './mise.js';
 import { ilYa } from './Panneau.js';
-import { Sftp, ConnexionSftp, Entree, dossierTemporaire, tailleLisible } from '../sftp.js';
+import { Sftp, ConnexionSftp, Entree, cheminCopieSftp, tailleLisible } from '../sftp.js';
 import { lancerDetache } from '../lanceurs.js';
 import { theme, fond } from '../theme.js';
 
@@ -19,7 +20,6 @@ type Saisie = { quoi: 'envoyer' | 'dossier'; texte: string };
 
 export function VueSftp({ fermer, cible }: { fermer: () => void; cible: ConnexionSftp }) {
     const { largeur, hauteur } = useTailleVue();
-    const sftp = useRef<Sftp>();
     const [chemin, setChemin] = useState('');
     const [entrees, setEntrees] = useState<Entree[]>();
     const [index, setIndex] = useState(0);
@@ -40,32 +40,22 @@ export function VueSftp({ fermer, cible }: { fermer: () => void; cible: Connexio
             setEntrees(liste);
             setIndex(0);
             dire(`${liste.length} élément${liste.length > 1 ? 's' : ''}`);
+            return true;
         } catch (e) {
             dire(`✕ ${(e as Error).message}`, true);
+            return false;
         }
     }
 
-    useEffect(() => {
-        const s = new Sftp(cible);
-        sftp.current = s;
-        (async () => {
-            try {
-                await s.connecter();
-                const depart = await s.reel(cible.dossier || '.');
-                await ouvrirDossier(depart);
-                if (s.nouvelleEmpreinte) dire(`✓ Connecté · empreinte du serveur enregistrée (${s.nouvelleEmpreinte.slice(0, 26)}…) : elle sera vérifiée à chaque connexion`);
-            } catch (e) {
-                dire(`✕ ${(e as Error).message}`, true);
-            }
-        })();
-        return () => s.fermer();
-    }, []);
+    const { sftp, confiance, accepter, refuser } = useConnexionSftp(cible, async (s) => {
+        return ouvrirDossier(await s.reel(cible.dossier || '.'));
+    }, dire);
 
     const liste = entrees ?? [];
     const courante = liste[index];
     const zone = Math.max(3, hauteur - 6);
     const premier = Math.max(0, Math.min(index - Math.floor(zone / 2), liste.length - zone));
-    const boutons = placerBoutons([
+    const boutons = placerBoutons(confiance ? [{ label: 'Annuler (Échap)', action: 'refuser-cle' }, { label: 'Accepter la clé (o)', action: 'accepter-cle' }] : [
         { label: '↑ Parent', action: 'parent' },
         { label: '◧ Ouvrir', action: 'ouvrir' },
         { label: '⤓ Télécharger', action: 'telecharger' },
@@ -81,7 +71,7 @@ export function VueSftp({ fermer, cible }: { fermer: () => void; cible: Connexio
         const distant = posix.join(chemin, e.nom);
         if (e.dossier || (e.lien && (await sftp.current.estDossier(distant)))) return ouvrirDossier(distant);
         // Fichier : copie locale, ouverte dans VS Code (ou l'application par défaut)
-        const local = path.join(dossierTemporaire(cible.nom), ...distant.split('/').filter(Boolean));
+        const local = cheminCopieSftp(cible.nom, distant);
         dire(`Téléchargement de ${e.nom}…`);
         try {
             await sftp.current.telecharger(distant, local);
@@ -93,6 +83,9 @@ export function VueSftp({ fermer, cible }: { fermer: () => void; cible: Connexio
     }
 
     async function agir(action: string) {
+        if (action === 'accepter-cle') return accepter();
+        if (action === 'refuser-cle') return refuser();
+        if (confiance && action !== 'fermer') return;
         if (action !== aConfirmer) setAConfirmer(undefined);
         if (action === 'fermer') return fermer();
         if (!sftp.current || entrees === undefined) return;
@@ -169,6 +162,8 @@ export function VueSftp({ fermer, cible }: { fermer: () => void; cible: Connexio
     }, (sens) => setIndex((i) => Math.max(0, Math.min(liste.length - 1, i - sens * 3))));
 
     useInput((input, key) => {
+        if (confiance) { if (key.escape || input === 'q') return refuser(); if (input === 'o' && !key.ctrl && !key.meta) accepter(); return; }
+
         if (saisie) {
             if (key.escape) return setSaisie(undefined);
             if (key.return) return void validerSaisie(saisie);
@@ -188,6 +183,11 @@ export function VueSftp({ fermer, cible }: { fermer: () => void; cible: Connexio
         <Box flexDirection="column" width={largeur} height={hauteur} paddingLeft={1}>
             <Titre texte={`⇅ FICHIERS · ${cible.nom}`} droite={`${cible.utilisateur}@${cible.hote} · ${chemin || '…'}`} />
             <LigneBoutons boutons={boutons} />
+            {confiance && <Box flexDirection="column" flexShrink={0}>
+                <Text color={theme.accent}>Première connexion · {confiance.serveur}</Text>
+                <Text>{confiance.empreinte}</Text>
+                <Text>Compare l’empreinte avec celle de l’administrateur du serveur. Aucun identifiant envoyé.</Text>
+            </Box>}
             <Box height={1} flexShrink={0} overflow="hidden">
                 {saisie
                     ? <Text wrap="truncate-start"><Text color={theme.accent}>{saisie.quoi === 'envoyer' ? 'Fichier local à envoyer : ' : 'Nom du nouveau dossier : '}</Text>{saisie.texte}<Text inverse> </Text><Text color="gray">  Entrée valider · Échap annuler</Text></Text>

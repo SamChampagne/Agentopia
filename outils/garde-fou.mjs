@@ -1,6 +1,6 @@
-// Garde-fou Claudetopia : hook PreToolUse de Claude Code (installé par /garde-fou, dans ~/.claude/settings.json).
+// Garde-fou Agentopia : hook PreToolUse de Claude Code (installé par /garde-fou, dans ~/.claude/settings.json).
 // Avant chaque commande Bash d'une session, si elle pousse sur une branche protégée ou se connecte à un serveur
-// marqué « prod », Claude doit te demander la permission (la session passe en « bloquée » dans Claudetopia).
+// marqué « prod », Claude doit te demander la permission (la session passe en « bloquée » dans Agentopia).
 // Volontairement autonome (aucun import du CLI) : il tourne avant chaque commande, il doit être rapide.
 import * as fs from 'fs';
 import * as os from 'os';
@@ -80,7 +80,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
                 hookSpecificOutput: {
                     hookEventName: 'PreToolUse',
                     permissionDecision: 'ask',
-                    permissionDecisionReason: `Garde-fou Claudetopia : ${raisons.join(', ')}. Confirme seulement si c'est voulu.`,
+                    permissionDecisionReason: `Garde-fou Agentopia : ${raisons.join(', ')}. Confirme seulement si c'est voulu.`,
                 },
             }));
         } catch {

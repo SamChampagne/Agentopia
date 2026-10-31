@@ -10,7 +10,7 @@ import { SessionVue } from '../agents.js';
 import { EtatGit } from '../projets.js';
 import { Bouton, nbRangees, COL_ACTIONS, ActionSession } from './mise.js';
 import { theme, couleurProjet, c, fond, degrade } from '../theme.js';
-import { ligneMarkdown } from '../affichage.js';
+import { lignesOutil, markdownConversation } from '../presentationConversation.js';
 
 // Découpe des lignes (avec couleurs) à la largeur, puis garde la fenêtre visible selon le défilement
 // Retire les espaces de fin (même entourés de codes couleur) : sinon les tableaux bourrés d'espaces
@@ -80,7 +80,7 @@ export function VueJournal({ lignes, largeur, hauteur, defilement }: { lignes: s
 }
 
 // Outils et résultats tiennent sur une ligne (coupée), le texte des messages est replié normalement
-export function lignesTranscript(messages: Message[], largeur: number): string[] {
+export function lignesTranscript(messages: Message[], largeur: number, details = false): string[] {
     const ligne = (s: string, n: number) => {
         const t = s.replace(/\s+/g, ' ').trim();
         return t.length > n ? t.slice(0, n - 1) + '…' : t;
@@ -88,8 +88,8 @@ export function lignesTranscript(messages: Message[], largeur: number): string[]
     const lignes: string[] = [];
     for (const m of messages.slice(-300)) {
         if (m.role === 'user') lignes.push('', c.accent.bold('❯ ') + c.accent(m.texte.split('\n')[0]), ...m.texte.split('\n').slice(1).map((l) => '  ' + l));
-        if (m.role === 'assistant') lignes.push('', ...m.texte.split('\n').map(ligneMarkdown));
-        if (m.role === 'outil') lignes.push(c.secondaire('▸ ') + c.discret(ligne(m.texte, largeur - 3)));
+        if (m.role === 'assistant') lignes.push('', ...markdownConversation(m.texte, largeur));
+        if (m.role === 'outil') lignes.push(...lignesOutil(m, largeur, details));
         if (m.role === 'resultat') lignes.push(c.discret('  ⎿ ' + ligne(m.texte, largeur - 5)));
     }
     return lignes;
@@ -218,9 +218,9 @@ export function BarreHaut({ boutons, largeur, droite, vueActive, survol }: { bou
 }
 
 // Nom affiché en haut à gauche (personnalisable dans Configuration)
-let titreBarre = (chargerConfig().banniere || 'CLAUDETOPIA').toUpperCase();
+let titreBarre = (chargerConfig().banniere || 'AGENTOPIA').toUpperCase();
 export function definirTitre(t: string): void {
-    titreBarre = (t || 'CLAUDETOPIA').toUpperCase();
+    titreBarre = (t || 'AGENTOPIA').toUpperCase();
 }
 // Largeur du titre : les boutons de la barre du haut commencent juste après
 export const largeurTitre = () => stringWidth(` ✻ ${titreBarre} `);   // même largeur avec le dégradé (couleurs seulement)

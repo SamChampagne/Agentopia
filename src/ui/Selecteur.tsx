@@ -5,10 +5,12 @@ import { Choix, bus } from './bus.js';
 import { theme } from '../theme.js';
 import { visible } from '../affichage.js';
 import { correspond } from '../projets.js';
+import wrapAnsi from 'wrap-ansi';
 
 const HAUTEUR = 10;
 
 interface Props {
+    detail?: string;
     message: string;
     choix: Choix<unknown>[];
     recherche: boolean;
@@ -17,7 +19,10 @@ interface Props {
 }
 
 // Liste de choix navigable au clavier, avec filtre et cases à cocher optionnels
-export function Selecteur({ message, choix, recherche, multiple, onFin }: Props) {
+export function Selecteur({ message, detail, choix, recherche, multiple, onFin }: Props) {
+    const [pageDetail, setPageDetail] = useState(0);
+    const lignesDetail = detail ? wrapAnsi(detail, Math.max(25, (process.stdout.columns || 100) - 55), { hard: true }).split('\n') : [];
+    const detailVisible = lignesDetail.slice(pageDetail, pageDetail + 6);
     const [filtre, setFiltre] = useState('');
     const [index, setIndex] = useState(0);
     const [coches, setCoches] = useState(() => new Set(choix.filter((x) => x.coche).map((x) => x.valeur)));
@@ -54,7 +59,7 @@ export function Selecteur({ message, choix, recherche, multiple, onFin }: Props)
 
     // Clic : l'App envoie la ligne cliquée relative au haut du sélecteur.
     // Bordure (0), titre (1), puis [recherche (2), espace (3)], puis les éléments.
-    const premiereLigne = recherche ? 4 : 2;
+    const premiereLigne = (recherche ? 4 : 2) + (detail ? detailVisible.length + 1 : 0);
     const surClic = useRef<(ligne: number) => void>(() => undefined);
     surClic.current = (ligne) => {
         const i = ligne - premiereLigne;
@@ -78,6 +83,8 @@ export function Selecteur({ message, choix, recherche, multiple, onFin }: Props)
     }, []);
 
     useInput((input, key) => {
+        if (detail && key.pageDown) return setPageDetail((n) => Math.min(Math.max(0, lignesDetail.length - 6), n + 6));
+        if (detail && key.pageUp) return setPageDetail((n) => Math.max(0, n - 6));
         if (key.escape) return onFin(undefined);
         if (key.upArrow) return setIndex((i) => (Math.min(i, filtres.length - 1) - 1 + filtres.length) % Math.max(1, filtres.length));
         if (key.downArrow) return setIndex((i) => (Math.min(i, filtres.length - 1) + 1) % Math.max(1, filtres.length));
@@ -103,6 +110,7 @@ export function Selecteur({ message, choix, recherche, multiple, onFin }: Props)
     return (
         <Box flexDirection="column" borderStyle="round" borderColor={theme.primaire} paddingX={1}>
             <Text bold color={theme.primaire}>{message}</Text>
+            {detail && <><Text>{detailVisible.join('\n')}</Text><Text color="gray">Page ↑/↓ pour lire les détails ({pageDetail + 1}/{lignesDetail.length})</Text></>}
             {recherche && (
                 <Box>
                     <Text color="gray">⌕ </Text>

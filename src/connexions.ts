@@ -5,14 +5,17 @@ import { CLAUDE } from './claude.js';
 import { chargerConfig } from './config.js';
 import { compteClaude, identiteGit } from './configCommandes.js';
 import { appel } from './git.js';
-import { Hebergeur, jeton, jetonsConfigures, pageJeton } from './jetons.js';
+import { Hebergeur, jeton, jetonsConfigures, pageJeton, originesGitLab, ancienGitLabPresent, etatCoffre } from './jetons.js';
+import { origineGitLab } from './originesGit.js';
 import { lireSynchro } from './synchro.js';
 import { lireHotes, clesDisponibles } from './sshConfig.js';
 import { lireAcces } from './ssh.js';
 import { lireDonnees } from './ui/donnees.js';
 import { surPath } from './chemins.js';
+import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
+import { disponibilite } from './providers/config.js';
 
-// Tout ce que Claudetopia peut connecter, avec son état et l'action qui le règle en un clic.
+// Tout ce que Agentopia peut connecter, avec son état et l'action qui le règle en un clic.
 // Les vérifications tournent en parallèle ; les plus lentes (API, versions) sont mises en cache.
 
 export type Etat = 'ok' | 'avert' | 'manque' | 'neutre' | 'verification';
@@ -44,7 +47,7 @@ const present = async (cmd: string) => !!surPath(cmd);
 
 export const remotesDuPoste = () => lireSynchro().depots.map((d) => d.remote ?? '').filter(Boolean);
 
-export async function identiteJeton(h: Hebergeur, cle: string, remotes = remotesDuPoste()): Promise<{ ok: boolean; texte: string }> {
+export async function identiteJeton(h: Hebergeur, cle: string, remotes = remotesDuPoste(), origine?: string): Promise<{ ok: boolean; texte: string }> {
     if (h === 'GitHub') {
         const r = await appel('https://api.github.com/user', { Authorization: `Bearer ${cle}`, Accept: 'application/vnd.github+json' });
         return r.ok ? { ok: true, texte: `@${r.json.login}` } : { ok: false, texte: r.statut === 401 ? 'jeton refusé (expiré ou mal copié)' : `GitHub répond ${r.statut || 'rien'}` };
@@ -56,14 +59,15 @@ export async function identiteJeton(h: Hebergeur, cle: string, remotes = remotes
         const nom = r.json?.authenticatedUser?.providerDisplayName;
         return r.ok && nom ? { ok: true, texte: `${nom} · ${org}` } : { ok: false, texte: r.statut === 401 || (r.ok && !nom) ? 'jeton refusé (expiré ou mauvaise organisation)' : `Azure répond ${r.statut || 'rien'}` };
     }
-    const base = pageJeton('GitLab', remotes).replace(/\/-\/user_settings\/.*$/, '');
+    if (!origine) return { ok: false, texte: 'origine GitLab à confirmer : /connecter gitlab' };
+    const base = origineGitLab(origine);
     const r = await appel(`${base}/api/v4/user`, { 'PRIVATE-TOKEN': cle });
     return r.ok ? { ok: true, texte: `@${r.json.username} · ${base.replace(/^https?:\/\//, '')}` } : { ok: false, texte: r.statut === 401 ? 'jeton refusé (expiré ou scope read_api manquant)' : `${base} répond ${r.statut || 'rien'}` };
 }
 
 // Vérifications des jetons : une fois par lancement (et après chaque changement)
-const identites = new Map<Hebergeur, Promise<{ ok: boolean; texte: string }>>();
-export const oublierIdentite = (h: Hebergeur) => identites.delete(h);
+const identites = new Map<string, Promise<{ ok: boolean; texte: string }>>();
+export const oublierIdentite = (h: Hebergeur) => { for (const k of identites.keys()) if (k === h || k.startsWith(h + ':')) identites.delete(k); };
 
 // ─── Outils installables avec winget ─────────────────────────────────────────
 
@@ -96,14 +100,20 @@ export async function etatConnexions(): Promise<Element[]> {
     versionClaude ??= claudeOk ? sortie(CLAUDE, ['--version']).then((r) => r.texte.split(' ')[0] ?? '') : Promise.resolve('');
 
     const elements: Element[] = [];
-    // Claude
+    // Configuration locale seulement : la présence du CLI/de la clé ne valide pas le compte.
+    for (const f of Object.keys(FOURNISSEURS) as Fournisseur[]) {
+        const etat = disponibilite(f);
+        elements.push({ groupe: 'FOURNISSEURS IA', nom: FOURNISSEURS[f].nom, etat: 'neutre', detail: etat.texte,
+            action: etat.pret ? 'vérifier la connexion' : 'configurer', commande: `/fournisseurs ${f}` });
+    }
+    // Intégration native Claude CLI : indépendante des fournisseurs intégrés.
     elements.push(claudeOk
-        ? { groupe: 'CLAUDE', nom: 'Claude Code', etat: 'ok', detail: `installé ${await versionClaude}`, action: 'mettre à jour', commande: '/installer-claude' }
-        : { groupe: 'CLAUDE', nom: 'Claude Code', etat: 'manque', detail: 'pas installé : aucune session possible', action: 'installer', commande: '/installer-claude' });
+        ? { groupe: 'OUTILS CLAUDE CLI', nom: 'Claude Code', etat: 'ok', detail: `installé ${await versionClaude}`, action: 'mettre à jour', commande: '/installer-claude' }
+        : { groupe: 'OUTILS CLAUDE CLI', nom: 'Claude Code', etat: 'neutre', detail: 'absent : sessions natives et maître Claude indisponibles', action: 'installer', commande: '/installer-claude' });
     if (claudeOk) {
         elements.push(compte.connecte
-            ? { groupe: 'CLAUDE', nom: 'Compte Claude', etat: 'ok', detail: `${compte.email ?? ''} ${compte.methode ? `(${compte.methode})` : ''}`.trim(), action: 'changer de compte', commande: '/compte claude' }
-            : { groupe: 'CLAUDE', nom: 'Compte Claude', etat: 'manque', detail: 'pas connecté', action: 'se connecter', commande: '/connexion-claude' });
+            ? { groupe: 'OUTILS CLAUDE CLI', nom: 'Compte Claude CLI', etat: 'ok', detail: `${compte.email ?? ''} ${compte.methode ? `(${compte.methode})` : ''}`.trim(), action: 'changer de compte', commande: '/compte claude' }
+            : { groupe: 'OUTILS CLAUDE CLI', nom: 'Compte Claude CLI', etat: 'neutre', detail: 'pas connecté (CLI uniquement)', action: 'se connecter', commande: '/connexion-claude' });
     }
 
     // Git et comptes en ligne
@@ -117,6 +127,18 @@ export async function etatConnexions(): Promise<Element[]> {
     for (const h of ['GitHub', 'Azure DevOps', 'GitLab'] as Hebergeur[]) {
         const n = depots.filter((x) => x.hebergeur === h).length;
         const cle = h === 'GitHub' ? 'github' : h === 'Azure DevOps' ? 'azure' : 'gitlab';
+        if (h === 'GitLab') {
+            const origines = originesGitLab();
+            if (ancienGitLabPresent()) elements.push({ groupe: 'GIT', nom: 'GitLab · ancien compte', etat: 'avert', detail: 'adresse à confirmer : aucun jeton envoyé automatiquement', action: 'associer', commande: '/connecter gitlab' });
+            for (const origine of origines) {
+                const key = `GitLab:${origine}`;
+                if (!identites.has(key)) { const secret = jeton(h, origine); identites.set(key, secret ? identiteJeton(h, secret, [], origine) : Promise.resolve({ ok: false, texte: 'jeton illisible' })); }
+                const id = await identites.get(key)!;
+                elements.push({ groupe: 'GIT', nom: `GitLab · ${new URL(origine).host}`, etat: id.ok ? 'ok' : 'avert', detail: id.texte, action: 'gérer', commande: '/connecter gitlab' });
+            }
+            if (!origines.length && !ancienGitLabPresent()) elements.push({ groupe: 'GIT', nom: 'GitLab', etat: 'neutre', detail: 'choisir l’adresse du serveur à connecter', action: 'connecter', commande: '/connecter gitlab' });
+            continue;
+        }
         if (jetons.includes(h)) {
             if (!identites.has(h)) {
                 const secret = jeton(h);
@@ -132,6 +154,7 @@ export async function etatConnexions(): Promise<Element[]> {
                 : { groupe: 'GIT', nom: h, etat: 'neutre', detail: 'aucun dépôt sur ce poste', action: 'connecter', commande: `/connecter ${cle}` });
         }
     }
+    if (etatCoffre()) elements.push({ groupe: 'GIT', nom: 'Coffre de connexions', etat: 'avert', detail: etatCoffre()!, action: 'récupérer', commande: '/recuperer-coffre' });
 
     // Serveurs
     const cles = clesDisponibles();

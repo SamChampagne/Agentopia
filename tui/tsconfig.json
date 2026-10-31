@@ -9,6 +9,8 @@
     "strict": true,
     "skipLibCheck": true,
     "allowJs": true,
+    "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": ["app.tsx"]
 }

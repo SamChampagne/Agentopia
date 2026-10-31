@@ -4,7 +4,8 @@ import * as path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import type { Commande } from './commandes.js';
-import { Config, sauverConfig, CHEMIN_CONFIG } from './config.js';
+import { Config, sauverConfig, CHEMIN_CONFIG, etatRecuperationConfig } from './config.js';
+import { diagnostiquerAgents } from './diagnosticAgents.js';
 import { CLAUDE } from './claude.js';
 import { passerLaMain } from './ui/ecran.js';
 import { choisir, saisir, confirmer, tache } from './ui/bus.js';
@@ -14,20 +15,12 @@ import { jetonsConfigures } from './jetons.js';
 import { PALETTES, appliquerTheme, nomPalette, c } from './theme.js';
 import { tableau, titre } from './affichage.js';
 import { surPath } from './chemins.js';
+import { maintenirInstallation, versionInstallation } from './miseAJour.js';
+import { cheminProfilTerminal, migrerProfilTerminal, GUID_PROFIL } from './profilTerminal.js';
+import { estDistribution } from './distribution.js';
+import { scriptRaccourciWindows } from './lancementsWindows.js';
 
 // Dossier du CLI (dist/ est un niveau sous la racine du projet)
-// Commande externe sans bloquer l'interface (npm passe par le shell sous Windows)
-function lancerAsync(cmd: string, args: string[], cwd: string): Promise<{ ok: boolean; sortie: string }> {
-    return new Promise((ok) => {
-        const proc = spawn(cmd, args, { cwd, shell: process.platform === 'win32' && cmd === 'npm' });
-        let sortie = '';
-        proc.stdout?.on('data', (d) => (sortie += d));
-        proc.stderr?.on('data', (d) => (sortie += d));
-        proc.on('error', (e) => ok({ ok: false, sortie: e.message }));
-        proc.on('close', (code) => ok({ ok: code === 0, sortie }));
-    });
-}
-
 export const RACINE_CLI =path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function sortieDe(programme: string, args: string[], delai = 15_000): Promise<{ ok: boolean; sortie: string }> {
@@ -105,13 +98,14 @@ export function prechargerBureau(): void {
 }
 
 export function cheminRaccourci(): string {
-    return path.join(bureau(), 'Claudetopia.lnk');
+    return path.join(bureau(), 'Agentopia.lnk');
 }
 
-// Ancien nom du logiciel : son raccourci est remplacé par celui de Claudetopia
-const ANCIEN_RACCOURCI = 'CLI Perso.lnk';
+// Les anciens lanceurs restent utilisables ; proposer le raccourci au nouveau nom.
+const ANCIENS_RACCOURCIS = ['CLI Perso.lnk', 'Claudetopia.lnk'];
 // Vérifié à chaque démarrage, sans lancer PowerShell : on regarde les bureaux habituels (local, OneDrive)
 export function remplacerAncienRaccourci(): void {
+    migrerProfilTerminal();
     const maison = os.homedir();
     let bureaux = [path.join(maison, 'Desktop'), path.join(maison, 'Bureau')];
     try {
@@ -119,24 +113,22 @@ export function remplacerAncienRaccourci(): void {
     } catch {
         // dossier utilisateur illisible
     }
-    bureaux = bureaux.filter((b) => fs.existsSync(path.join(b, ANCIEN_RACCOURCI)));
+    bureaux = bureaux.filter((b) => ANCIENS_RACCOURCIS.some((nom) => fs.existsSync(path.join(b, nom))) && !fs.existsSync(path.join(b, 'Agentopia.lnk')));
     if (!bureaux.length || !creerRaccourci().ok) return;
-    for (const b of bureaux) fs.rmSync(path.join(b, ANCIEN_RACCOURCI), { force: true });
 }
 
 // Ouvre le CLI dans Windows Terminal si présent (souris, couleurs), sinon dans cmd
 export function creerRaccourci(): { ok: boolean; message: string } {
-    const lanceur = path.join(RACINE_CLI, 'Claudetopia.bat');
+    migrerProfilTerminal();
+    const distribution = estDistribution(RACINE_CLI);
+    const lanceur = distribution ? path.join(process.env.AGENTOPIA_DISTRIBUTION_ROOT || RACINE_CLI, 'Agentopia.cmd') : path.join(RACINE_CLI, 'Agentopia.bat');
     const wt = surPath('wt');
-    // Avec le profil Windows Terminal « Claudetopia » (/apparence) : ses couleurs, sa police, sa transparence
-    const profil = fs.existsSync(path.join(process.env.LOCALAPPDATA ?? '', 'Microsoft', 'Windows Terminal', 'Fragments', 'Claudetopia', 'claudetopia.json'));
+    // Avec le profil Windows Terminal « Agentopia » (/apparence) : ses couleurs, sa police, sa transparence
+    const profil = !distribution && fs.existsSync(cheminProfilTerminal());
     const [cible, args] = wt
-        ? [wt, profil ? '-p "Claudetopia"' : `-d "${RACINE_CLI}" --title "Claudetopia" cmd /k "${lanceur}"`]
+        ? [wt, profil ? `-p "${GUID_PROFIL}"` : `-d "${RACINE_CLI}" --title "Agentopia" cmd /k "${lanceur}"`]
         : [path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe'), `/k "${lanceur}"`];
-    const echapper = (s: string) => s.replace(/'/g, "''");
-    const script = `$s = (New-Object -ComObject WScript.Shell).CreateShortcut('${echapper(cheminRaccourci())}');`
-        + `$s.TargetPath = '${echapper(cible)}'; $s.Arguments = '${echapper(args)}'; $s.WorkingDirectory = '${echapper(RACINE_CLI)}';`
-        + `$s.IconLocation = '${echapper(wt ? wt : cible)},0'; $s.Description = 'Claudetopia : sessions et équipes Claude, projets, Git, Docker, SSH'; $s.Save()`;
+    const script = scriptRaccourciWindows(cheminRaccourci(), cible, args, RACINE_CLI, wt || cible);
     const res = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf-8' });
     return res.status === 0 && fs.existsSync(cheminRaccourci())
         ? { ok: true, message: `Raccourci créé : ${cheminRaccourci()}${wt ? ' (ouvre Windows Terminal)' : ''}` }
@@ -156,6 +148,10 @@ interface Verification {
 export async function diagnostic(config: Config): Promise<Verification[]> {
     const v: Verification[] = [];
     const ajouter = (niveau: Niveau, quoi: string, detail: string, solution?: string) => v.push({ niveau, quoi, detail, solution });
+    const recuperation = etatRecuperationConfig();
+    if (recuperation) ajouter('avert', 'Réglages récupérés', recuperation.message,
+        recuperation.copie ? `original conservé : ${recuperation.copie}` : recuperation.sauvegarde ? `sauvegarde : ${recuperation.sauvegarde}` : `vérifie l’accès à ${CHEMIN_CONFIG}`);
+    v.push(...await diagnostiquerAgents(config));
 
     const majeure = Number(process.versions.node.split('.')[0]);
     ajouter(majeure >= 24 ? 'ok' : 'avert', 'Node.js', `${process.version}${majeure >= 24 ? ' (souris active)' : ''}`,
@@ -165,10 +161,10 @@ export async function diagnostic(config: Config): Promise<Verification[]> {
 
     const versionClaude = await sortieDe(CLAUDE, ['--version']);
     if (!versionClaude.ok) {
-        ajouter('erreur', 'Claude Code', 'introuvable', 'npm install -g @anthropic-ai/claude-code');
+        ajouter('avert', 'Claude CLI (optionnel)', 'absent · utile aux fonctions natives Claude', '/connexions pour l’installer ; /fournisseurs pour les agents intégrés');
     } else {
         const compte = await compteClaude();
-        ajouter(compte.connecte ? 'ok' : 'erreur', 'Claude Code', `${versionClaude.sortie.split(' ')[0]} · ${compte.connecte ? `connecté (${compte.email ?? compte.methode})` : 'non connecté'}`,
+        ajouter(compte.connecte ? 'ok' : 'avert', 'Claude CLI (optionnel)', `${versionClaude.sortie.split(' ')[0]} · ${compte.connecte ? `connecté (${compte.email ?? compte.methode})` : 'non connecté'}`,
             compte.connecte ? undefined : 'Configuration › Compte Claude, ou /compte claude');
     }
 
@@ -295,7 +291,7 @@ export function commandesConfig(config: Config): Commande[] {
         },
         {
             nom: 'raccourci', groupe: 'Config',
-            description: 'Créer le raccourci « Claudetopia » sur le bureau',
+            description: 'Créer le raccourci « Agentopia » sur le bureau',
             executer: () => {
                 const res = creerRaccourci();
                 console.log(res.ok ? c.succes(res.message) : c.erreur(`✗ ${res.message}`));
@@ -303,44 +299,48 @@ export function commandesConfig(config: Config): Commande[] {
         },
         {
             nom: 'installation', groupe: 'Config',
-            description: 'La ligne à copier pour installer Claudetopia sur un autre poste',
+            description: 'La ligne à copier pour installer Agentopia sur un autre poste',
             executer: () => {
+                console.log('Téléchargement Windows : https://github.com/SamChampagne/ClaudeTopia/releases');
+                if (estDistribution(RACINE_CLI)) {
+                    console.log('Partager Agentopia-Setup.exe : il contient les moteurs et ouvre la préparation guidée. Les réglages et clés personnelles ne font pas partie du paquet.');
+                    console.log('Versions publiées : https://github.com/SamChampagne/ClaudeTopia/releases');
+                    return;
+                }
                 const depot = spawnSync('git', ['remote', 'get-url', 'origin'], { cwd: RACINE_CLI, encoding: 'utf-8' }).stdout?.trim();
                 if (!depot) {
-                    console.log(c.alerte('Claudetopia n\'est pas encore sur un dépôt git distant (git remote origin).'));
+                    console.log(c.alerte('Agentopia n\'est pas encore sur un dépôt git distant (git remote origin).'));
                     console.log(c.discret('Une fois poussé, cette commande affiche la ligne exacte à partager.'));
                     return;
                 }
-                const ligne = `git clone ${depot} "$HOME\\Claudetopia"; & "$HOME\\Claudetopia\\Installer.bat"`;
-                console.log(titre('Installer Claudetopia sur un autre poste'));
+                const branche = spawnSync('git', ['branch', '--show-current'], { cwd: RACINE_CLI, encoding: 'utf-8' }).stdout?.trim();
+                const optionBranche = branche && /^[\w./-]+$/.test(branche) ? ` --branch ${branche}` : '';
+                const ligne = `git clone${optionBranche} ${depot} "$HOME\\Agentopia"; & "$HOME\\Agentopia\\Installer.bat"`;
+                console.log(titre('Installer Agentopia sur un autre poste'));
                 console.log('Dans PowerShell, une seule ligne :\n');
                 console.log(c.accent(ligne));
-                const brut = /github\.com[/:]([^/]+)\/(.+?)(\.git)?$/.exec(depot);
-                if (brut) {
-                    console.log(c.discret('\nSi le dépôt GitHub est public, aussi :'));
-                    console.log(c.accent(`$env:CLAUDETOPIA_DEPOT='${depot}'; irm https://raw.githubusercontent.com/${brut[1]}/${brut[2]}/main/install.ps1 | iex`));
-                }
-                console.log(c.discret('\nL\'installateur installe ce qui manque (Node, Git, Windows Terminal, Bun, Claude Code…), compile, crée le raccourci « Claudetopia » sur le bureau, puis ouvre Claudetopia qui scanne le poste.'));
+                console.log(c.discret('\nL’installateur prépare le logiciel et son raccourci. Agentopia scanne ensuite les projets et guide la connexion des agents que tu choisis.'));
             },
         },
         {
             nom: 'maj', alias: ['mise-a-jour'], groupe: 'Config',
-            description: 'Mettre à jour Claudetopia (git pull, dépendances, compilation)',
+            description: 'Mettre à jour et vérifier le logiciel et son interface',
             executer: async () => {
-                if (!fs.existsSync(path.join(RACINE_CLI, '.git'))) return console.log(c.alerte('Ce dossier n\'est pas un dépôt git : copie la nouvelle version à la main, puis relance Installer.bat.'));
-                const etapes: [string, string, string[]][] = [
-                    ['Récupération des nouveautés', 'git', ['pull', '--ff-only']],
-                    ['Dépendances', 'npm', ['ci', '--no-audit', '--no-fund']],
-                    ['Compilation', 'npm', ['run', 'build']],
-                ];
-                for (const [nom, cmd, args] of etapes) {
-                    const res = await tache(nom, () => lancerAsync(cmd, args, RACINE_CLI));
-                    if (!res.ok) return console.log(c.erreur(`✗ ${nom} : ${res.sortie.trim().split('\n').slice(-3).join(' · ')}`));
-                    if (cmd === 'git' && /Already up to date|Déjà à jour/i.test(res.sortie)) return console.log(c.succes('✓ Claudetopia est déjà à jour'));
-                }
-                console.log(c.succes('✓ Mis à jour · ferme et relance Claudetopia pour utiliser la nouvelle version'));
+                await maintenirInstallation(RACINE_CLI, false, { etape: tache });
+                console.log(c.succes('✓ Vérification terminée · si une version a été installée, ferme et relance Agentopia.'));
             },
         },
+        {
+            nom: 'reparer', groupe: 'Config', description: 'Restaurer la version installée en conservant les données ; recompiler en mode sources',
+            executer: async () => {
+                await maintenirInstallation(RACINE_CLI, true, { etape: tache });
+                console.log(c.succes('✓ Réparation terminée · ferme et relance le logiciel.'));
+            },
+        },
+        { nom: 'version', groupe: 'Config', description: 'Version, branche, révision et dernière vérification de cette installation',
+            executer: async () => console.log(await versionInstallation(RACINE_CLI)) },
+        { nom: 'retour-version', groupe: 'Config', description: 'Revenir à la version Windows précédente, en conservant les données',
+            executer: async () => { const { revenirVersion } = await import('./distribution.js'); await revenirVersion(RACINE_CLI); } },
         {
             nom: 'fichier-config', groupe: 'Config', cache: true,
             description: 'Ouvrir le fichier de configuration',

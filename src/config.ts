@@ -1,7 +1,9 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { CHEMINS } from './chemins.js';
+import { CHEMINS, NOM, nomBanniere } from './chemins.js';
+import { FOURNISSEURS, estFournisseur, capacitesFournisseur, validerModele, type Fournisseur } from './providers/types.js';
+import { StockageConfig } from './stockageConfig.js';
 
 // Fichier de config dans le dossier utilisateur : ~/.claudetopia.json
 export const CHEMIN_CONFIG = CHEMINS.config;
@@ -13,15 +15,19 @@ export interface Config {
     banniere: string;    // texte de la bannière au démarrage
     theme: { primaire: string; secondaire: string; accent: string };
     couleurs: Record<string, string>;   // couleur d'onglet forcée par projet : { "SaniPlan": "#e63946" }
-    notifications: boolean;             // toast Windows quand une session Claude t'attend
+    notifications: boolean;             // toast Windows quand une session t'attend
     prompts: Record<string, string>;    // prompts favoris : /claude saniplan @tests
     panneau: boolean;                   // panneau live (sessions + serveurs) au-dessus de la saisie
     prenom: string;                     // pour le "Bonjour" (sinon : git user.name / user.email)
-    lancement: 'fond' | 'onglet';       // où /claude ouvre les sessions
+    lancement: 'fond' | 'onglet';       // où /claude-cli ouvre les sessions natives
+    fournisseurDefaut?: Fournisseur | 'choisir'; // nouvelles conversations intégrées
+    modelesFournisseurs?: Partial<Record<Fournisseur, string>>;
+    preparationProjets?: { projet: string; commande?: { programme: string; args: string[] }; fichiersLocaux?: string[] }[];
+    limitesAgents?: { toursJour: number; dureeMinutes: number };
     dockerDistant: string[];            // serveurs SSH dont on surveille aussi les conteneurs Docker
     largeurLaterale: number;            // largeur de la colonne de gauche (0 = automatique)
     fetchAuto: boolean;                 // git fetch de tous les dépôts toutes les 5 min, en fond
-    equipe: { parallele: number; permissions: string };   // équipes d'agents : agents en même temps, mode de permissions
+    equipe: { parallele: number; permissions: string; paralleleGlobal?: number; parFournisseur?: Partial<Record<Fournisseur, number>> };
     sectionsMasquees: string[];         // sections de la colonne de gauche masquées (docker, ssh)
     sectionsRepliees?: string[];        // sections repliées (en-tête seul) ; par défaut : ssh
     cartesDetaillees?: boolean;         // cartes de session sur 3 lignes (avec ta dernière demande)
@@ -33,7 +39,7 @@ export interface Config {
     sons?: boolean;                    // petit son quand une session finit ou a besoin de toi
     themeAuto?: { mode: 'heure' | 'windows'; jour: string; soir: string };   // palette qui change le soir, ou selon le mode clair/sombre de Windows
     budgetJour?: number;                // alerte au-delà de ce coût du jour en $ (équivalent API) ; 0 = aucune
-    maitre: { actif: boolean; modele: string; veille?: number };   // veille : minutes d'inactivité avant de libérer sa mémoire (0 = jamais)
+    maitre: { actif: boolean; modele: string; veille?: number; fournisseur?: Fournisseur | 'claude-cli' | 'auto' };   // fournisseur du maître, indépendant des agents de travail
     sftp: import('./sftp.js').ConnexionSftp[];   // connexions SFTP (le mot de passe est chiffré à part)   // l'agent maître (gère les sessions) : haiku = rapide
 }
 
@@ -50,7 +56,7 @@ const PROMPTS_DEFAUT: Record<string, string> = {
 const CONFIG_DEFAUT: Config = {
     racines: [path.join(os.homedir(), 'dev'), 'C:\\dev'],
     extras: [],
-    banniere: 'CLAUDETOPIA',
+    banniere: NOM.toUpperCase(),
     theme: { primaire: '#00b4d8', secondaire: '#90e0ef', accent: '#f72585' },
     couleurs: {},
     notifications: true,
@@ -58,10 +64,11 @@ const CONFIG_DEFAUT: Config = {
     panneau: true,
     prenom: '',
     lancement: 'fond',
+    fournisseurDefaut: 'choisir',
     dockerDistant: [],
     largeurLaterale: 0,
     fetchAuto: true,
-    equipe: { parallele: 3, permissions: 'acceptEdits' },
+    equipe: { parallele: 3, paralleleGlobal: 3, permissions: 'acceptEdits' },
     sectionsMasquees: [],
     maitre: { actif: true, modele: 'haiku' },
     sftp: [],
@@ -70,29 +77,64 @@ const CONFIG_DEFAUT: Config = {
 // Vrai si le fichier de config n'existait pas : on lance l'assistant /scan au démarrage
 export let premierLancement = false;
 
-export function chargerConfig(): Config {
-    try {
-        const brut = JSON.parse(fs.readFileSync(CHEMIN_CONFIG, 'utf-8'));
-        const config = { ...CONFIG_DEFAUT, ...brut, theme: { ...CONFIG_DEFAUT.theme, ...brut.theme } };
-        // L'ancien mode clair n'existe plus : sa palette (couleurs foncées) est illisible sur fond sombre
-        if ('modeClair' in brut) {
-            if (brut.modeClair) config.theme = { ...CONFIG_DEFAUT.theme };
-            delete config.modeClair;
-            sauverConfig(config);
-        }
-        // Écrit les nouvelles clés dans le fichier pour qu'elles soient faciles à modifier
-        if (Object.keys(CONFIG_DEFAUT).some((k) => !(k in brut))) sauverConfig(config);
-        return config;
-    } catch {
-        if (!fs.existsSync(CHEMIN_CONFIG)) premierLancement = true;
-        sauverConfig(CONFIG_DEFAUT);
-        return structuredClone(CONFIG_DEFAUT);
+export function normaliserConfig(valeur: unknown): Config {
+    if (!valeur || typeof valeur !== 'object' || Array.isArray(valeur)) throw new Error('Configuration invalide');
+    const brut = valeur as Record<string, any>;
+    for (const cle of ['racines', 'extras', 'dockerDistant', 'sectionsMasquees', 'sectionsRepliees']) {
+        if (brut[cle] !== undefined && (!Array.isArray(brut[cle]) || !brut[cle].every((v: unknown) => typeof v === 'string'))) throw new Error(`Réglage invalide : ${cle}`);
     }
+    for (const cle of ['theme', 'couleurs', 'prompts', 'equipe', 'maitre', 'ecran', 'limitesAgents', 'gardeFou', 'themeAuto']) {
+        if (brut[cle] !== undefined && (!brut[cle] || typeof brut[cle] !== 'object' || Array.isArray(brut[cle]))) throw new Error(`Réglage invalide : ${cle}`);
+    }
+    for (const cle of ['sftp', 'planifications', 'modelesSession']) {
+        if (brut[cle] !== undefined && (!Array.isArray(brut[cle]) || !brut[cle].every((v: unknown) => v && typeof v === 'object' && !Array.isArray(v)))) throw new Error(`Réglage invalide : ${cle}`);
+    }
+    for (const cle of ['banniere', 'prenom', 'lancement']) if (brut[cle] !== undefined && typeof brut[cle] !== 'string') throw new Error(`Réglage invalide : ${cle}`);
+    for (const cle of ['notifications', 'panneau', 'fetchAuto', 'cartesDetaillees', 'sons']) if (brut[cle] !== undefined && typeof brut[cle] !== 'boolean') throw new Error(`Réglage invalide : ${cle}`);
+    for (const cle of ['largeurLaterale', 'budgetJour', 'ecranVeille']) if (brut[cle] !== undefined && (typeof brut[cle] !== 'number' || !Number.isFinite(brut[cle]))) throw new Error(`Réglage invalide : ${cle}`);
+    for (const [section, champs] of Object.entries({ theme: ['primaire', 'secondaire', 'accent'], equipe: ['permissions'], maitre: ['modele'], ecran: ['laterale', 'actions'], themeAuto: ['mode', 'jour', 'soir'] })) {
+        for (const champ of champs) if (brut[section]?.[champ] !== undefined && typeof brut[section][champ] !== 'string') throw new Error(`Réglage invalide : ${section}.${champ}`);
+    }
+    for (const section of ['couleurs', 'prompts']) if (brut[section] && !Object.values(brut[section]).every((v) => typeof v === 'string')) throw new Error(`Réglage invalide : ${section}`);
+    for (const [section, champ] of [['maitre', 'actif'], ['ecran', 'icones']]) {
+        if (brut[section]?.[champ] !== undefined && typeof brut[section][champ] !== 'boolean') throw new Error(`Réglage invalide : ${section}.${champ}`);
+    }
+    for (const [section, champs] of Object.entries({ equipe: ['parallele'], maitre: ['veille'], limitesAgents: ['toursJour', 'dureeMinutes'] })) {
+        for (const champ of champs) if (brut[section]?.[champ] !== undefined && (typeof brut[section][champ] !== 'number' || !Number.isFinite(brut[section][champ]))) throw new Error(`Réglage invalide : ${section}.${champ}`);
+    }
+    for (const [section, champs] of Object.entries({ ecran: ['cockpitMasques'], gardeFou: ['serveurs', 'branches'] })) {
+        for (const champ of champs) if (brut[section]?.[champ] !== undefined && (!Array.isArray(brut[section][champ]) || !brut[section][champ].every((v: unknown) => typeof v === 'string'))) throw new Error(`Réglage invalide : ${section}.${champ}`);
+    }
+    const defaut = structuredClone(CONFIG_DEFAUT);
+    if (brut.modelesFournisseurs !== undefined) {
+        if (!brut.modelesFournisseurs || typeof brut.modelesFournisseurs !== 'object' || Array.isArray(brut.modelesFournisseurs)) throw new Error('Réglage invalide : modèles fournisseurs');
+        for (const [f, m] of Object.entries(brut.modelesFournisseurs)) {
+            if (!estFournisseur(f) || !capacitesFournisseur(f).modele || !validerModele(m)) throw new Error('Réglage de modèle non pris en charge');
+        }
+    }
+    const limite = (v: unknown) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 32;
+    if (brut.equipe?.paralleleGlobal !== undefined && !limite(brut.equipe.paralleleGlobal)) throw new Error('Plafond global invalide (0 à 32)');
+    if (brut.equipe?.parFournisseur !== undefined && (!brut.equipe.parFournisseur || typeof brut.equipe.parFournisseur !== 'object' || Array.isArray(brut.equipe.parFournisseur)
+        || !Object.entries(brut.equipe.parFournisseur).every(([f, n]) => estFournisseur(f) && limite(n)))) throw new Error('Plafond fournisseur invalide');
+    if (brut.preparationProjets !== undefined && (!Array.isArray(brut.preparationProjets) || brut.preparationProjets.length > 200 || !brut.preparationProjets.every((p: any) =>
+        p && typeof p.projet === 'string' && path.isAbsolute(p.projet) && p.projet.length <= 4000
+        && (p.commande === undefined || p.commande && typeof p.commande.programme === 'string' && p.commande.programme.length > 0 && p.commande.programme.length <= 4000 && !/[\x00-\x1f]/.test(p.commande.programme)
+            && Array.isArray(p.commande.args) && p.commande.args.length <= 100 && p.commande.args.every((a: unknown) => typeof a === 'string' && a.length <= 4000 && !a.includes('\0')))
+        && (p.fichiersLocaux === undefined || Array.isArray(p.fichiersLocaux) && p.fichiersLocaux.length <= 100 && p.fichiersLocaux.every((f: unknown) => typeof f === 'string' && f.length <= 4000 && !path.isAbsolute(f) && !f.split(/[\\/]/).includes('..') && !/[\x00-\x1f]/.test(f)))))) throw new Error('Préparation de projet invalide');
+    const config = { ...defaut, ...brut, theme: { ...defaut.theme, ...brut.theme }, equipe: { ...defaut.equipe, ...brut.equipe }, maitre: { ...defaut.maitre, ...brut.maitre } } as Config & { modeClair?: boolean };
+    if (!Object.hasOwn(FOURNISSEURS, config.fournisseurDefaut ?? '')) config.fournisseurDefaut = 'choisir';
+    config.banniere = nomBanniere(config.banniere);
+    if (config.modeClair) config.theme = { ...defaut.theme };
+    delete config.modeClair;
+    return config;
 }
-
-export function sauverConfig(config: Config): void {
-    fs.writeFileSync(CHEMIN_CONFIG, JSON.stringify(config, null, 2), 'utf-8');
+const stockage = new StockageConfig(CHEMIN_CONFIG, normaliserConfig, () => structuredClone(CONFIG_DEFAUT));
+export const etatRecuperationConfig = () => stockage.etat;
+export function chargerConfig(): Config {
+    if (!fs.existsSync(CHEMIN_CONFIG)) premierLancement = true;
+    return stockage.charger();
 }
+export function sauverConfig(config: Config): void { stockage.sauver(config); }
 
 export function chargerHistorique(): string[] {
     try {

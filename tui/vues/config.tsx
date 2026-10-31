@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ScrollBoxRenderable } from '@opentui/core';
 import { useKeyboard } from '@opentui/react';
 import { GRAS, couper } from '../style.ts';
 import { bus } from '../../dist/ui/bus.js';
@@ -16,6 +17,8 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
     const lignes = lignesConfig(etat, claude);
     const reglages = lignes.map((l: any, i: number) => (l.type === 'reglage' ? i : -1)).filter((i: number) => i >= 0);
     const [index, setIndex] = useState(reglages[0]);
+    const defilement = useRef<ScrollBoxRenderable>(null);
+    useEffect(() => { defilement.current?.scrollChildIntoView(`config-${index}`); }, [index]);
     const [survol, setSurvol] = useState<number>();
     const activer = (i: number) => {
         const l = lignes[i];
@@ -33,12 +36,12 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
     return (
         <box flexGrow={1} flexDirection="column" paddingLeft={1}>
             <Titre texte="CONFIGURATION" droite="clic ou Entrée = modifier · Échap fermer" />
-            <scrollbox verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
+            <scrollbox ref={defilement} verticalScrollbarOptions={{ visible: false }} flexGrow={1} scrollY>
                 {lignes.map((l: any, i: number) => {
                     if (l.type === 'section') return <text key={i} fg={theme.primaire} attributes={GRAS}>{` ${l.texte}`}</text>;
                     const actif = i === index || i === survol;
                     return (
-                        <box key={i} height={1} flexDirection="row" backgroundColor={i === index ? fond.selection : undefined}
+                        <box key={i} id={`config-${i}`} height={1} flexDirection="row" backgroundColor={i === index ? fond.selection : undefined}
                             onMouseOver={() => setSurvol(i)} onMouseOut={() => setSurvol(undefined)} onMouseDown={() => activer(i)}>
                             <text fg={actif ? theme.accent : 'gray'}>{i === index ? ' ❯ ' : '   '}</text>
                             <text width={26} fg={fond.texte} truncate>{couper(l.label, 25)}</text>

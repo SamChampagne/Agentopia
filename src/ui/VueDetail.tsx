@@ -1,3 +1,4 @@
+import { citerArgument } from '../ligneCommande.js';
 import * as path from 'path';
 import { Box, Text } from 'ink';
 import type { Donnees } from './donnees.js';
@@ -16,7 +17,7 @@ import type { Projet } from '../projets.js';
 
 export interface ContenuDetail {
     titre: Morceau[];
-    boutons: { label: string; action: string }[];    // action : commande Claudetopia, ou « retour »
+    boutons: { label: string; action: string }[];    // action : commande Agentopia, ou « retour »
     lignes: Morceau[][];
 }
 
@@ -32,9 +33,9 @@ export function contenuDetail(detail: Detail, d: Donnees, projets: Projet[]): Co
         const sessions = d.agents.filter((a) => path.resolve(a.cwd).toLowerCase().startsWith(path.resolve(p.chemin).toLowerCase()));
         return {
             titre: [{ t: '● ', c: couleurProjet(p.nom) }, { t: p.nom, gras: true }, { t: `  ${p.chemin}`, c: 'gray' }],
-            boutons: [RETOUR, { label: '✻ Session', action: `/claude ${p.chemin}` }, { label: '✓ Commit', action: `/commit ${p.chemin}` },
-                { label: '⇣ Pull', action: `/pull ${p.chemin}` }, { label: '◧ VS Code', action: `/code ${p.chemin}` },
-                { label: '❯ Terminal', action: `/terminal defaut ${p.chemin}` }, { label: '⋯ Actions', action: `/actions ${p.chemin}` }],
+            boutons: [RETOUR, { label: '✦ Mission', action: `/mission ${citerArgument(p.chemin)}` }, { label: '✻ Session', action: `/session ${citerArgument(p.chemin)}` }, { label: '✓ Commit', action: `/commit ${citerArgument(p.chemin)}` },
+                { label: '⇣ Pull', action: `/pull ${citerArgument(p.chemin)}` }, { label: '◧ VS Code', action: `/code ${citerArgument(p.chemin)}` },
+                { label: '❯ Terminal', action: `/terminal defaut ${citerArgument(p.chemin)}` }, { label: '⋯ Actions', action: `/actions ${citerArgument(p.chemin)}` }],
             lignes: [
                 ...(g ? [
                     ligne('Branche', `⎇ ${g.branche}${g.amont ? `  (suit ${g.amont})` : '  (pas de branche distante)'}`, theme.secondaire),
@@ -44,7 +45,7 @@ export function contenuDetail(detail: Detail, d: Donnees, projets: Projet[]): Co
                     ...(g.prs?.length ? [vide, [{ t: '  PULL REQUESTS', c: theme.primaire, gras: true }] as Morceau[], ...g.prs.slice(0, 5).map((pr): Morceau[] => [{ t: `  #${pr.numero} `, c: theme.accent }, { t: pr.titre }, { t: `  ${pr.auteur} · ${pr.branche}`, c: 'gray' }])] : []),
                 ] : [ligne('Git', 'pas un dépôt git', 'gray')]),
                 vide,
-                [{ t: `  SESSIONS CLAUDE (${sessions.length})`, c: theme.primaire, gras: true }],
+                [{ t: `  SESSIONS (${sessions.length})`, c: theme.primaire, gras: true }],
                 ...(sessions.length ? sessions.map((s): Morceau[] => [{ t: `  ${s.statut === 'travaille' ? '✻' : s.statut === 'bloquee' ? '!' : '○'} `, c: theme.accent }, { t: s.titre || s.nom }, { t: s.question ? `  ? ${s.question}` : '', c: '#fdba74' }])
                     : [[{ t: '  aucune pour l\'instant · « ✻ Session » pour en lancer une', c: 'gray' }]]),
             ],

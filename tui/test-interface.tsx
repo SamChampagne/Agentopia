@@ -1,13 +1,25 @@
-process.env.CLAUDETOPIA_SANS_REPRISE = '1';   // ne lit ni n'écrit l'état de reprise de l'utilisateur
-// Test de la nouvelle interface, sans terminal : rien n'est envoyé à Claude ni modifié.
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+// Avant tout import de l’application : ce smoke historique ne doit jamais
+// utiliser le profil personnel, même lancé manuellement par erreur.
+const profilTest = process.env.CLAUDETOPIA_DATA_DIR;
+const relatifProfil = profilTest ? path.relative(os.tmpdir(), path.resolve(profilTest)) : '';
+if (process.env.CLAUDETOPIA_TEST_UI !== '1' || !profilTest || !path.isAbsolute(profilTest)
+    || !relatifProfil || relatifProfil.startsWith('..') || path.isAbsolute(relatifProfil) || !fs.statSync(profilTest, { throwIfNoEntry: false })?.isDirectory()) {
+    throw new Error('Smoke refusé : CLAUDETOPIA_TEST_UI=1 et CLAUDETOPIA_DATA_DIR dans un dossier temporaire dédié sont obligatoires. Utiliser les tests TUI à fixtures pour la validation automatisée.');
+}
+process.env.CLAUDETOPIA_SANS_REPRISE = '1';
+process.env.AGENTOPIA_SANS_MOTEUR = '1';
+// Smoke des vues sur un profil jetable ; la collecte du poste est désactivée.
 // Entrée n'est pressée que sur des commandes « /… » vérifiées à l'écran juste avant ; les dialogues sont annulés par Échap.
 // Lancer : bun tui/test-interface.tsx   (VOIR=1 pour afficher les écrans)
 import { createTestRenderer } from '@opentui/core/testing';
 import { createRoot } from '@opentui/react';
-import { App } from './app.tsx';
-import { demarrerCollecte, lireDonnees } from '../dist/ui/donnees.js';
-import { capturerConsole, lignesJournal } from '../dist/ui/journal.js';
-import { lireTranscript } from '../dist/agents.js';
+const { App } = await import('./app.tsx');
+const { lireDonnees } = await import('../dist/ui/donnees.js');
+const { capturerConsole, lignesJournal } = await import('../dist/ui/journal.js');
+const { lireTranscript } = await import('../dist/agents.js');
 
 const COLS = 200, ROWS = 50;
 // Une erreur (dont un garde-fou qui refuse d'appuyer sur Entrée) arrête le test au lieu de le laisser tourner
@@ -18,7 +30,6 @@ const arret = (e: unknown) => {
 };
 process.on('unhandledRejection', arret);
 process.on('uncaughtException', arret);
-demarrerCollecte();
 const { renderer, mockInput, mockMouse, flush, captureCharFrame } = await createTestRenderer({ width: COLS, height: ROWS, useMouse: true, autoFocus: false });
 capturerConsole();
 createRoot(renderer).render(<App quitter={() => undefined} />);
@@ -61,7 +72,7 @@ async function echap() {
 
 await w(7000);
 let image = await ecran();
-verifier('accueil : cockpit et colonne', image.includes('SESSIONS CLAUDE') && image.includes('Sessions  Projets') && image.includes('SERVEURS SSH'), image);
+verifier('accueil : cockpit et colonne', image.includes('SESSIONS') && image.includes('Sessions  Projets') && image.includes('SERVEURS SSH'), image);
 
 await mockInput.typeText('/the');
 image = await ecran();
@@ -140,9 +151,9 @@ await mockMouse.click(12, 2);
 await ecran();
 await mockMouse.click(10, 3);
 image = await ecran();
-verifier('clic sur un projet : panneau de détail', image.includes('← Retour') && image.includes('SESSIONS CLAUDE (') && (image.includes('Branche') || image.includes('pas un dépôt git')), image);
+verifier('clic sur un projet : panneau de détail', image.includes('← Retour') && image.includes('SESSIONS (') && (image.includes('Branche') || image.includes('pas un dépôt git')), image);
 image = await echap();
-verifier('Échap referme le détail', !image.includes('SESSIONS CLAUDE ('), image);
+verifier('Échap referme le détail', !image.includes('SESSIONS ('), image);
 await mockMouse.click(3, 2);
 await ecran();
 
@@ -161,18 +172,13 @@ for (const [cmd, titre, nom] of vues) {
     image = await echap();
     verifier(`Échap referme ${nom}`, !image.includes(titre), image);
 }
-// Fichiers (SFTP) sur dev : connexion et liste du dossier, en lecture seule
-image = await commande('/sftp dev');
-await w(4000);
-image = await ecran();
-verifier('/sftp dev : vue Fichiers, dossier listé', image.includes('⇅ FICHIERS · dev') && /\d+ éléments?/.test(image), image);
-image = await echap();
-verifier('Échap referme Fichiers', !image.includes('⇅ FICHIERS'), image);
+// SFTP est couvert par test-securite-sftp.tsx avec client factice ; aucun serveur
+// du poste n’est contacté par ce smoke.
 
 image = await commande('/sorties');
 verifier('/sorties : journal complet', image.includes('▤ JOURNAL'), image);
 image = await echap();
-verifier('Échap revient au cockpit', image.includes('SESSIONS CLAUDE'), image);
+verifier('Échap revient au cockpit', image.includes('SESSIONS'), image);
 
 // La session qui a le plus de messages : on vérifie aussi que le texte s'affiche
 // Dans l'ordre des cartes affichées : seulement les actives (ni terminées, ni en pause), 5 lignes par carte
@@ -211,7 +217,7 @@ if (avecMessages >= 0) {
     await mockMouse.moveTo(60 + 6, 6);
     image = await ecran();
     image = await echap();
-    verifier('Échap referme la conversation', image.includes('SESSIONS CLAUDE'), image);
+    verifier('Échap referme la conversation', image.includes('SESSIONS'), image);
 }
 
 // Passer d'une vue à l'autre sans fermer la première (clic dans la barre du haut)
@@ -266,7 +272,7 @@ await mockMouse.click(120, 30, 2);
 image = await ecran();
 verifier('clic droit sur le cockpit : menu général', image.includes('Parler au maître') && image.includes('Nouvelle session Claude'), image);
 image = await echap();
-verifier('Échap referme le menu sans rien lancer', image.includes('SESSIONS CLAUDE'), image);
+verifier('Échap referme le menu sans rien lancer', image.includes('SESSIONS'), image);
 
 // Ctrl+K : la palette (recherche), refermée par Échap
 mockInput.pressKey('k', { ctrl: true });
