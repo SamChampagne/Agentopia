@@ -1,18 +1,48 @@
 name: Tâche
-description: Définir un changement et ses critères d'acceptation
+description: Décrire, estimer et planifier un changement
 labels: [enhancement]
 body:
   - type: textarea
-    id: objective
+    id: description
     attributes:
-      label: Objectif et périmètre
-      description: Besoin concret, dépendances et limites.
+      label: Description
+      description: Besoin ou défaut concret, contexte, résultat attendu et périmètre.
     validations:
       required: true
   - type: textarea
-    id: acceptance
+    id: criteria
     attributes:
       label: Critères d'acceptation
-      description: Résultats vérifiables et validations nécessaires.
+      description: Au moins une case avec un résultat observable. Cocher après vérification.
+      value: "- [ ] "
+    validations:
+      required: true
+  - type: input
+    id: estimate
+    attributes:
+      label: Estimation (heures)
+      description: Effort initial positif, au plus 80 h. Décomposer les gros lots. Hors attentes.
+      placeholder: '2'
+    validations:
+      required: true
+  - type: textarea
+    id: assumptions
+    attributes:
+      label: Hypothèses de l'estimation
+      description: Ce que couvre l'estimation, réutilisation attendue, inconnues et exclusions.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation prévue
+      description: Commandes, scénarios ou preuves attendues pour juger le résultat.
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priorité
+      options: [P1, P2, P3]
     validations:
       required: true

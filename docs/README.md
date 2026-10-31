@@ -1,5 +1,7 @@
 # Documentation — Agentopia
 
+- [Suivi obligatoire : issues, estimations, statuts et PR](github-workflow.md)
+
 - [État du dépôt et prochaines actions](etat-du-projet.md)
 - [Contribuer](../CONTRIBUTING.md)
 - [Projet GitHub](https://github.com/users/SamChampagne/projects/4)

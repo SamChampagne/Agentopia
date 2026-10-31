@@ -1,0 +1,38 @@
+name: Suivi du projet
+on:
+  issues:
+    types: [opened, edited, reopened, closed, labeled, unlabeled, transferred]
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, closed, ready_for_review, converted_to_draft]
+  workflow_dispatch:
+
+# All runs reconcile the current repository state, including events coalesced by concurrency.
+concurrency:
+  group: project-tracking-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  statuses: write
+
+jobs:
+  synchroniser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Secrets are only used with code/config from the repository's default branch.
+      # Never check out a PR head or execute its files in this privileged workflow.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+      - name: Vérifier et synchroniser issues, estimations et PR
+        run: node .github/scripts/project-workflow.mjs sync
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PROJECTS_TOKEN: ${{ secrets.PROJECTS_TOKEN }}

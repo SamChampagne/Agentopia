@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 2,
   "owner": "SamChampagne",
   "repository": "Agentopia",
   "number": 4,
@@ -8,6 +9,8 @@
   "statusOptions": {
     "Todo": "f75ad846",
     "In Progress": "47fc9ee4",
+    "In Review": "4e1e171e",
+    "Blocked": "d50239d3",
     "Done": "98236657"
   },
   "priorityFieldId": "PVTSSF_lAHOBqtaac4BpjAKzhn-K7o",
@@ -15,5 +18,9 @@
     "P1": "99715e2e",
     "P2": "8031ffa8",
     "P3": "46493a77"
-  }
+  },
+  "estimateFieldId": "PVTF_lAHOBqtaac4BpjAKzhoBJrE",
+  "estimateMaxHours": 80,
+  "statusContext": "workflow-projet",
+  "adoptedAt": "2026-10-31T00:00:00Z"
 }

@@ -1,19 +1,20 @@
 ## Objectif
 
-<!-- Problème concret et résultat attendu. -->
+<!-- Problème concret, résultat et périmètre. -->
 
-<!-- Remplacer par Closes #N (issue de ce dépôt). -->
+<!-- Écrire Closes #N pour chaque issue réellement traitée, hors commentaire. -->
 
 ## Validation
 
-<!-- Commandes réellement exécutées, résultats, SHA et environnement. -->
+<!-- Commandes réellement exécutées, résultats observés, environnement et révision. -->
 
 ## Limites
 
-<!-- Contrôles non exécutés, risques restants ou absence de risque particulier expliquée. -->
+<!-- Contrôles non exécutés, risques ou absence de risque particulier expliquée. -->
 
 ## Suivi
 
-- [ ] Issue rattachée au projet et critères d'acceptation relus.
-- [ ] Documentation et tests adaptés au changement.
-- [ ] CI relue sur le dernier commit; aucun échec masqué.
+- [ ] Issue décrite et estimée, critères et hypothèses à jour.
+- [ ] Carte dans le projet attendu; travail démarré via la commande start.
+- [ ] PR liée nativement à l'issue; carte en In Review avant fusion.
+- [ ] Contrôles du dernier commit relus, dont workflow-projet.
