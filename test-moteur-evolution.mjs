@@ -44,11 +44,21 @@ test('worktree manuel : aucune copie locale implicite, création asynchrone et r
     assert.equal(annule.dossier, undefined); assert.ok(annule.erreur); assert.equal(worktrees.listerWorktrees(p).length, 2);
 });
 
-test('worktree manuel : profil explicite appliqué et préparation en erreur conservée sans lancement', async () => {
+test('worktree manuel : profil retrouvé via alias réel, préparation appliquée et erreur conservée sans lancement', async () => {
     const p = depot('manuel-prepare');
     fs.writeFileSync(path.join(p, '.env'), 'FIXTURE=selected');
     fs.writeFileSync(path.join(p, '.env.autre'), 'FIXTURE=unselected');
-    const c = config.chargerConfig(); c.preparationProjets = [{ projet: p, fichiersLocaux: ['.env'], commande: { programme: process.execPath, args: ['-e', 'require("node:fs").writeFileSync("prepare.txt", "fixture")'] } }]; config.sauverConfig(c);
+    // Git peut normaliser un alias Windows 8.3. Une jonction réelle fournit deux écritures
+    // différentes du même dossier, même lorsque les noms courts NTFS sont désactivés.
+    const alias = path.join(racine, 'alias-manuel-prepare');
+    fs.symlinkSync(p, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.notEqual(alias, p); assert.equal(fs.realpathSync.native(alias), fs.realpathSync.native(p));
+    const c = config.chargerConfig(); c.preparationProjets = [{ projet: alias, fichiersLocaux: ['.env'], commande: { programme: process.execPath, args: ['-e', 'require("node:fs").writeFileSync("prepare.txt", "fixture")'] } }]; config.sauverConfig(c);
+    assert.equal(preparation.preparationDuProjet(p)?.projet, alias);
+    c.preparationProjets[0].projet = p; config.sauverConfig(c);
+    assert.equal(preparation.preparationDuProjet(alias)?.projet, p);
+    c.preparationProjets[0].projet = alias; config.sauverConfig(c);
+    assert.equal(preparation.preparationDuProjet(depot('autre-projet')), undefined);
     const r = await worktrees.creerWorktree(p, 'test/preparation'); assert.ok(r.dossier, r.erreur);
     assert.equal(fs.readFileSync(path.join(r.dossier, '.env'), 'utf8'), 'FIXTURE=selected');
     assert.equal(fs.existsSync(path.join(r.dossier, '.env.autre')), false);

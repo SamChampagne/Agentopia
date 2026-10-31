@@ -25,4 +25,8 @@ Le smoke refuse désormais de démarrer avant tout import de l’application si 
 
 ## Vérification commune
 
-Les résultats de compilation, de la chaîne CI et de la distribution Windows sont consignés séparément par la validation commune du lot ; les tests ci-dessus ne prouvent pas une exécution réelle de tous les fournisseurs payants.
+La compilation TypeScript principale et celle d’OpenTUI passent. La suite comporte 259 tests Node, un parcours du composeur Ink et 12 parcours OpenTUI. Les contrôles ont révélé puis couvert une concurrence entre intégrations, les reprises de fichiers corrompus, un PID de test réutilisé sous Windows et les différentes écritures d’un même chemin de projet (alias ou chemin physique). La comparaison des profils de préparation utilise le chemin réel, sans assouplir les contrôles des fichiers copiés.
+
+Un paquet Windows local a passé le vrai Setup dans un dossier temporaire : démarrage sans Node/Bun dans le PATH, interface, modèle d’équipe, récupération, moteur détaché unique, mise à jour, réparation, retour arrière, contrôle d’intégrité et conservation des données. Les téléchargements complet, indisponible, tronqué et altéré ont aussi été exercés. Ce test n’a pas modifié l’inscription de l’installation personnelle dans le registre.
+
+La publication automatisée reconstruit le paquet depuis le tag, refait la suite et les parcours Windows, puis publie seulement si tout réussit. Les tests ne prouvent pas une exécution réelle de tous les fournisseurs payants. La signature réelle nécessite un certificat externe ; le paquet local contrôlé était explicitement non signé.

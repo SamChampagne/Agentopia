@@ -7,9 +7,20 @@ import { choisir, choisirPlusieurs, confirmer } from './ui/bus.js';
 import { executerProcessus, gitExecution } from './gitExecution.js';
 
 export interface PreparationProjet { projet: string; commande?: { programme: string; args: string[] }; fichiersLocaux?: string[] }
-const canon = (p: string) => { const n = path.resolve(p); return process.platform === 'win32' ? n.toLowerCase() : n; };
+function canon(p: string): string {
+    let n = path.resolve(p);
+    // Git restitue le chemin long du dépôt, même si le profil utilise un alias 8.3
+    // ou une jonction. Comparer l'identité réelle évite de perdre sa préparation.
+    try { n = fs.realpathSync.native(n); }
+    catch (e) {
+        // Un ancien projet supprimé ne doit pas empêcher de trouver les autres profils.
+        if (!['ENOENT', 'ENOTDIR'].includes((e as NodeJS.ErrnoException).code || '')) throw e;
+    }
+    return process.platform === 'win32' ? n.toLowerCase() : n;
+}
 export function preparationDuProjet(projet: string): PreparationProjet | undefined {
-    return chargerConfig().preparationProjets?.find((p) => canon(p.projet) === canon(projet));
+    const cible = canon(projet);
+    return chargerConfig().preparationProjets?.find((p) => canon(p.projet) === cible);
 }
 export function propositionsPreparation(projet: string): { nom: string; commande: { programme: string; args: string[] } }[] {
     const fichier = path.join(projet, 'package.json'); if (!fs.existsSync(fichier) || fs.statSync(fichier).size > 1024 * 1024) return [];
