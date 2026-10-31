@@ -20,7 +20,7 @@ const RACINE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TUI = path.join(RACINE, 'tui', 'app.tsx');
 const bun = !process.env.CLAUDETOPIA_INK && fs.existsSync(path.join(RACINE, 'tui', 'node_modules', '@opentui', 'core')) ? surPath('bun') : undefined;
 if (bun && fs.existsSync(TUI)) {
-    const res = spawnSync(bun, [TUI, ...process.argv.slice(2)], { stdio: 'inherit', env: { ...process.env, NODE_ENV: process.env.NODE_ENV ?? 'production' } });
+    const res = spawnSync(bun, ['--jsx-import-source', '@opentui/react', TUI, ...process.argv.slice(2)], { stdio: 'inherit', env: { ...process.env, NODE_ENV: process.env.NODE_ENV ?? 'production' } });
     if (!res.error) process.exit(res.status ?? 0);
     console.error(`Nouvelle interface indisponible (${res.error.message}) : démarrage de l'ancienne.`);
 }

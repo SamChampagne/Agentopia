@@ -1,5 +1,15 @@
 # Agentopia 1.4 — bêta Windows
 
+## 1.4.0-beta.14 — écran noir au lancement
+
+- Compatibilité du runtime JSX OpenTUI avec React en production, sans désactiver les optimisations du mode production. Le correctif de dépendance est versionné et réappliqué lors de la construction Windows.
+- Le lanceur choisit explicitement le runtime JSX d’Agentopia, indépendamment du `tsconfig` du projet ouvert.
+- Le précontrôle d’installation utilise le même mode production que le lancement réel. Il vérifie l’accueil, le cockpit, la saisie multiligne, l’affichage d’une erreur contrôlée et la reprise.
+- La console de débogage vide ne s’ouvre plus par-dessus une erreur de rendu. Les essais du vrai point d’entrée désactivent la collecte et la maintenance lorsque le profil de test est utilisé.
+- La suite ajoute un contrôle de démarrage en production et en développement, lancé depuis un dossier ayant un `tsconfig` différent. Les tests utilisent uniquement des profils temporaires.
+
+La capture de l’écran noir a révélé une lacune dans les contrôles de la bêta 13 : les tests d’interface et d’installation validaient le mode développement, alors que le raccourci utilisait le mode production.
+
 La bêta **1.4.0-beta.13** reprend les 12 priorités de stabilisation et les 8 améliorations de l’audit. [Guide et portée des changements](ameliorations-mn.md).
 
 - **Conversations** : saisie multiligne, recherche dans l’historique, export Markdown/JSONL, choix du modèle et événements Claude progressifs.

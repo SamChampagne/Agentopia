@@ -916,17 +916,21 @@ if (import.meta.main) {
     const commandeInitiale = process.argv.slice(2).join(' ').trim() || undefined;
     // Première fois sur ce poste : l'assistant demande l'essentiel ; juste après l'installation (CLAUDETOPIA_SCAN) : le scan du poste
     const auDemarrage = premierLancement || preparationAReprendre() ? '/preparer' : process.env.CLAUDETOPIA_SCAN ? '/scan' : undefined;
-    demarrerCollecte();
-    if (!commandeInitiale) demarrerNotifications();
-    const { remplacerAncienRaccourci, prechargerBureau } = await import('../dist/configCommandes.js');
-    setTimeout(remplacerAncienRaccourci, 3000);
-    setTimeout(prechargerBureau, 3500);
-    // Notifications cliquables : le lien claudetopia: ouvre la session concernée
-    setTimeout(() => void import('../dist/notifications.js').then((n: any) => n.surveillerLiens()), 2000);
-    // Terminaux installés détectés en avance : le premier clic droit s'ouvre sans attendre
-    setTimeout(() => void import('../dist/terminaux.js').then((t: any) => t.terminaux()), 2500);
-    process.on('exit', () => void import('../dist/maitre.js').then((m: any) => m.arreterMaitre()));
-    const renderer = await createCliRenderer({ exitOnCtrlC: false, useMouse: true, enableMouseMovement: true, consoleMode: 'disabled', autoFocus: false });
+    // Le vrai point d'entrée peut aussi être exercé dans un terminal de test,
+    // sans lancer la collecte du poste, le moteur ou la maintenance du bureau.
+    if (process.env.CLAUDETOPIA_TEST_UI !== '1') {
+        demarrerCollecte();
+        if (!commandeInitiale) demarrerNotifications();
+        const { remplacerAncienRaccourci, prechargerBureau } = await import('../dist/configCommandes.js');
+        setTimeout(remplacerAncienRaccourci, 3000);
+        setTimeout(prechargerBureau, 3500);
+        // Notifications cliquables : le lien claudetopia: ouvre la session concernée
+        setTimeout(() => void import('../dist/notifications.js').then((n: any) => n.surveillerLiens()), 2000);
+        // Terminaux installés détectés en avance : le premier clic droit s'ouvre sans attendre
+        setTimeout(() => void import('../dist/terminaux.js').then((t: any) => t.terminaux()), 2500);
+        process.on('exit', () => void import('../dist/maitre.js').then((m: any) => m.arreterMaitre()));
+    }
+    const renderer = await createCliRenderer({ exitOnCtrlC: false, useMouse: true, enableMouseMovement: true, consoleMode: 'disabled', openConsoleOnError: false, autoFocus: false });
     // Tout ce que les commandes écrivent va au journal (affiché dans « Dernières sorties » et /sorties)
     capturerConsole();
     // Windows : clics et molette (entrée VT de la console), noté dans le journal
