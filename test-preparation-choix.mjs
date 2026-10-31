@@ -15,7 +15,9 @@ after(() => {
     if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) fs.rmSync(racine, { recursive: true, force: true });
 });
 const config = () => ({ racines: [], extras: [], fournisseurDefaut: 'codex', maitre: { actif: false } });
-const projet = (nom) => ({ nom, chemin: path.join(racine, nom), activite: new Date(), types: [], worktree: false });
+// Une activité commune garde l'ordre de la fixture indépendant du passage d'une milliseconde.
+const activiteProjets = new Date();
+const projet = (nom) => ({ nom, chemin: path.join(racine, nom), activite: activiteProjets, types: [], worktree: false });
 const fixture = (nom, extra = {}) => {
     const fichier = path.join(racine, `${nom}.json`);
     const etat = { version: 1, selection: ['codex', 'claude'], ignores: ['claude'], projetsVus: [], projetsTermines: true, terminee: true,

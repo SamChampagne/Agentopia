@@ -1,0 +1,36 @@
+name: Standard de développement
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: node --test .github/scripts/check-development.test.mjs
+      - run: node .github/scripts/check-development.mjs
+      - run: git diff --check
+  suivi-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: node .github/scripts/check-development.mjs --pr
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

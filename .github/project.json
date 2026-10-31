@@ -1,0 +1,19 @@
+{
+  "owner": "SamChampagne",
+  "repository": "Agentopia",
+  "number": 4,
+  "url": "https://github.com/users/SamChampagne/projects/4",
+  "id": "PVT_kwHOBqtaac4BpjAK",
+  "statusFieldId": "PVTSSF_lAHOBqtaac4BpjAKzhn-KHE",
+  "statusOptions": {
+    "Todo": "f75ad846",
+    "In Progress": "47fc9ee4",
+    "Done": "98236657"
+  },
+  "priorityFieldId": "PVTSSF_lAHOBqtaac4BpjAKzhn-K7o",
+  "priorityOptions": {
+    "P1": "99715e2e",
+    "P2": "8031ffa8",
+    "P3": "46493a77"
+  }
+}
