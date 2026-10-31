@@ -23,9 +23,11 @@ export function decoderPerplexity(r: any): string {
 export async function executerPerplexity(c: ContexteAgent, requete: typeof fetch = fetch): Promise<string> {
     const cle = cleFournisseur('perplexity');
     if (!cle) throw new Error('Configure une clé API Perplexity dans /fournisseurs');
-    c.evenement({ role: 'outil', texte: 'Recherche web Perplexity · réponse et sources en préparation' });
+    const debut = Date.now();
+    c.evenement({ id: 'recherche', role: 'outil', texte: 'Recherche web Perplexity · réponse et sources en préparation (ce transport ne transmet pas les étapes en direct)', etat: 'en_cours' });
+    try {
     const r = await requete('https://api.perplexity.ai/v1/agent', {
-        method: 'POST', signal: AbortSignal.any([c.signal, AbortSignal.timeout(180_000)]),
+        method: 'POST', redirect: 'error', signal: AbortSignal.any([c.signal, AbortSignal.timeout(180_000)]),
         headers: { Authorization: `Bearer ${cle}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ effort: 'low', input: [...c.historique, { role: 'user', content: c.prompt }] }),
     });
@@ -36,6 +38,11 @@ export async function executerPerplexity(c: ContexteAgent, requete: typeof fetch
         cache: reponse.usage.input_tokens_details?.cached_tokens,
         coutUSD: reponse.usage.cost?.currency === 'USD' ? reponse.usage.cost.total_cost : undefined });
     const texte = decoderPerplexity(reponse);
+    c.evenement({ id: 'recherche', role: 'outil', texte: 'Recherche Perplexity terminée · sources disponibles dans la réponse', etat: 'termine', dureeMs: Date.now() - debut });
     c.evenement({ role: 'assistant', texte });
     return texte;
+    } catch (e) {
+        c.evenement({ id: 'recherche', role: 'outil', texte: 'Recherche Perplexity interrompue', etat: c.signal.aborted ? 'interrompu' : 'erreur', dureeMs: Date.now() - debut });
+        throw e;
+    }
 }

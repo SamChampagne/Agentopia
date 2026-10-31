@@ -51,7 +51,7 @@ namespace Agentopia.Installation {
                 // Extraire uniquement le moteur et les deux modules connus, après contrôle du ZIP.
                 Paquet.ExtraireComposants(archive, temporaire);
                 string parametres = Path.Combine(temporaire, "options.json");
-                File.WriteAllText(parametres, new JavaScriptSerializer().Serialize(new { archive, hash = config.sha256, destination = options.destination, raccourci = !options.sansRaccourci, idAttendu = config.id, versionAttendue = config.version }), new UTF8Encoding(false));
+                File.WriteAllText(parametres, new JavaScriptSerializer().Serialize(new { archive, hash = config.sha256, destination = options.destination, raccourci = !options.sansRaccourci, enregistrerDesinstallation = !options.sansEnregistrement, idAttendu = config.id, versionAttendue = config.version }), new UTF8Encoding(false));
                 string destination = await Installer(temporaire, parametres, progression);
                 Signaler(progression, "termine", "Agentopia est prêt", "Tes réglages et conversations sont conservés.", 100, false);
                 return destination;

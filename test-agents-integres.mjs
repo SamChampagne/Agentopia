@@ -196,7 +196,7 @@ test('une équipe échange les sources, isole et fusionne les dépendances sans 
         s.etat = 'attend'; s.issue = 'success'; s.resultat = s.fournisseur === 'perplexity' ? 'Source https://example.org/source' : 'Livraison terminée';
         sessions.sauverIntegree(s);
     } };
-    for (let n = 0; n < 12 && e.etat !== 'prete'; n++) { equipe.avancerEquipes([], services); await pause(30); }
+    for (let n = 0; n < 12 && e.etat !== 'prete'; n++) { await equipe.avancerEquipes([], services); await equipe.attendreLancements(); }
     assert.equal(e.etat, 'prete'); assert.deepEqual(lancements, ['perplexity', 'claude', 'codex']);
     assert.equal(fs.existsSync(path.join(depot, 'livraison.txt')), false);
     assert.notEqual(e.taches[1].cwd, e.taches[2].cwd);
@@ -212,10 +212,10 @@ test('une équipe ne confond pas attente, permission, erreur et réussite', asyn
     const s = sessions.creerIntegree('claude', depot, 'Session fixture');
     e.etat = 'en cours'; e.taches[0].etat = 'en cours'; e.taches[0].agentId = s.id;
     const services = { notifier() {}, async envoyer() { assert.fail('La dépendance ne doit pas démarrer'); } };
-    equipe.avancerEquipes([], services); assert.equal(e.taches[0].etat, 'en cours');
-    s.etat = 'bloquee'; sessions.sauverIntegree(s); equipe.avancerEquipes([], services); assert.equal(e.taches[0].etat, 'bloquee');
+    await equipe.avancerEquipes([], services); assert.equal(e.taches[0].etat, 'en cours');
+    s.etat = 'bloquee'; sessions.sauverIntegree(s); await equipe.avancerEquipes([], services); assert.equal(e.taches[0].etat, 'bloquee');
     s.etat = 'erreur'; s.issue = 'error'; s.erreur = 'Connexion refusée'; sessions.sauverIntegree(s);
-    equipe.avancerEquipes([], services); assert.equal(e.etat, 'erreur'); assert.equal(e.taches[1].etat, 'attente');
+    await equipe.avancerEquipes([], services); assert.equal(e.etat, 'erreur'); assert.equal(e.taches[1].etat, 'attente');
     e.archivee = true;
 });
 test('les tâches indépendantes démarrent ensemble ; leur suite attend les deux résultats', async () => {
@@ -229,13 +229,15 @@ test('les tâches indépendantes démarrent ensemble ; leur suite attend les deu
         const s = sessions.lireIntegree(id); s.etat = 'attend'; s.issue = 'success'; s.resultat = `Résultat ${s.fournisseur}`;
         sessions.sauverIntegree(s); ok();
     })); } };
-    equipe.avancerEquipes([], services);
+    await equipe.avancerEquipes([], services);
+    for (let i = 0; i < 100 && enCours.length < 2; i++) await pause(30);
     assert.equal(enCours.length, 2); assert.equal(e.taches[2].etat, 'attente');
-    enCours[0](); await pause(10); equipe.avancerEquipes([], services);
+    enCours[0](); await pause(10); await equipe.avancerEquipes([], services);
     assert.equal(enCours.length, 2); assert.equal(e.taches[2].etat, 'attente');
-    enCours[1](); await pause(10); equipe.avancerEquipes([], services);
+    enCours[1](); await pause(10); await equipe.avancerEquipes([], services);
+    for (let i = 0; i < 100 && enCours.length < 3; i++) { await pause(30); await equipe.avancerEquipes([], services); }
     assert.equal(enCours.length, 3);
-    enCours[2](); await pause(10); equipe.avancerEquipes([], services);
+    enCours[2](); await pause(10); await equipe.avancerEquipes([], services);
     assert.equal(e.etat, 'prete'); e.archivee = true;
 });
 test('des modifications non commitées empêchent de déclarer une tâche réussie', async () => {
@@ -247,16 +249,16 @@ test('des modifications non commitées empêchent de déclarer une tâche réuss
         const s = sessions.lireIntegree(id); fs.writeFileSync(path.join(s.cwd, 'non-commite.txt'), 'en cours');
         s.etat = 'attend'; s.issue = 'success'; s.resultat = 'Le modèle prétend avoir fini'; sessions.sauverIntegree(s);
     } };
-    equipe.avancerEquipes([], services); await pause(20); equipe.avancerEquipes([], services);
+    await equipe.avancerEquipes([], services); await equipe.attendreLancements(); await equipe.avancerEquipes([], services);
     assert.equal(e.etat, 'erreur'); assert.match(e.taches[0].resultat, /non commitées/); e.archivee = true;
 });
-test('une ancienne session Claude qui attend n’est pas une tâche terminée', () => {
+test('une ancienne session Claude qui attend n’est pas une tâche terminée', async () => {
     const e = equipe.creerEquipeMixte({ chemin: path.join(racine, 'projet'), nom: 'Ancien mode' }, 'Fixture', [
         { titre: 'Tâche', fournisseur: 'claude', consigne: 'mission', dependances: [] },
     ]);
     e.mixte = false; e.etat = 'en cours'; const t = e.taches[0];
     t.fournisseur = undefined; t.etat = 'en cours'; t.agentId = 'native-fixture'; t.vuTravailler = true;
-    equipe.avancerEquipes([{ id: t.agentId, statut: 'attend', sessionId: 'native', cwd: e.projet }], { envoyer() { assert.fail(); }, notifier() {} });
+    await equipe.avancerEquipes([{ id: t.agentId, statut: 'attend', sessionId: 'native', cwd: e.projet }], { envoyer() { assert.fail(); }, notifier() {} });
     assert.equal(t.etat, 'bloquee'); assert.notEqual(e.etat, 'prete'); e.archivee = true;
 });
 

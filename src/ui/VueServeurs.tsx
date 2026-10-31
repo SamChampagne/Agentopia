@@ -10,7 +10,7 @@ import { sauverConfig } from '../config.js';
 import { config } from '../commandes.js';
 import { nomDossierClaude } from '../usage.js';
 import { ouvrirOnglet } from '../lanceurs.js';
-import { getProjets } from '../commandes.js';
+import { useProjets } from './projets.js';
 import { theme, fond } from '../theme.js';
 import { bus } from './bus.js';
 
@@ -114,7 +114,7 @@ export function VueServeurs({ fermer, initial }: { fermer: () => void; initial?:
         if (premier !== debut) setDebut(premier);
     });
 
-    const projets = getProjets();
+    const projets = useProjets();
     const caches = d.serveurs.length - liste.length;
 
     return (

@@ -28,6 +28,10 @@ import { commandesSsh } from './sshGestion.js';
 import { commandesConnexions } from './connexionsCommandes.js';
 import { commandesPlus } from './plus.js';
 import { commandesPrCi } from './prci.js';
+import { commandesConversation } from './conversationCommandes.js';
+import { commandesDiagnostics } from './diagnosticsCommandes.js';
+import { commandesRecuperation } from './recuperationCommandes.js';
+import { commandesMaintenance } from './maintenanceCommandes.js';
 import { commandesTicket } from './ticket.js';
 import { commandesModeles } from './modelesSession.js';
 import { commandesHistorique } from './historiqueCout.js';
@@ -36,7 +40,7 @@ import { commandesThemeAuto } from './themeAuto.js';
 import { commandesSurveillance } from './surveillanceLogs.js';
 import { commandesExport } from './exportImport.js';
 import { commandesApparence } from './apparence.js';
-import { ajusterProjets } from './synchro.js';
+import { ajusterProjets, synchro } from './synchro.js';
 import { cloner as clonerDepot } from './git.js';
 import { afficherServeurs, testerServeurs, ouvrirSsh, serveursDuProjet } from './sshCommandes.js';
 import { c } from './theme.js';
@@ -103,9 +107,9 @@ async function changements(s: SessionVue): Promise<void> {
 export const config = chargerConfig();
 let projets = listerProjets(config);
 export const getProjets = () => projets;
+synchro.on('projets', (liste: Projet[]) => { projets = liste; bus.emit('projets', projets); });
 export const rafraichirProjets = () => {
-    projets = listerProjets(config);
-    ajusterProjets(projets);
+    ajusterProjets(listerProjets(config));
     return projets;
 };
 
@@ -753,36 +757,7 @@ export const COMMANDES: Commande[] = [
     {
         nom: 'jetons', groupe: 'Git',
         description: 'Jetons GitHub / Azure DevOps / GitLab pour voir les pull requests',
-        executer: async () => {
-            const { AIDE_JETONS, pageJeton, jetonsConfigures, enregistrerJeton, oublierJeton } = await import('./jetons.js');
-            const { lireDepots, etatPR } = await import('./git.js');
-            type H = keyof typeof AIDE_JETONS;
-            const deja = jetonsConfigures();
-            const site = await choisir<H>('Pour quel site ?', (Object.keys(AIDE_JETONS) as H[]).map((h) => ({
-                label: `${deja.includes(h) ? '✓' : '○'} ${h}`, valeur: h, description: deja.includes(h) ? 'jeton enregistré' : 'aucun jeton',
-            })), false);
-            const action = await choisir(site, [
-                { label: '⧉ Créer un jeton (ouvre la page) puis le coller', valeur: 'creer' },
-                { label: '✎ Coller un jeton que j\'ai déjà', valeur: 'coller' },
-                ...(deja.includes(site) ? [{ label: '✕ Supprimer le jeton enregistré', valeur: 'oublier' }] : []),
-            ], false);
-            if (action === 'oublier') {
-                oublierJeton(site);
-                return console.log(c.succes(`Jeton ${site} supprimé`));
-            }
-            if (action === 'creer') {
-                const remotes = (await import('./synchro.js')).lireSynchro().depots.map((d) => d.remote ?? '').filter(Boolean);
-                lancerDetache('start', ['', pageJeton(site, remotes)]);
-                console.log(c.discret(`Page ouverte dans le navigateur · ${AIDE_JETONS[site].consigne}`));
-            }
-            const secret = await saisir(`Colle le jeton ${site} (${AIDE_JETONS[site].consigne})`, '', true);
-            if (!enregistrerJeton(site, secret)) return console.log(c.erreur('Impossible de chiffrer le jeton'));
-            console.log(c.succes(`Jeton ${site} enregistré (chiffré pour ton compte Windows)`));
-            await tache(`Vérification : lecture des pull requests ${site}`, () => lireDepots(projets));
-            const etat = etatPR[site];
-            if (etat === 'ok') console.log(c.succes(`✓ Le jeton fonctionne · les PR ${site} s'affichent dans la vue Git`));
-            else console.log(c.erreur(`✕ ${site} : ${etat ?? 'aucun dépôt de ce site'} · vérifie les droits du jeton (${AIDE_JETONS[site].consigne})`));
-        },
+        executer: (ctx) => commandesConnexions().find((cmd) => cmd.nom === 'connecter')!.executer(ctx),
     },
     {
         nom: 'git', alias: ['depots', 'repos'], groupe: 'Git',
@@ -987,6 +962,10 @@ export const COMMANDES: Commande[] = [
     ...commandesEquipes(),
     ...commandesPlus(config),
     ...commandesPrCi(),
+    ...commandesConversation(),
+    ...commandesDiagnostics(),
+    ...commandesRecuperation(config),
+    ...commandesMaintenance(),
     ...commandesTicket(getProjets),
     ...commandesModeles(config, getProjets),
     ...commandesHistorique(getProjets),
@@ -1035,12 +1014,13 @@ export function trouverCommande(nom: string): Commande | undefined {
 const PROGRAMMES_SHELL = new Set(['git', 'npm', 'npx', 'node', 'pnpm', 'yarn', 'dotnet', 'php', 'composer', 'python', 'pip', 'docker', 'ls', 'dir', 'wt']);
 
 // Point d'entrée : une ligne tapée par l'utilisateur
-export async function executerLigne(ligne: string): Promise<void> {
+export async function executerLigne(ligne: string, contexte: { dossier?: string } = {}): Promise<void> {
     const texte = ligne.trim();
+    const dossier = path.resolve(contexte.dossier || process.cwd());
     if (!texte) return menu();
     if (texte.startsWith('!') || PROGRAMMES_SHELL.has(texte.split(' ')[0].toLowerCase())) {
         const cmd = texte.replace(/^!\s*/, '');
-        const code = await executer(cmd, process.cwd(), (l) => console.log(l));
+        const code = await executer(cmd, dossier, (l) => console.log(l));
         if (code !== 0) console.log(c.erreur(`code de sortie ${code}`));
         return;
     }
@@ -1052,7 +1032,7 @@ export async function executerLigne(ligne: string): Promise<void> {
             throw new Error(`Commande inconnue : ${premier}.${proches.length ? ` Essaie ${proches.join(', ')}.` : ' Ouvre /aide ou Ctrl+K.'} Aucun agent lancé.`);
         }
         // Même parcours que /session : choix explicite ou préférence, jamais de Claude implicite.
-        const ici = await resoudreProjet('.');
+        const ici = await resoudreProjet(dossier);
         return COMMANDES.find((c) => c.nom === 'session')!.executer({ args: [], reste: texte, projet: ici, apresProjet: developperPrompts(texte) });
     }
     const reste = texte.slice(premier.length).trim();
@@ -1065,7 +1045,7 @@ export async function executerLigne(ligne: string): Promise<void> {
     let apresProjet = reste;
     if (cmd.projet) {
         if (args[0]) {
-            projet = await resoudreProjet(args[0]);
+            projet = await resoudreProjet(args[0] === '.' ? dossier : args[0]);
             if (!projet) return;
             apresProjet = reste.slice(premierArg!.fin).trim();
         } else {

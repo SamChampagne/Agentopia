@@ -1,8 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Commande } from './commandes.js';
-import { Config, sauverConfig } from './config.js';
-import { lireHotes, enregistrerHote, clesDisponibles } from './sshConfig.js';
+import { Config, CHEMIN_CONFIG, normaliserConfig } from './config.js';
+import { lireHotes, preparerImportHotes, clesDisponibles } from './sshConfig.js';
+import { appliquerTransaction } from './transactionFichiers.js';
+import { lireFichierBorne } from './fichiersProteges.js';
 import { bureau } from './configCommandes.js';
 import { confirmer, saisir } from './ui/bus.js';
 import { c } from './theme.js';
@@ -14,7 +16,7 @@ import { listerProjets } from './projets.js';
 
 // Réglages copiés tels quels (les chemins et les secrets sont traités à part)
 const REGLAGES: (keyof Config)[] = ['banniere', 'prenom', 'theme', 'couleurs', 'notifications', 'prompts', 'lancement', 'fournisseurDefaut', 'equipe', 'maitre',
-    'fetchAuto', 'sectionsMasquees', 'sectionsRepliees','cartesDetaillees', 'budgetJour', 'largeurLaterale', 'dockerDistant'];
+    'fetchAuto', 'sectionsMasquees', 'sectionsRepliees','cartesDetaillees', 'budgetJour', 'largeurLaterale', 'dockerDistant', 'modelesFournisseurs', 'preparationProjets'];
 
 const nomDe = (chemin: string) => path.basename(chemin.replace(/[\\/]+$/, ''));
 const dossierPresent = (chemin: string) => { try { return fs.statSync(chemin).isDirectory(); } catch { return false; } };
@@ -74,6 +76,7 @@ export function commandesExport(config: Config): Commande[] {
                     if (d.config[k] === undefined) continue;
                     // Les prompts s'ajoutent à ceux d'ici, le reste remplace
                     if (k === 'prompts') candidate.prompts = { ...d.config.prompts, ...config.prompts };
+                    else if (k === 'preparationProjets') notes.push('Préparations de projets non activées : reconfigure les commandes et fichiers locaux sur ce poste avant utilisation.');
                     else (candidate as unknown as Record<string, unknown>)[k] = d.config[k];
                 }
                 // Dossiers de projets : seulement ceux qui existent sur ce poste
@@ -104,20 +107,16 @@ export function commandesExport(config: Config): Commande[] {
                     candidate.sftp = [...(candidate.sftp ?? []), s];
                     if (s.auth === 'motdepasse') notes.push(`SFTP « ${s.nom} » : ressaisis le mot de passe avec /sftp-modifier ${s.nom}`);
                 }
-                sauverConfig(candidate);
-                Object.assign(config, candidate);
-                rafraichirProjets();
-
                 // Serveurs SSH absents d'ici ; la clé, si une clé du même nom existe sur ce poste
-                const deja = new Set(lireHotes().map((h) => h.alias.toLowerCase()));
                 const cles = clesDisponibles();
-                let ajoutes = 0;
-                for (const h of d.ssh) {
-                    if (deja.has(h.alias.toLowerCase())) continue;
-                    enregistrerHote({ ...h, cle: h.cle ? cles.find((k) => path.basename(k) === h.cle) : undefined });
-                    deja.add(h.alias.toLowerCase());
-                    ajoutes++;
-                }
+                const ssh = preparerImportHotes(d.ssh.map(h => ({ ...h, cle: h.cle ? cles.find(k => path.basename(k) === h.cle) : undefined })));
+                const changements: { fichier: string; contenu: string | Buffer }[] = [];
+                if (fs.existsSync(CHEMIN_CONFIG)) changements.push({ fichier: `${CHEMIN_CONFIG}.sauvegarde.json`, contenu: lireFichierBorne(CHEMIN_CONFIG, 8 * 1024 * 1024) });
+                if (ssh.ajoutes) changements.push({ fichier: ssh.fichier, contenu: ssh.contenu });
+                changements.push({ fichier: CHEMIN_CONFIG, contenu: JSON.stringify(normaliserConfig(candidate), null, 2) });
+                appliquerTransaction(`${CHEMIN_CONFIG}.importation.json`, changements);
+                Object.assign(config, candidate); rafraichirProjets();
+                const ajoutes = ssh.ajoutes;
                 console.log(c.succes(`✓ Configuration importée · ${racines.length + extras.length} dossier(s) de projets, ${ajoutes} serveur(s) SSH ajoutés`));
                 notes.forEach((n) => console.log(c.alerte(`! ${n}`)));
                 console.log(c.discret('Comptes et jetons : /connexions · relance Agentopia pour appliquer le thème et la mise en page'));

@@ -28,7 +28,7 @@ try {
     for (mode of ['complet', 'indisponible', 'tronque', 'modifie']) {
         const destination = path.join(temporaire, mode), journal = path.join(temporaire, `${mode}.log`);
         const code = await new Promise((resoudre, rejeter) => {
-            const p = spawn(exe, ['--destination', destination, '--sans-raccourci', '--sans-lancer', '--silencieux', '--journal', journal], { windowsHide: true,
+            const p = spawn(exe, ['--destination', destination, '--sans-raccourci', '--sans-enregistrement', '--sans-lancer', '--silencieux', '--journal', journal], { windowsHide: true,
                 env: { ...process.env, CLAUDETOPIA_DATA_DIR: path.join(temporaire, 'profil'), CLAUDETOPIA_TEST_UI: '1', CLAUDETOPIA_SANS_REPRISE: '1' } });
             const limite = setTimeout(() => { p.kill(); rejeter(new Error(`Délai dépassé : ${mode}`)); }, 240_000);
             p.on('error', (e) => { clearTimeout(limite); rejeter(e); });

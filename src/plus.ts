@@ -102,6 +102,13 @@ export function commandesPlus(config: Config): Commande[] {
                 const { choisir } = await import('./ui/bus.js');
                 const { c } = await import('./theme.js');
                 const { decrireJours, dernierLancement, lancerPlanification } = await import('./planificateur.js');
+                const { diagnosticPlanifications } = await import('./stockagePlanifications.js');
+                const diagnostic = diagnosticPlanifications();
+                if (diagnostic.erreur) {
+                    const action = await choisir('Historique des planifications à récupérer', [{ label: 'Ouvrir la récupération', valeur: 'recuperer' }, { label: 'Retour', valeur: 'retour' }], false, diagnostic.erreur);
+                    if (action === 'recuperer') { const { COMMANDES } = await import('./commandes.js'); return COMMANDES.find((c) => c.nom === 'planifications-recuperer')!.executer({ args: [], reste: '', apresProjet: '' }); }
+                    return;
+                }
                 const liste = config.planifications ?? [];
                 const p = await choisir<import('./planificateur.js').Planification | 'nouvelle'>('Tâches planifiées', [
                     { label: '+ Nouvelle tâche planifiée', valeur: 'nouvelle' },

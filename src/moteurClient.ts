@@ -48,7 +48,7 @@ export async function assurerMoteur(accepterAncien = false): Promise<void> {
     })().finally(() => { demarrage = undefined; });
     return demarrage;
 }
-export type ActionMoteur = 'lancer' | 'arreter' | 'integrer' | 'relancer' | 'reprendre' | 'ecarter' | 'retirer' | 'ranger' | 'tout-arreter' | 'planification' | 'modifier-plan' | 'recuperer-equipes';
+export type ActionMoteur = 'lancer' | 'arreter' | 'integrer' | 'relancer' | 'reprendre' | 'ecarter' | 'retirer' | 'ranger' | 'tout-arreter' | 'planification' | 'modifier-plan' | 'recuperer-equipes' | 'annuler-attente';
 export async function commanderMoteur<T>(action: ActionMoteur, id?: string, tache?: string, donnees?: unknown): Promise<T> {
     await assurerMoteur(['tout-arreter', 'arreter', 'ranger'].includes(action));
     const cle = `${Date.now()}-${randomUUID()}`, dossier = path.join(DOSSIER_MOTEUR, 'commandes');

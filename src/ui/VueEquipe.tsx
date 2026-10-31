@@ -19,8 +19,8 @@ const ANIM = ['✻', '✼', '✽', '✾', '✿', '❀'];
 export function etatTache(t: Tache, tic: number): { texte: string; couleur: string } {
     const depuis = t.debut ? ` · ${ilYa(new Date(t.debut))}` : '';
     switch (t.etat) {
-        case 'attente': return { texte: t.dependances.length ? `○ attend ${t.dependances.join(', ')}` : '○ en attente', couleur: 'gray' };
-        case 'en cours': return { texte: `${ANIM[tic % ANIM.length]} travaille${depuis}`, couleur: '#4ade80' };
+        case 'attente': return { texte: t.attenteFile ? '○ dans la file du poste' : t.dependances.length ? `○ attend ${t.dependances.join(', ')}` : '○ en attente', couleur: 'gray' };
+        case 'en cours': return { texte: t.preparation?.etat === 'en cours' ? '◷ prépare le dossier' : `${ANIM[tic % ANIM.length]} travaille${depuis}`, couleur: '#4ade80' };
         case 'bloquee': return { texte: '! attend ta permission', couleur: '#fb923c' };
         case 'faite': return t.ecartee ? { texte: '✕ écartée (pas fusionnée)', couleur: '#f87171' } : { texte: '✓ faite', couleur: '#94a3b8' };
         case 'arretee': return { texte: '■ arrêtée', couleur: '#facc15' };
@@ -256,7 +256,7 @@ function CorpsEquipe({ e, fermer, retour }: { e: Equipe; fermer: () => void; ret
             courante.resultat ? `Résultat : ${courante.resultat}` : courante.consigne,
         ].join('\n');
     const lignesDetail = wrapAnsi(texteDetail, Math.max(20, largeur - 3), { hard: true }).split('\n').slice(0, detail);
-    const info = message || e.message || (e.resume ? `Plan : ${e.resume}` : '');
+    const info = message || courante?.preparation?.message || courante?.attenteFile || e.message || (e.resume ? `Plan : ${e.resume}` : '');
 
     return (
         <Box flexDirection="column" width={largeur} height={hauteur} paddingLeft={1}>

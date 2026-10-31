@@ -1,15 +1,16 @@
+import { executerFournisseur } from './providers/registre.js';
+import { journaliserDiagnostic, installerDiagnostics } from './diagnostics.js';
+import { capacitesFournisseur } from './providers/types.js';
 import * as fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { ajouterMessage, ajouterEvenement, dossierIntegre, fichierIntegre, sauverIntegree, prendreExecution, terminerExecution } from './sessionsIntegrees.js';
 import type { ContexteAgent, SessionIntegree } from './providers/types.js';
-import { executerClaude } from './providers/claude.js';
-import { executerCodex } from './providers/codex.js';
-import { executerPerplexity } from './providers/perplexity.js';
 import { chargerConfig } from './config.js';
 import { sauverUsage, normaliserUsage } from './utilisation.js';
 import { spawnSync } from 'node:child_process';
 import { HorlogeTravail } from './horlogeTravail.js';
 import { creerDemandesPermission } from './demandesPermission.js';
+import { lireContexteLocal } from './providers/historique.js';
 
 export async function travailler(id: string, tour: string, executer?: (c: ContexteAgent) => Promise<string>): Promise<void> {
     const execution = prendreExecution(id, tour);
@@ -49,15 +50,8 @@ async function executerTour(s: SessionIntegree, executer?: (c: ContexteAgent) =>
         const r = JSON.parse(fs.readFileSync(fichier('requete.json'), 'utf8'));
         if (!r || r.tour !== tour) throw new Error('Requête périmée');
         if (typeof r.prompt !== 'string' || !r.prompt.trim()) throw new Error('Message de la requête invalide');
-        const historique: ContexteAgent['historique'] = [];
-        if (s.fournisseur === 'perplexity' && fs.existsSync(fichier('conversation.jsonl'))) {
-            for (const l of fs.readFileSync(fichier('conversation.jsonl'), 'utf8').split('\n').filter(Boolean)) {
-                const m = JSON.parse(l);
-                if (!['user', 'assistant'].includes(m.type)) continue;
-                const texte = typeof m.message.content === 'string' ? m.message.content : m.message.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n');
-                if (texte) historique.push({ role: m.type, content: texte });
-            }
-        }
+        const historique = capacitesFournisseur(s.fournisseur).historiqueLocal && fs.existsSync(fichier('conversation.jsonl'))
+            ? await lireContexteLocal(fichier('conversation.jsonl'), controller.signal) : [];
         ajouterMessage(id, 'user', r.prompt);
         const contexte: ContexteAgent = { session: s, prompt: r.prompt, historique: historique.slice(-20), signal: controller.signal,
             evenement: (e) => {
@@ -69,12 +63,13 @@ async function executerTour(s: SessionIntegree, executer?: (c: ContexteAgent) =>
             utilisation: (usage) => { if (termine) return; s.utilisation = normaliserUsage(usage); if (s.recuUsage) sauverUsage(s.recuUsage, s.utilisation); },
             thread: (threadId) => { if (termine) return; s.threadId = threadId; sauver(); },
         };
-        const adaptateur = executer || ({ claude: executerClaude, codex: executerCodex, perplexity: executerPerplexity }[s.fournisseur]);
+        const adaptateur = executer || executerFournisseur;
         s.resultat = await adaptateur(contexte);
         s.bilan.resume = s.resultat;
         controller.signal.throwIfAborted();
         s.etat = 'attend'; s.issue = 'success';
     } catch (e) {
+        journaliserDiagnostic('session.execution', e, `${id}:${tour}`);
         s.etat = controller.signal.aborted ? 'arretee' : 'erreur';
         s.issue = controller.signal.aborted ? 'cancelled' : 'error';
         s.erreur = delaiAtteint ? `Limite de ${minutes} minutes de travail atteinte (attente utilisateur exclue). Config → Limites des agents, puis Reprendre.`
@@ -87,7 +82,7 @@ async function executerTour(s: SessionIntegree, executer?: (c: ContexteAgent) =>
         clearInterval(pouls); horloge.arreter(); s.bilan.durees = horloge.bilan();
         process.off('SIGTERM', arreter); process.off('SIGINT', arreter);
         s.permission = undefined; s.pid = undefined; s.demarragePoste = undefined;
-        if (s.fournisseur !== 'perplexity') {
+        if (capacitesFournisseur(s.fournisseur).fichiers) {
             const r = spawnSync('git', ['status', '--short'], { cwd: s.cwd, windowsHide: true, encoding: 'utf8', timeout: 5000 });
             if (r.status === 0) s.bilan!.fichiers = r.stdout.trim() || 'Dossier propre (les changements peuvent déjà être commités).';
         }
@@ -96,5 +91,6 @@ async function executerTour(s: SessionIntegree, executer?: (c: ContexteAgent) =>
     }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+    installerDiagnostics();
     void travailler(process.argv[2], process.argv[3]).catch(() => { process.exitCode = 1; });
 }

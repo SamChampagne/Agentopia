@@ -29,11 +29,11 @@ console.log('lancement sur un dossier non accepté :', await lancerEquipe(e.id) 
 for (const t of plan.taches) Object.assign(t, { etat: 'en cours', agentId: `faux-${t.id}`, debut: Date.now() });
 plan.etat = 'en cours';
 const agent = (t, statut) => ({ cle: t.agentId, id: t.agentId, sessionId: t.agentId, arrierePlan: true, cwd: dossier, nom: 'jetable', titre: t.titre, statut, debut: new Date(), fichier: path.join(dossier, 'absent.jsonl') });
-avancerEquipes(plan.taches.map((t) => agent(t, 'travaille')));
+await avancerEquipes(plan.taches.map((t) => agent(t, 'travaille')));
 console.log('après « travaille » :', JSON.stringify(avancement(plan)), plan.etat);
-avancerEquipes(plan.taches.map((t, i) => agent(t, i === 0 ? 'bloquee' : 'attend')));
+await avancerEquipes(plan.taches.map((t, i) => agent(t, i === 0 ? 'bloquee' : 'attend')));
 console.log('une bloquée, les autres finies :', JSON.stringify(avancement(plan)), plan.etat);
-avancerEquipes(plan.taches.map((t) => agent(t, 'attend')));
+await avancerEquipes(plan.taches.map((t) => agent(t, 'attend')));
 console.log('toutes finies :', JSON.stringify(avancement(plan)), plan.etat, '· branche', plan.taches[0].branche);
 
 // Nettoyage : on retire l'équipe de test du fichier

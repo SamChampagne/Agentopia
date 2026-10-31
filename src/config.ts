@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { CHEMINS, NOM, nomBanniere } from './chemins.js';
-import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
+import { FOURNISSEURS, estFournisseur, capacitesFournisseur, validerModele, type Fournisseur } from './providers/types.js';
 import { StockageConfig } from './stockageConfig.js';
 
 // Fichier de config dans le dossier utilisateur : ~/.claudetopia.json
@@ -21,11 +21,13 @@ export interface Config {
     prenom: string;                     // pour le "Bonjour" (sinon : git user.name / user.email)
     lancement: 'fond' | 'onglet';       // où /claude-cli ouvre les sessions natives
     fournisseurDefaut?: Fournisseur | 'choisir'; // nouvelles conversations intégrées
+    modelesFournisseurs?: Partial<Record<Fournisseur, string>>;
+    preparationProjets?: { projet: string; commande?: { programme: string; args: string[] }; fichiersLocaux?: string[] }[];
     limitesAgents?: { toursJour: number; dureeMinutes: number };
     dockerDistant: string[];            // serveurs SSH dont on surveille aussi les conteneurs Docker
     largeurLaterale: number;            // largeur de la colonne de gauche (0 = automatique)
     fetchAuto: boolean;                 // git fetch de tous les dépôts toutes les 5 min, en fond
-    equipe: { parallele: number; permissions: string };   // équipes d'agents : agents en même temps, mode de permissions
+    equipe: { parallele: number; permissions: string; paralleleGlobal?: number; parFournisseur?: Partial<Record<Fournisseur, number>> };
     sectionsMasquees: string[];         // sections de la colonne de gauche masquées (docker, ssh)
     sectionsRepliees?: string[];        // sections repliées (en-tête seul) ; par défaut : ssh
     cartesDetaillees?: boolean;         // cartes de session sur 3 lignes (avec ta dernière demande)
@@ -66,7 +68,7 @@ const CONFIG_DEFAUT: Config = {
     dockerDistant: [],
     largeurLaterale: 0,
     fetchAuto: true,
-    equipe: { parallele: 3, permissions: 'acceptEdits' },
+    equipe: { parallele: 3, paralleleGlobal: 3, permissions: 'acceptEdits' },
     sectionsMasquees: [],
     maitre: { actif: true, modele: 'haiku' },
     sftp: [],
@@ -75,7 +77,7 @@ const CONFIG_DEFAUT: Config = {
 // Vrai si le fichier de config n'existait pas : on lance l'assistant /scan au démarrage
 export let premierLancement = false;
 
-function normaliserConfig(valeur: unknown): Config {
+export function normaliserConfig(valeur: unknown): Config {
     if (!valeur || typeof valeur !== 'object' || Array.isArray(valeur)) throw new Error('Configuration invalide');
     const brut = valeur as Record<string, any>;
     for (const cle of ['racines', 'extras', 'dockerDistant', 'sectionsMasquees', 'sectionsRepliees']) {
@@ -104,6 +106,21 @@ function normaliserConfig(valeur: unknown): Config {
         for (const champ of champs) if (brut[section]?.[champ] !== undefined && (!Array.isArray(brut[section][champ]) || !brut[section][champ].every((v: unknown) => typeof v === 'string'))) throw new Error(`Réglage invalide : ${section}.${champ}`);
     }
     const defaut = structuredClone(CONFIG_DEFAUT);
+    if (brut.modelesFournisseurs !== undefined) {
+        if (!brut.modelesFournisseurs || typeof brut.modelesFournisseurs !== 'object' || Array.isArray(brut.modelesFournisseurs)) throw new Error('Réglage invalide : modèles fournisseurs');
+        for (const [f, m] of Object.entries(brut.modelesFournisseurs)) {
+            if (!estFournisseur(f) || !capacitesFournisseur(f).modele || !validerModele(m)) throw new Error('Réglage de modèle non pris en charge');
+        }
+    }
+    const limite = (v: unknown) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 32;
+    if (brut.equipe?.paralleleGlobal !== undefined && !limite(brut.equipe.paralleleGlobal)) throw new Error('Plafond global invalide (0 à 32)');
+    if (brut.equipe?.parFournisseur !== undefined && (!brut.equipe.parFournisseur || typeof brut.equipe.parFournisseur !== 'object' || Array.isArray(brut.equipe.parFournisseur)
+        || !Object.entries(brut.equipe.parFournisseur).every(([f, n]) => estFournisseur(f) && limite(n)))) throw new Error('Plafond fournisseur invalide');
+    if (brut.preparationProjets !== undefined && (!Array.isArray(brut.preparationProjets) || brut.preparationProjets.length > 200 || !brut.preparationProjets.every((p: any) =>
+        p && typeof p.projet === 'string' && path.isAbsolute(p.projet) && p.projet.length <= 4000
+        && (p.commande === undefined || p.commande && typeof p.commande.programme === 'string' && p.commande.programme.length > 0 && p.commande.programme.length <= 4000 && !/[\x00-\x1f]/.test(p.commande.programme)
+            && Array.isArray(p.commande.args) && p.commande.args.length <= 100 && p.commande.args.every((a: unknown) => typeof a === 'string' && a.length <= 4000 && !a.includes('\0')))
+        && (p.fichiersLocaux === undefined || Array.isArray(p.fichiersLocaux) && p.fichiersLocaux.length <= 100 && p.fichiersLocaux.every((f: unknown) => typeof f === 'string' && f.length <= 4000 && !path.isAbsolute(f) && !f.split(/[\\/]/).includes('..') && !/[\x00-\x1f]/.test(f)))))) throw new Error('Préparation de projet invalide');
     const config = { ...defaut, ...brut, theme: { ...defaut.theme, ...brut.theme }, equipe: { ...defaut.equipe, ...brut.equipe }, maitre: { ...defaut.maitre, ...brut.maitre } } as Config & { modeClair?: boolean };
     if (!Object.hasOwn(FOURNISSEURS, config.fournisseurDefaut ?? '')) config.fournisseurDefaut = 'choisir';
     config.banniere = nomBanniere(config.banniere);

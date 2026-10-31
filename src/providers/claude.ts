@@ -2,6 +2,7 @@ import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { cleFournisseur } from './config.js';
 import type { ContexteAgent } from './types.js';
 import { normaliserUsage } from '../utilisation.js';
+import { creerFluxClaude } from './fluxClaude.js';
 
 export async function executerClaude(c: ContexteAgent, requete: typeof query = query): Promise<string> {
     const cle = cleFournisseur('claude');
@@ -11,6 +12,7 @@ export async function executerClaude(c: ContexteAgent, requete: typeof query = q
     c.signal.addEventListener('abort', arreter, { once: true });
     if (c.signal.aborted) controller.abort();
     let resultat: string | undefined;
+    const progression = creerFluxClaude(c.evenement);
     const precedente = c.session.compteursClaude;
     const reprise = !!c.session.threadId;
     async function* entree(): AsyncGenerator<SDKUserMessage> {
@@ -18,7 +20,7 @@ export async function executerClaude(c: ContexteAgent, requete: typeof query = q
     }
     try {
         const flux = requete({ prompt: entree(), options: {
-            cwd: c.session.cwd, model: c.session.modele, resume: c.session.threadId,
+            cwd: c.session.cwd, model: c.session.modele, resume: c.session.threadId, includePartialMessages: true,
             abortController: controller, permissionMode: c.session.lectureSeule ? 'plan' : 'default', settingSources: c.conseil ? [] : ['project'],
             ...(c.conseil ? { tools: [], persistSession: false } : c.session.lectureSeule ? { tools: ['Read', 'Glob', 'Grep'] } : {}),
             env: { ...process.env, ANTHROPIC_API_KEY: cle, CLAUDE_CODE_OAUTH_TOKEN: undefined },
@@ -37,12 +39,7 @@ export async function executerClaude(c: ContexteAgent, requete: typeof query = q
         } });
         for await (const m of flux) {
             if ('session_id' in m && m.session_id) c.thread(m.session_id);
-            if (m.type === 'assistant') for (const bloc of m.message.content) {
-                if (bloc.type === 'text') c.evenement({ role: 'assistant', texte: bloc.text });
-                if (bloc.type === 'tool_use') c.evenement({ role: 'outil', texte: bloc.name,
-                    fichier: typeof (bloc.input as any)?.file_path === 'string' ? (bloc.input as any).file_path : undefined,
-                    commande: bloc.name === 'Bash' && typeof (bloc.input as any)?.command === 'string' ? (bloc.input as any).command : undefined });
-            }
+            progression.recevoir(m);
             if (m.type === 'result') {
                 // Le SDK reprend ses compteurs cumulatifs avec le transcript : soustraire
                 // la référence précédente, jamais additionner tout l'historique à chaque tour.
@@ -62,5 +59,5 @@ export async function executerClaude(c: ContexteAgent, requete: typeof query = q
         }
         if (resultat === undefined) throw new Error('Claude a fermé la connexion sans résultat final');
         return resultat;
-    } finally { c.signal.removeEventListener('abort', arreter); }
+    } finally { progression.fermer(resultat !== undefined && !c.signal.aborted); c.signal.removeEventListener('abort', arreter); }
 }

@@ -8,7 +8,7 @@ import {
 } from './verificationProjet.js';
 
 const ETATS: Record<EtatVerification, string> = { 'non verifie': 'Non vérifié', 'en cours': 'En cours', reussi: 'Réussi', echoue: 'Échoué', interrompu: 'Interrompu', perime: 'Périmé · projet modifié', inconnu: 'Inconnu · résultat non confirmé' };
-const LIMITE = 'Limites : 5 min · journal 512 Ko · mode CI=1 · gestionnaire déjà installé.';
+const LIMITE = 'Limites : 5 min · journal 512 Ko · mode CI=1 · outils déjà installés. Aucun téléchargement automatique par Agentopia.';
 const PORTEE = 'Un code 0 confirme la fin de cette commande, pas la qualité du logiciel ni la couverture de tous les tests. L’empreinte couvre les fichiers Git suivis et non ignorés ; pas les dépendances installées, services externes ou variables d’environnement.';
 function description(p: PreuveVerification, etat: EtatVerification): string {
     return `${ETATS[etat]} · ${p.commande.commande}\n${p.cible.titre}\nDossier : ${p.cible.dossier}\n`
@@ -82,9 +82,9 @@ export async function verifierEquipe(equipe: string): Promise<void> {
     const cible = cibles[index], indisponible = indisponibiliteVerification(cible);
     if (indisponible) throw new Error(indisponible);
     const detection = detecterVerifications(cible.dossier);
-    const script = await choisir('Script existant à exécuter', [{ label: 'Retour au bilan', valeur: '' },
+    const script = await choisir('Vérification à exécuter', [{ label: 'Retour au bilan', valeur: '' },
         ...detection.commandes.map((c) => ({ label: c.commande, valeur: c.script, description: c.contenu }))], detection.commandes.length > 8,
-        `${cible.dossier}\n${detection.explication || 'Scripts test/check/typecheck/lint détectés dans package.json.'}\n${LIMITE}`);
+        `${cible.dossier}\n${detection.explication || (detection.commandes.length ? 'Commandes détectées dans les fichiers du projet.' : 'Aucune vérification détectée. Tu peux définir verifications dans agentopia.json.')}\n${LIMITE}`);
     const commande = detection.commandes.find((c) => c.script === script); if (!commande) return;
     const accord = await choisir('Exécuter cette vérification ?', [{ label: 'Exécuter', valeur: true }, { label: 'Retour sans exécuter', valeur: false }], false,
         `Commande : ${commande.commande}\nDossier : ${cible.dossier}\nExécutable : ${commande.executable}\n\n`

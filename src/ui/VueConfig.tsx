@@ -9,6 +9,7 @@ import { jetonsConfigures } from '../jetons.js';
 import { nomPalette, theme, fond } from '../theme.js';
 import { FOURNISSEURS, nomAgentDefaut } from '../providers/types.js';
 import { lirePreparation, projetsIgnores } from '../preparation.js';
+import { problemesSessions } from '../stockageSessions.js';
 
 export type LigneConfig =
     | { type: 'section'; texte: string }
@@ -19,6 +20,7 @@ type Ligne = LigneConfig;
 export const lireEtatConfig = () => ({
     config: chargerConfig(), git: identiteGit(), jetons: jetonsConfigures(), raccourci: fs.existsSync(cheminRaccourci()),
     preparation: lirePreparation(),
+    sessionsIllisibles: problemesSessions().length,
 });
 export type EtatConfig = ReturnType<typeof lireEtatConfig>;
 
@@ -92,7 +94,7 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
 }
 
 // Les réglages affichés, pour l'interface Ink comme pour la nouvelle (tui/)
-export function lignesConfig({ config, git, jetons, raccourci, preparation }: EtatConfig, claude?: CompteClaude): LigneConfig[] {
+export function lignesConfig({ config, git, jetons, raccourci, preparation, sessionsIllisibles = 0 }: EtatConfig, claude?: CompteClaude): LigneConfig[] {
     const projetsReportes = preparation ? projetsIgnores(preparation, config).length : 0;
     return [
         ...(etatRecuperationConfig() ? [{ type: 'reglage' as const, label: 'Réglages récupérés', valeur: etatRecuperationConfig()!.message, couleur: '#facc15', commande: '/diagnostic', aide: 'voir la sauvegarde' }] : []),
@@ -124,6 +126,9 @@ export function lignesConfig({ config, git, jetons, raccourci, preparation }: Et
         { type: 'section', texte: 'AGENTS ET SESSIONS' },
         { type: 'reglage', label: 'Modèles d’équipe', valeur: 'réutiliser les missions, agents et dépendances', commande: '/modeles-equipes', aide: 'voir et gérer' },
         { type: 'reglage', label: 'Moteur des équipes', valeur: 'continuer le travail en arrière-plan · pause globale', commande: '/moteur', aide: 'voir et contrôler' },
+        { type: 'reglage', label: 'File globale des agents', valeur: 'travaux en attente et raisons de l’attente', commande: '/file-agents', aide: 'voir ou annuler' },
+        { type: 'reglage', label: 'Capacité des équipes', valeur: 'nombre d’agents en parallèle sur ce poste', commande: '/limites-equipes', aide: 'régler' },
+        { type: 'reglage', label: 'Préparation des projets', valeur: 'commandes des copies de travail et fichiers autorisés', commande: '/preparation-projet', aide: 'configurer' },
         { type: 'reglage', label: 'Utilisation des agents', valeur: 'tours, jetons et coûts disponibles du jour', commande: '/utilisation', aide: 'voir le détail' },
         { type: 'reglage', label: 'Limites des agents', valeur: `${config.limitesAgents?.toursJour || 'illimité'} tours/jour · ${config.limitesAgents?.dureeMinutes ?? 60} min/tour`, commande: '/limites-agents', aide: 'régler' },
         { type: 'reglage', label: 'Tâches planifiées', valeur: 'agent choisi · exécution par le moteur', commande: '/planifications', aide: 'gérer' },
@@ -132,6 +137,7 @@ export function lignesConfig({ config, git, jetons, raccourci, preparation }: Et
         { type: 'reglage', label: 'Agent par défaut', valeur: nomAgentDefaut(config.fournisseurDefaut), commande: '/agent-defaut', aide: 'nouvelles conversations' },
         { type: 'reglage', label: 'Agent maître', valeur: config.maitre.fournisseur === 'claude-cli' ? 'Claude CLI' : config.maitre.fournisseur && config.maitre.fournisseur !== 'auto' ? nomAgentDefaut(config.maitre.fournisseur) : 'Automatique · à la demande', commande: '/maitre-fournisseur', aide: 'organiser le travail' },
         { type: 'reglage', label: 'Historique des agents', valeur: 'conversations créées ici, tous fournisseurs', commande: '/historique-agents', aide: 'reprendre' },
+        { type: 'reglage', label: 'Chercher une conversation', valeur: 'messages anciens, sessions actives et archivées', commande: '/chercher-conversations', aide: 'rechercher' },
         {
             type: 'reglage', label: 'Lancement Claude CLI', valeur: config.lancement === 'fond' ? 'en arrière-plan (sessions natives)' : 'dans un onglet (sessions natives)',
             commande: `/lancement ${config.lancement === 'fond' ? 'onglet' : 'fond'}`, aide: 'CLI uniquement',
@@ -141,16 +147,28 @@ export function lignesConfig({ config, git, jetons, raccourci, preparation }: Et
             commande: `/notifs ${config.notifications ? 'off' : 'on'}`, aide: 'basculer',
         },
         { type: 'reglage', label: 'Prompts favoris', valeur: Object.keys(config.prompts).map((p) => `@${p}`).join(' '), commande: '/prompts', aide: 'voir' },
+        { type: 'section', texte: 'SAUVEGARDE ET RÉCUPÉRATION' },
+        { type: 'reglage', label: 'Sauvegarder Agentopia', valeur: 'réglages, conversations, équipes et preuves', commande: '/sauvegarder', aide: 'créer une copie' },
+        { type: 'reglage', label: 'Restaurer une sauvegarde', valeur: 'prévisualisation puis restauration en pause', commande: '/restaurer-sauvegarde', aide: 'choisir' },
+        { type: 'reglage', label: 'Sessions à récupérer', valeur: sessionsIllisibles ? `${sessionsIllisibles} état(s) illisible(s) · conversations conservées` : 'aucune session illisible détectée', couleur: sessionsIllisibles ? '#facc15' : undefined, commande: '/recuperer-sessions', aide: 'examiner' },
+        { type: 'reglage', label: 'Récupérer les connexions', valeur: 'dernière copie chiffrée du coffre sur ce compte', commande: '/recuperer-coffre', aide: 'restaurer' },
+        { type: 'reglage', label: 'Annuler un import', valeur: 'récupérer les réglages et SSH précédents', commande: '/recuperer-importation', aide: 'vérifier' },
+        { type: 'reglage', label: 'Annuler une restauration', valeur: 'récupérer les fichiers précédents si inchangés', commande: '/annuler-restauration', aide: 'vérifier' },
         { type: 'section', texte: 'POSTE' },
         { type: 'reglage', label: 'Projets suivis', valeur: `${config.racines.length} dossier(s) + ${config.extras.length} projet(s)`, commande: '/scan', aide: 'rescanner le poste' },
         ...(projetsReportes ? [{ type: 'reglage' as const, label: 'Projets ignorés', valeur: `${projetsReportes} projet(s) laissés de côté au dernier choix`, commande: '/preparer projets', aide: 'revoir sans retirer' }] : []),
         { type: 'reglage', label: 'Docker distant', valeur: config.dockerDistant.length ? config.dockerDistant.join(', ') : 'aucun serveur', commande: '/ssh', aide: 'choisir dans la vue SSH' },
         { type: 'reglage', label: 'Raccourci bureau', valeur: raccourci ? 'présent' : 'absent', couleur: raccourci ? '#4ade80' : '#facc15', commande: '/raccourci', aide: raccourci ? 'recréer' : 'créer' },
         { type: 'reglage', label: 'Diagnostic', valeur: 'vérifie que tout fonctionne', commande: '/diagnostic', aide: 'lancer' },
+        { type: 'reglage', label: 'Exporter le diagnostic', valeur: 'rapport local sans conversation ni secret', commande: '/diagnostics', aide: 'prévisualiser' },
         { type: 'reglage', label: 'Version installée', valeur: 'version, branche, révision et dernière vérification', commande: '/version', aide: 'voir' },
         { type: 'reglage', label: 'Mise à jour', valeur: 'vérifier et installer la version disponible', commande: '/maj', aide: 'mettre à jour' },
         { type: 'reglage', label: 'Réparer l’installation', valeur: 'restaurer le logiciel en conservant tes données', commande: '/reparer', aide: 'réparer' },
         ...(process.env.AGENTOPIA_DISTRIBUTION_ROOT ? [{ type: 'reglage' as const, label: 'Version précédente', valeur: 'revenir à la version Windows conservée', commande: '/retour-version', aide: 'revenir' }] : []),
+        ...(process.env.AGENTOPIA_DISTRIBUTION_ROOT ? [
+            { type: 'reglage' as const, label: 'Entretien de l’installation', valeur: 'espace occupé et anciennes versions nettoyables', commande: '/espace-installation', aide: 'examiner' },
+            { type: 'reglage' as const, label: 'Désinstaller Agentopia', valeur: 'conserve tes données, projets et comptes', commande: '/desinstaller', aide: 'ouvrir le retrait' },
+        ] : []),
         { type: 'reglage', label: 'Fichier de configuration', valeur: '~/.claudetopia.json', commande: '/fichier-config', aide: 'ouvrir dans VS Code' },
     ];
 }

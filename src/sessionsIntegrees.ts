@@ -5,8 +5,11 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { surPath } from './chemins.js';
 import { disponibilite } from './providers/config.js';
+import { chargerConfig } from './config.js';
+import { sousCapaciteAgent } from './fileAgents.js';
 import { commencerUsage, sauverUsage } from './utilisation.js';
 import type { Fournisseur, SessionIntegree, ReponsePermission, EvenementAgent } from './providers/types.js';
+import { capacitesFournisseur, validerModele } from './providers/types.js';
 import { prendreVerrou, sousVerrou, processusVivant, demarragePoste } from './verrou.js';
 import { ecrireAtomique } from './stockageAtomique.js';
 import { RACINE_SESSIONS, estIdentifiantSession, dossierSession, fichierSession, lireEtatSession, sauverEtatSession,
@@ -95,13 +98,31 @@ export function listerIntegrees(avecArchives = false): SessionIntegree[] {
         });
     } catch { return []; }
 }
-export function creerIntegree(fournisseur: Fournisseur, cwd: string, titre: string, modele?: string): SessionIntegree {
+export function modeleSessionValide(modele?: string): string | undefined {
+    return validerModele(modele);
+}
+export function creerIntegree(fournisseur: Fournisseur, cwd: string, titre: string, options?: string | { modele?: string }): SessionIntegree {
     if (!fs.statSync(cwd).isDirectory()) throw new Error('Le dossier du projet est introuvable');
+    const choix = typeof options === 'string' ? options : options?.modele;
+    const modele = modeleSessionValide(choix ?? chargerConfig().modelesFournisseurs?.[fournisseur]);
+    if (modele && !capacitesFournisseur(fournisseur).modele) throw new Error('Le choix de modèle n’est pas disponible pour ce fournisseur.');
     const s: SessionIntegree = { id: `ct-${randomUUID()}`, fournisseur, cwd: path.resolve(cwd), titre, modele,
         creee: Date.now(), maj: Date.now(), tour: '', etat: 'attend' };
     fs.mkdirSync(dossierIntegre(s.id), { recursive: true, mode: 0o700 });
     sauverIntegree(s);
     return s;
+}
+export function changerModeleIntegree(id: string, modele?: string): void {
+    const valide = modeleSessionValide(modele);
+    sousVerrou(operation(id), () => {
+        const fin = prendreVerrou(execution(id)); if (!fin) throw new Error('Cette session travaille encore ou appartient au terminal.');
+        try {
+            const s = lireEtatSession(id); if (!s) throw new Error('Session introuvable');
+            if (valide && !capacitesFournisseur(s.fournisseur).modele) throw new Error('Le choix de modèle n’est pas disponible pour ce fournisseur.');
+            if (active(s) || s.terminalExterne || fs.existsSync(fichierSession(id, 'verrou'))) throw new Error('Attends la fin du tour ou ferme son terminal avant de changer de modèle.');
+            s.modele = valide; sauverIntegree(s);
+        } finally { fin(); }
+    });
 }
 export function ajouterMessage(id: string, role: 'user' | 'assistant' | 'outil', texte: string, fichier?: string): void {
     const content = role === 'user' ? texte : role === 'outil'
@@ -129,7 +150,7 @@ export async function envoyerIntegree(id: string, prompt: string): Promise<void>
     if (!pret.pret) throw new Error(pret.texte);
     if (fs.existsSync(fichierSession(id, 'archive'))) throw new Error('Cette session est archivée');
     const verrou = fichierSession(id, 'verrou');
-    const lancement = sousVerrou(operation(id), () => {
+    const lancement = sousVerrou(operation(id), () => sousCapaciteAgent(id, s!.fournisseur, () => {
         const finExecution = prendreVerrou(execution(id));
         if (!finExecution) throw new Error('Un tour est déjà en cours. Attends la réponse ou utilise Interrompre.');
         try {
@@ -160,7 +181,7 @@ export async function envoyerIntegree(id: string, prompt: string): Promise<void>
                 throw e;
             }
         } finally { finExecution(); }
-    });
+    }));
     try { await lancement; }
     catch (e) {
         sousVerrou(operation(id), () => {

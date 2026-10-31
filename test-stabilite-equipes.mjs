@@ -31,7 +31,7 @@ const definitions = () => [
 const creer = (p, defs = definitions()) => eq.creerEquipeMixte({ chemin: p, nom: path.basename(p) }, 'Objectif original', defs);
 const donnees = (e) => ({ attendu: eq.empreintePlan(e), objectif: 'Objectif modifié', taches: definitions() });
 const interdit = async () => assert.fail('Aucun agent ne doit être lancé');
-const suivre = () => eq.avancerEquipes([], { envoyer: interdit, notifier() {} });
+const suivre = async () => await eq.avancerEquipes([], { envoyer: interdit, notifier() {} });
 
 test('plan : validation atomique, conflit entre fenêtres et verrouillage après lancement', async () => {
     const e = creer(depot('edition'));
@@ -94,22 +94,22 @@ test('premier lancement : partir du dernier commit, puis conserver cette base au
     fs.writeFileSync(path.join(p, 'ajout.txt'), 'Ajout après création du plan'); git(p, 'add', '.'); git(p, 'commit', '-m', 'Projet avancé');
     const nouvelleBase = git(p, 'rev-parse', 'HEAD'); assert.notEqual(nouvelleBase, baseInitiale);
     assert.equal(await eq.lancerEquipe(e.id), undefined); assert.equal(e.base, nouvelleBase);
-    eq.avancerEquipes([], { notifier() {}, envoyer: async (id) => {
+    await eq.avancerEquipes([], { notifier() {}, envoyer: async (id) => {
         const s = sessions.lireIntegree(id); assert.equal(fs.readFileSync(path.join(s.cwd, 'ajout.txt'), 'utf8'), 'Ajout après création du plan');
         s.etat = 'erreur'; s.issue = 'error'; sessions.sauverIntegree(s);
     } });
-    await eq.attendreLancements(); suivre(); assert.equal(e.etat, 'erreur');
+    await eq.attendreLancements(); await suivre(); assert.equal(e.etat, 'erreur');
     fs.writeFileSync(path.join(p, 'autre.txt'), 'Autre commit'); git(p, 'add', '.'); git(p, 'commit', '-m', 'Après lancement');
     await eq.lancerEquipe(e.id); assert.equal(e.base, nouvelleBase); e.archivee = true;
 });
 test('intégration : exclusivité entre équipes, conflit Git et reprise dans la même conversation et branche', async () => {
     const p = depot('fusion'), e = creer(p, definitions().slice(0, 1));
     await eq.lancerEquipe(e.id);
-    eq.avancerEquipes([], { notifier() {}, envoyer: async (id) => {
+    await eq.avancerEquipes([], { notifier() {}, envoyer: async (id) => {
         const s = sessions.lireIntegree(id); fs.writeFileSync(path.join(s.cwd, 'fichier.txt'), 'agent\n');
         git(s.cwd, 'add', '.'); git(s.cwd, 'commit', '-m', 'Agent'); s.etat = 'attend'; s.issue = 'success'; s.resultat = 'Changement agent'; sessions.sauverIntegree(s);
     } });
-    await eq.attendreLancements(); suivre(); assert.equal(e.etat, 'prete');
+    await eq.attendreLancements(); await suivre(); assert.equal(e.etat, 'prete');
     const autre = creer(p, definitions().slice(0, 1)); autre.etat = 'prete'; autre.taches[0].etat = 'faite'; autre.taches[0].branche = e.taches[0].branche;
     fs.writeFileSync(path.join(p, 'fichier.txt'), 'humain\n'); git(p, 'add', '.'); git(p, 'commit', '-m', 'Travail humain');
     let terminer, nombre = 0;
@@ -122,9 +122,11 @@ test('intégration : exclusivité entre équipes, conflit Git et reprise dans la
         s.etat = 'erreur'; s.issue = 'error'; s.erreur = 'Interruption pendant la résolution'; sessions.sauverIntegree(s);
     });
     assert.match(await eq.integrer(autre.id, interdit), /autre équipe/);
+    for (let i = 0; i < 100 && !terminer; i++) await new Promise((ok) => setTimeout(ok, 30));
+    assert.ok(terminer, 'L’intégration a atteint le fournisseur simulé');
     e.archivee = true; e.etat = 'prete';
     assert.match(await eq.integrer(autre.id, interdit), /autre équipe/, 'Le worker doit être réellement arrêté même si son équipe est rangée');
-    e.archivee = false; e.etat = 'integration'; terminer(); await lancement; suivre();
+    e.archivee = false; e.etat = 'integration'; terminer(); await lancement; await suivre();
     assert.equal(e.etat, 'prete'); const integration = e.integrateur, sessionAvant = integration.agentId;
     assert.match(await eq.integrer(e.id, interdit), /intégration existante/);
     assert.equal(await eq.reprendreTache(e.id, 'integration', async (id, prompt) => {
@@ -134,7 +136,7 @@ test('intégration : exclusivité entre équipes, conflit Git et reprise dans la
         fs.writeFileSync(path.join(p, 'fichier.txt'), 'solution finale agent et humain\n'); git(p, 'add', '.'); git(p, 'commit', '-m', 'Résoudre le conflit');
         s.etat = 'attend'; s.issue = 'success'; s.resultat = 'Fusion résolue et vérifiée'; sessions.sauverIntegree(s);
     }), undefined);
-    suivre(); assert.equal(e.etat, 'finie'); assert.equal(nombre, 2); assert.equal(e.integrateur, integration);
+    await suivre(); assert.equal(e.etat, 'finie'); assert.equal(nombre, 2); assert.equal(e.integrateur, integration);
     assert.match(await eq.lancerEquipe(e.id), /déjà intégrée/);
     assert.match(await eq.relancerTache(e.id, 't1'), /ne peut plus être relancée/);
     await eq.arreterEquipe(e.id); assert.equal(e.etat, 'finie');
@@ -147,7 +149,7 @@ test('intégration : branche détachée, pause et branche changée avant reprise
     git(p, 'checkout', '--detach'); assert.match(await eq.integrer(e.id, interdit), /aucune branche/); git(p, 'checkout', branche);
     fs.mkdirSync(CHEMINS.moteur, { recursive: true }); fs.writeFileSync(path.join(CHEMINS.moteur, 'pause.json'), '{}');
     assert.match(await eq.integrer(e.id, interdit), /pause/); fs.rmSync(path.join(CHEMINS.moteur, 'pause.json'));
-    await eq.integrer(e.id, async (id) => { const s = sessions.lireIntegree(id); s.etat = 'erreur'; s.issue = 'error'; sessions.sauverIntegree(s); }); suivre();
+    await eq.integrer(e.id, async (id) => { const s = sessions.lireIntegree(id); s.etat = 'erreur'; s.issue = 'error'; sessions.sauverIntegree(s); }); await suivre();
     e.integrateur.branche = undefined;
     assert.match(await eq.reprendreTache(e.id, 'integration', interdit), /ancienne intégration/); e.integrateur.branche = branche;
     git(p, 'checkout', '-b', 'autre-branche');
@@ -204,7 +206,7 @@ async function branchesTerminees(nom, defs = definitions()) {
     const p = depot(nom), e = creer(p, defs);
     await eq.lancerEquipe(e.id);
     for (let i = 0; i < defs.length; i++) {
-        eq.avancerEquipes([], { notifier() {}, envoyer: async (id) => {
+        await eq.avancerEquipes([], { notifier() {}, envoyer: async (id) => {
             const s = sessions.lireIntegree(id), t = e.taches.find((t) => t.agentId === id);
             fs.writeFileSync(path.join(s.cwd, `${t.id}.txt`), `Travail ${t.id}\n`);
             git(s.cwd, 'add', '.'); git(s.cwd, 'commit', '-m', t.titre);
@@ -212,7 +214,7 @@ async function branchesTerminees(nom, defs = definitions()) {
         } });
         await eq.attendreLancements();
     }
-    suivre(); assert.equal(e.etat, 'prete'); return { p, e };
+    await suivre(); assert.equal(e.etat, 'prete'); return { p, e };
 }
 const succesIntegration = (id, resultat = 'Toutes les branches ont été intégrées') => {
     const s = sessions.lireIntegree(id); s.etat = 'attend'; s.issue = 'success'; s.resultat = resultat; sessions.sauverIntegree(s);
@@ -268,7 +270,7 @@ test('exclusion : réparer une ancienne sélection incohérente en plusieurs ét
 
 test('intégration : un faux succès reste récupérable jusqu’à la preuve Git de toutes les branches', async () => {
     const { p, e } = await branchesTerminees('fusion-incomplete', definitions().map((t) => ({ ...t, dependances: [] })));
-    await eq.integrer(e.id, async (id) => succesIntegration(id)); suivre();
+    await eq.integrer(e.id, async (id) => succesIntegration(id)); await suivre();
     assert.equal(e.etat, 'prete'); assert.equal(e.integrateur.etat, 'erreur'); assert.match(e.message, /n’est pas intégrée/);
     assert.equal(fs.existsSync(path.join(p, 't1.txt')), false);
     const id = e.integrateur.agentId, branche = e.integrateur.branche;
@@ -276,11 +278,11 @@ test('intégration : un faux succès reste récupérable jusqu’à la preuve Gi
     await assert.rejects(eq.basculerEcart(e.id, 't1'), /sélection est conservée/);
     assert.equal(await eq.reprendreTache(e.id, 'integration', async (sid) => {
         assert.equal(sid, id); git(p, 'merge', '--no-edit', e.taches[0].branche); succesIntegration(sid);
-    }), undefined); suivre();
+    }), undefined); await suivre();
     assert.equal(e.etat, 'prete'); assert.match(e.message, /Relire.*n’est pas intégrée/);
     assert.equal(await eq.reprendreTache(e.id, 'integration', async (sid) => {
         assert.equal(sid, id); git(p, 'merge', '--no-edit', e.taches[1].branche); succesIntegration(sid);
-    }), undefined); suivre();
+    }), undefined); await suivre();
     assert.equal(e.etat, 'finie'); assert.equal(e.integrateur.branche, branche);
     assert.equal(e.integrateur.agentId, id);
     for (const t of e.taches) git(p, 'merge-base', '--is-ancestor', t.branche, 'HEAD');
@@ -292,14 +294,14 @@ test('intégration : ne pas valider des fusions effectuées sur une autre branch
     const destination = git(p, 'branch', '--show-current');
     await eq.integrer(e.id, async (id) => {
         git(p, 'checkout', '-b', 'autre-destination'); git(p, 'merge', '--no-edit', e.taches[0].branche); succesIntegration(id);
-    }); suivre();
+    }); await suivre();
     assert.equal(e.etat, 'prete'); assert.match(e.message, /branche du projet a changé/);
     assert.equal(e.integrateur.branche, destination);
     assert.match(await eq.reprendreTache(e.id, 'integration', interdit), /branche du dossier a changé/);
     git(p, 'checkout', destination);
     assert.equal(await eq.reprendreTache(e.id, 'integration', async (id) => {
         git(p, 'merge', '--no-edit', e.taches[0].branche); succesIntegration(id);
-    }), undefined); suivre(); assert.equal(e.etat, 'finie'); e.archivee = true;
+    }), undefined); await suivre(); assert.equal(e.etat, 'finie'); e.archivee = true;
 });
 
 test('intégration : une branche indépendante écartée reste hors du projet', async () => {
@@ -308,7 +310,7 @@ test('intégration : une branche indépendante écartée reste hors du projet', 
     await eq.integrer(e.id, async (id, prompt) => {
         assert.ok(!prompt.includes(e.taches[1].branche));
         git(p, 'merge', '--no-edit', e.taches[0].branche); succesIntegration(id);
-    }); suivre();
+    }); await suivre();
     assert.equal(e.etat, 'finie'); assert.equal(fs.existsSync(path.join(p, 't1.txt')), true);
     assert.equal(fs.existsSync(path.join(p, 't2.txt')), false); e.archivee = true;
 });
@@ -323,10 +325,10 @@ test('intégration native : garder la destination initiale et refuser une ancien
         etat: 'en cours', agentId: 'native-fixture', branche: destination };
     git(p, 'checkout', '-b', 'autre-destination'); git(p, 'merge', '--no-edit', e.taches[0].branche);
     const agents = [{ id: 'native-fixture', statut: 'terminee', sessionId: 'native', cwd: p, fichier }];
-    eq.avancerEquipes(agents, { envoyer: interdit, notifier() {} });
+    await eq.avancerEquipes(agents, { envoyer: interdit, notifier() {} });
     assert.equal(e.etat, 'prete'); assert.equal(e.integrateur.branche, destination); assert.match(e.message, /branche du projet a changé/);
     e.integrateur.branche = undefined; e.integrateur.etat = 'en cours'; e.etat = 'integration';
-    eq.avancerEquipes(agents, { envoyer: interdit, notifier() {} });
+    await eq.avancerEquipes(agents, { envoyer: interdit, notifier() {} });
     assert.equal(e.etat, 'prete'); assert.equal(e.integrateur.branche, undefined); assert.match(e.message, /ancienne intégration/);
     e.archivee = true;
 });
@@ -334,7 +336,7 @@ test('intégration native : garder la destination initiale et refuser une ancien
 test('intégration : un échec de lecture Git ne devient jamais une réussite', async () => {
     const { e } = await branchesTerminees('branche-introuvable', definitions().slice(0, 1));
     e.taches[0].branche = 'branche-introuvable';
-    await eq.integrer(e.id, async (id) => succesIntegration(id)); suivre();
+    await eq.integrer(e.id, async (id) => succesIntegration(id)); await suivre();
     assert.equal(e.etat, 'prete'); assert.equal(e.integrateur.etat, 'erreur');
     assert.ok(e.message); assert.equal(suiteEquipe(e).reprise, true); e.archivee = true;
 });

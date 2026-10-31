@@ -79,7 +79,7 @@ const lireDetail = async (texte: RegExp) => {
 };
 const ouvrirConfirmation = async () => {
     await choisir(/^Vérifier le projet/); await attendreDialogue('Dossier à vérifier');
-    await choisir(/^Projet · branche actuelle/); await attendreDialogue('Script existant à exécuter');
+    await choisir(/^Projet · branche actuelle/); await attendreDialogue('Vérification à exécuter');
     await choisir(/^npm run check$/); await attendreDialogue('Exécuter cette vérification ?');
     assert.match(ui.captureCharFrame(), /Commande : npm run check/);
     const visible = ui.captureCharFrame().replace(/[│\s]/g, '');

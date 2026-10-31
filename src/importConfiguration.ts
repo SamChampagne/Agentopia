@@ -1,6 +1,7 @@
 import type { Config } from './config.js';
+import * as path from 'node:path';
 import type { HoteSsh } from './sshConfig.js';
-import { FOURNISSEURS } from './providers/types.js';
+import { FOURNISSEURS, estFournisseur, validerModele, capacitesFournisseur } from './providers/types.js';
 
 export interface ExportConfiguration {
     format: 'claudetopia-export'; version: 1; date?: string; poste?: string;
@@ -45,6 +46,14 @@ export function validerExportConfiguration(d: unknown): ExportConfiguration {
     option(c, 'lancement', (v) => v === 'fond' || v === 'onglet');
     option(c, 'fournisseurDefaut', (v) => v === 'choisir' || (texte(v) && Object.hasOwn(FOURNISSEURS, v)));
     option(c, 'equipe', (v) => objet(v) && Number.isInteger(v.parallele) && Number(v.parallele) > 0 && texte(v.permissions));
+    if (objet(c.equipe)) {
+        option(c.equipe, 'paralleleGlobal', v => Number.isInteger(v) && Number(v) >= 0 && Number(v) <= 32, 'equipe');
+        option(c.equipe, 'parFournisseur', v => objet(v) && Object.entries(v).every(([k, n]) => estFournisseur(k) && Number.isInteger(n) && Number(n) >= 0 && Number(n) <= 32), 'equipe');
+    }
+    option(c, 'modelesFournisseurs', v => objet(v) && Object.entries(v).every(([k, m]) => estFournisseur(k) && capacitesFournisseur(k).modele && !!validerModele(m)));
+    option(c, 'preparationProjets', v => Array.isArray(v) && v.length <= 200 && v.every(p => objet(p) && texte(p.projet) && path.isAbsolute(p.projet)
+        && (p.commande === undefined || objet(p.commande) && texte(p.commande.programme) && p.commande.programme.length > 0 && p.commande.programme.length <= 4000 && !/[\x00-\x1f]/.test(p.commande.programme) && Array.isArray(p.commande.args) && p.commande.args.length <= 100 && p.commande.args.every(a => texte(a) && a.length <= 4000 && !a.includes('\0')))
+        && (p.fichiersLocaux === undefined || Array.isArray(p.fichiersLocaux) && p.fichiersLocaux.length <= 100 && p.fichiersLocaux.every(f => texte(f) && f.length <= 4000 && !path.isAbsolute(f) && !f.split(/[\\/]/).includes('..') && !/[\x00-\x1f]/.test(f)))));
     option(c, 'maitre', (v) => objet(v) && typeof v.actif === 'boolean' && texte(v.modele)
         && (v.veille === undefined || nombre(v.veille))
         && (v.fournisseur === undefined || ['auto', 'claude-cli', ...Object.keys(FOURNISSEURS)].includes(String(v.fournisseur))));
@@ -58,6 +67,7 @@ export function validerExportConfiguration(d: unknown): ExportConfiguration {
             exiger(Array.isArray(p.jours) && p.jours.every((j) => Number.isInteger(j) && j >= 0 && j <= 6), 'planification.jours');
             exiger(typeof p.actif === 'boolean', 'planification.actif');
             option(p, 'fournisseur', (v) => texte(v) && Object.hasOwn(FOURNISSEURS, v), 'planification');
+            option(p, 'modele', v => texte(v) && v.length <= 160 && !/[\x00-\x20\x7f]/.test(v), 'planification');
         }
     }
     if (c.sftp !== undefined) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useKeyboard } from '@opentui/react';
 import { Ansi } from './ansi.tsx';
 import { GRAS } from './style.ts';
@@ -11,6 +11,7 @@ import { Boutons } from './vues/commun.tsx';
 import { DiffDirect } from './diffDirect.tsx';
 import { presenterPermission } from '../dist/presentationPermission.js';
 import { useNavigationConversation } from './navigationConversation.ts';
+import { chargerHistoriqueConversation, rechercherHistoriqueConversation } from '../dist/historiqueConversation.js';
 
 // Conversation d'une session : ses actions à gauche (la description de celle survolée en dessous),
 // le texte à droite. Défilement natif à la molette, collé en bas : la fin suit en direct ; texte sélectionnable.
@@ -19,9 +20,10 @@ const COL = 24;
 
 // position (/ecran) : actions en colonne à gauche ou à droite, en rangée en haut, ou cachées (clic droit)
 // recherche (Ctrl+F) : les lignes qui contiennent le terme sont surlignées ; occurrence = laquelle montrer (la plus récente d'abord)
-export function Conversation({ s, largeur, cout, agir, position = 'gauche', recherche = '', occurrence = 0, surTrouvees, diff = true, saisie, navigationActive = true, compact = false, menuActions }: {
+export function Conversation({ s, largeur, cout, agir, position = 'gauche', recherche = '', rechercheActive = false, occurrence = 0, surTrouvees, diff = true, saisie, navigationActive = true, compact = false, menuActions }: {
     s: any; largeur: number; cout?: number; agir: (action: string) => void; position?: string;
     recherche?: string; occurrence?: number; surTrouvees?: (n: number) => void; diff?: boolean;
+    rechercheActive?: boolean;
     saisie?: ReactNode;
     navigationActive?: boolean;
     compact?: boolean; menuActions?: () => void;
@@ -35,9 +37,40 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
         return () => clearInterval(t);
     }, [s.fichier]);
     const enColonne = position === 'gauche' || position === 'droite';
+    const [archive, setArchive] = useState<Awaited<ReturnType<typeof chargerHistoriqueConversation>>>();
+    const [chargement, setChargement] = useState('');
+    const controleArchive = useRef<AbortController>();
+    useEffect(() => () => controleArchive.current?.abort(), []);
+    const chargerAncien = async () => {
+        if (controleArchive.current || archive?.debut === 0) return;
+        const controle = new AbortController(); controleArchive.current = controle;
+        setChargement('Chargement des messages antérieurs…');
+        try {
+            const page = await chargerHistoriqueConversation(s.fichier, archive ? 2_000_000 : 4_000_000, controle.signal, archive?.debut);
+            if (!controle.signal.aborted) { setArchive(page); setChargement(''); setTimeout(() => defilement.current?.scrollTo(0), 0); }
+        } catch (e) { if (!controle.signal.aborted) setChargement(`Historique indisponible : ${(e as Error).message}`); }
+        finally { if (controleArchive.current === controle) controleArchive.current = undefined; }
+    };
+    const [resultats, setResultats] = useState<{ messages: any[]; total: number; enCours: boolean; erreur?: string }>({ messages: [], total: 0, enCours: false });
+    useEffect(() => {
+        if (!rechercheActive || recherche.length < 2) { setResultats({ messages: [], total: 0, enCours: false }); return; }
+        const controle = new AbortController();
+        setResultats({ messages: [], total: 0, enCours: true });
+        const timer = setTimeout(() => {
+            void rechercherHistoriqueConversation(s.fichier, recherche, { signal: controle.signal }).then((r) => {
+                if (!controle.signal.aborted) setResultats({ ...r, enCours: false });
+            }, (e) => { if (!controle.signal.aborted) setResultats({ messages: [], total: 0, enCours: false, erreur: (e as Error).message }); });
+        }, 180);
+        return () => { clearTimeout(timer); controle.abort(); };
+    }, [s.fichier, recherche, rechercheActive]);
     const [details, setDetails] = useState(false);
-    useKeyboard((k) => { if ((k.meta || k.option) && k.name === 'l') setDetails((v) => !v); });
-    const lignes = useMemo(() => lignesTranscript(messages, largeur - (enColonne ? COL : 0) - 4, details), [messages, largeur, enColonne, details]);
+    useKeyboard((k) => {
+        if (!navigationActive) return;
+        if ((k.meta || k.option) && k.name === 'l') setDetails((v) => !v);
+        if (k.ctrl && k.name === 'pageup' && !rechercheActive) { k.preventDefault(); void chargerAncien(); }
+    });
+    const affiches = rechercheActive && recherche.length >= 2 ? resultats.messages : archive?.messages ?? messages;
+    const lignes = useMemo(() => lignesTranscript(affiches, largeur - (enColonne ? COL : 0) - 4, details || rechercheActive), [affiches, largeur, enColonne, details, rechercheActive]);
     const [survol, setSurvol] = useState<string>();
     const { defilement, enHistorique, retourEnBas } = useNavigationConversation(navigationActive);
     const terme = recherche.length >= 2 ? recherche.toLowerCase() : '';
@@ -70,6 +103,11 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
             {s.erreur && <text fg="#facc15" wrapMode="word">{s.erreur}</text>}
             {(s.integree || enHistorique) && <text height={1} flexShrink={0} fg={enHistorique ? theme.accent : fond.eteint} paddingLeft={1} truncate
                 onMouseDown={() => enHistorique && retourEnBas()}>{enHistorique ? '↑ Historique · ↓ Derniers messages (Alt+Fin ou clic)' : s.terminalExterne ? 'Terminal Codex ouvert · lecture seule ici jusqu’à sa fermeture' : s.statut === 'travaille' ? '● En direct · messages et sorties des outils' : s.statut === 'bloquee' ? '● En attente de ta réponse' : 'Conversation à jour · Pg↑ Pg↓ parcourir'}</text>}
+            {rechercheActive ? <text height={1} truncate fg={theme.accent} paddingLeft={1}>{resultats.erreur ? `Recherche : ${resultats.erreur}` : recherche.length < 2 ? 'Recherche dans tout l’historique · au moins 2 caractères' : resultats.enCours ? 'Recherche dans tout l’historique…' : `${resultats.total} message(s) dans tout l’historique${resultats.total > resultats.messages.length ? ` · ${resultats.messages.length} derniers affichés` : ''} · Échap revenir`}</text>
+                : <box height={1} flexShrink={0} paddingLeft={1} flexDirection="row">
+                    <text fg={theme.secondaire} onMouseDown={() => void chargerAncien()}>{chargement || (archive?.debut === 0 ? 'Début de l’historique' : '↑ Messages antérieurs · Ctrl+Pg↑')}</text>
+                    {archive && <text fg={theme.accent} onMouseDown={() => { setArchive(undefined); retourEnBas(); }}>  ↓ Revenir au direct</text>}
+                </box>}
             {s.integree && !messages.length && <text fg={fond.discret} paddingLeft={1}>Écris ton premier message dans la barre ci-dessous.</text>}
             {compact && <box height={1} flexShrink={0} paddingLeft={1} flexDirection="row">
                 <text fg={theme.secondaire} onMouseDown={() => agir('fermer')}>← Retour  </text>

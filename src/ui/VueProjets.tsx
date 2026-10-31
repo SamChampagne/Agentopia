@@ -5,7 +5,7 @@ import { useTailleVue, useClicsVue, Separateur, Titre } from './Vues.js';
 import { useSynchro } from './VueGit.js';
 import { bus } from './bus.js';
 import { ilYa } from './Panneau.js';
-import { getProjets } from '../commandes.js';
+import { useProjets } from './projets.js';
 import { Projet, correspond } from '../projets.js';
 import { activiteAgents, derniereSessionProjet } from '../activiteAgents.js';
 import { Depot } from '../git.js';
@@ -37,7 +37,7 @@ export function VueProjets({ fermer, filtreInitial = '' }: { fermer: () => void;
     const [choix, setChoix] = useState<string>();
     const [debut, setDebut] = useState(0);
 
-    const projets = getProjets().filter((p) => !filtre || correspond(p.nom, filtre));
+    const projets = useProjets().filter((p) => !filtre || correspond(p.nom, filtre));
     const activite = activiteAgents();
     const parRacine = new Map<string, Projet[]>();
     projets.forEach((p) => parRacine.set(p.racine, [...(parRacine.get(p.racine) ?? []), p]));

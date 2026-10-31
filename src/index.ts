@@ -5,6 +5,8 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { CHEMINS, surPath } from './chemins.js';
+import { installerDiagnostics } from './diagnostics.js';
+installerDiagnostics();
 
 if (process.argv.includes('--verifier-installation')) {
     try { const { verifierInstallation } = await import('./verifierInstallation.js'); await verifierInstallation(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')); }

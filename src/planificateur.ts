@@ -9,19 +9,18 @@ import type { Fournisseur } from './providers/types.js';
 import { sousVerrou } from './verrou.js';
 import { commanderMoteur, localAuMoteur, moteurEnPause } from './moteurClient.js';
 import { toast } from './notifications.js';
+import { lireRecusPlanifications, ecrireRecusPlanifications, jourPlanification as jour, type RecuPlanification as Recu } from './stockagePlanifications.js';
+import { capaciteAgents, raisonCapacite } from './fileAgents.js';
+import { verifierCheminLocal } from './fichiersProteges.js';
 
 export interface Planification {
     id: string; nom: string; heure: string; jours: number[]; projet: string; consigne: string; actif: boolean;
     fournisseur?: Fournisseur; // absent = ancienne tâche Claude CLI, conservée sans migration payante implicite
 }
-interface Recu { jour: string; etat: 'reserve' | 'lance' | 'erreur'; message?: string; session?: string }
 type Resultat = { ok: boolean; message: string; id?: string };
-const jour = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-function recus(): Record<string, Recu | string> {
-    try { return JSON.parse(fs.readFileSync(CHEMINS.planifications, 'utf8')); } catch { return {}; }
-}
+const recus = lireRecusPlanifications;
 export function recuPlanification(id: string): Recu | undefined {
-    const r = recus()[id]; return typeof r === 'string' ? { jour: r, etat: 'lance' } : r;
+    return recus()[id];
 }
 export const dernierLancement = (id: string): string | undefined => {
     const r = recuPlanification(id); return r ? `${r.jour} · ${r.etat === 'reserve' ? 'lancement à vérifier' : r.etat}${r.message ? ` · ${r.message}` : ''}` : undefined;
@@ -46,18 +45,22 @@ async function demarrer(p: Planification): Promise<Resultat> {
 export async function lancerPlanification(p: Planification, automatique = false, lancer = demarrer): Promise<Resultat> {
     if (!localAuMoteur()) return commanderMoteur('planification', p.id);
     if (moteurEnPause()) return { ok: false, message: 'Moteur en pause · Config → Moteur des équipes' };
+    verifierCheminLocal(`${CHEMINS.planifications}.verrou`);
+    let capacite: string | undefined;
     // Réserver AVANT le lancement : un crash ne doit pas rejouer une demande facturable.
     const reserve = sousVerrou(`${CHEMINS.planifications}.verrou`, () => {
         const d = recus(), precedent = recuPlanification(p.id);
-        if (automatique && precedent?.jour === jour()) return false;
-        d[p.id] = { jour: jour(), etat: 'reserve' }; ecrireAtomique(CHEMINS.planifications, d); return true;
+        if (automatique && precedent?.jour === jour() && precedent.etat !== 'attente') return false;
+        capacite = raisonCapacite(capaciteAgents(), p.fournisseur);
+        if (capacite) { if (automatique) { d[p.id] = { jour: jour(), etat: 'attente', message: capacite }; ecrireRecusPlanifications(d); } return false; }
+        d[p.id] = { jour: jour(), etat: 'reserve' }; ecrireRecusPlanifications(d); return true;
     });
-    if (!reserve) return { ok: false, message: 'Cette tâche a déjà été tentée aujourd’hui' };
+    if (!reserve) return { ok: false, message: capacite ? `${capacite}. ${automatique ? 'La planification attend une place ; aucun tour réservé.' : 'Réessaie quand une place se libère ; aucun tour réservé.'}` : 'Cette tâche a déjà été tentée aujourd’hui' };
     let r: Resultat;
     try { r = await lancer(p); } catch (e) { r = { ok: false, message: (e as Error).message.replace(/(?:sk-|pplx-)[\w-]+/g, '[clé masquée]').slice(0, 400) }; }
     sousVerrou(`${CHEMINS.planifications}.verrou`, () => {
         const d = recus(); d[p.id] = { jour: jour(), etat: r.ok ? 'lance' : 'erreur', message: r.message, session: r.id };
-        ecrireAtomique(CHEMINS.planifications, d);
+        ecrireRecusPlanifications(d);
     });
     return r;
 }
@@ -68,7 +71,8 @@ export async function verifierPlanifications(): Promise<void> {
     try {
         const maintenant = new Date(), hhmm = `${String(maintenant.getHours()).padStart(2, '0')}:${String(maintenant.getMinutes()).padStart(2, '0')}`;
         for (const p of chargerConfig().planifications ?? []) {
-            if (!p.actif || !heureValide(p.heure) || hhmm < p.heure || recuPlanification(p.id)?.jour === jour()) continue;
+            const recu = recuPlanification(p.id);
+            if (!p.actif || !heureValide(p.heure) || hhmm < p.heure || recu?.jour === jour() && recu.etat !== 'attente') continue;
             if (p.jours.length && !p.jours.includes(maintenant.getDay())) continue;
             const r = await lancerPlanification(p, true);
             toast(r.ok ? `◴ ${p.nom} a démarré` : `✕ ${p.nom} n’a pas démarré`, r.message);

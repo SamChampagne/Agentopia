@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import type { Commande } from './commandes.js';
 import { Projet } from './projets.js';
 import { lireDepot, appel } from './git.js';
@@ -122,9 +120,8 @@ export function commandesTicket(getProjets: () => Projet[]): Commande[] {
             const { dossier, erreur } = await tache('Création de la branche (worktree)', () => creerWorktree(projet!.chemin, branche));
             if (!dossier) return void console.log(c.erreur(`✗ ${erreur ?? 'impossible de créer la branche'}`));
             console.log(c.succes(`Branche ${branche} · ${dossier}`));
-            const npm = fs.existsSync(path.join(dossier, 'package.json')) && !fs.existsSync(path.join(dossier, 'node_modules'));
             const { id, sortie } = await tache('Démarrage de la session', () => lancerArrierePlan(dossier, `${ticket.numero ? `#${ticket.numero} ` : ''}${(ticket as Ticket).titre}`.slice(0, 60),
-                (npm ? 'Commence par npm install.\n\n' : '') + consigne(ticket as Ticket)));
+                consigne(ticket as Ticket)));
             if (!id) return void console.log(c.erreur(sortie.split('\n')[0] || 'Échec du lancement'));
             console.log(c.succes(`Session ${id} lancée sur le ticket · sa conversation s'ouvre à droite`));
             bus.emit('selectionner', id);

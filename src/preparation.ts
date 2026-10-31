@@ -187,6 +187,9 @@ export async function preparerPoste(config: Config, options: OptionsPreparation 
     etat.terminee = etat.selection.every((f) => etat.ignores.includes(f) || etat.etats[f]?.pret); sauver();
     const bilan = etat.selection.map((f) => `${FOURNISSEURS[f].nom} : ${etat.ignores.includes(f) ? 'reporté' : etat.etats[f]?.pret ? 'connecté' : 'à terminer'}`).join(' · ');
     console.log(`${etat.terminee ? 'Préparation enregistrée' : 'Préparation à reprendre'}${bilan ? ` · ${bilan}` : ' · aucun agent sélectionné'}`);
-    bus.emit('notice', etat.terminee ? 'Choisis un projet et écris ce que tu veux faire.' : 'Une étape reste à terminer · Config → Préparer le poste');
+    bus.emit('notice', etat.terminee ? prets.length
+        ? 'Choisis un projet et écris ce que tu veux faire.'
+        : 'Mode exploration · aucun agent prêt parmi tes choix. Explore tes projets ou ouvre Config → Agents à utiliser pour en connecter un.'
+        : 'Une étape reste à terminer · Config → Préparer le poste');
     return etat;
 }

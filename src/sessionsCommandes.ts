@@ -2,7 +2,7 @@ import type { Commande, Contexte } from './commandes.js';
 import { presenterPermission } from './presentationPermission.js';
 import { sauverConfig, type Config } from './config.js';
 import { bus, choisir, saisir } from './ui/bus.js';
-import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
+import { FOURNISSEURS, capacitesFournisseur, validerModele, type Fournisseur } from './providers/types.js';
 import { disponibilite } from './providers/config.js';
 import { guiderConnexion } from './providers/assistantConnexion.js';
 import { creerIntegree, envoyerIntegree, lireIntegree, listerIntegrees, restaurerIntegree, repondrePermission, interrompreIntegree } from './sessionsIntegrees.js';
@@ -22,6 +22,23 @@ async function ouvrir({ projet, apresProjet }: Contexte, fournisseur?: Fournisse
 }
 export function commandesSessions(config: Config): Commande[] {
     return [
+        { nom: 'modele-agent', groupe: 'Config', description: 'Modèle par défaut des nouvelles conversations et tâches', executer: async () => {
+            const f = await choisirFournisseur('Modèle de quel fournisseur ?');
+            if (!capacitesFournisseur(f).modele) { bus.emit('notice', `${FOURNISSEURS[f].nom} choisit automatiquement son modèle avec ce transport.`); return; }
+            const modele = validerModele((await saisir('Identifiant du modèle (vide = choix du fournisseur)', config.modelesFournisseurs?.[f] || '')).trim());
+            const modeles = { ...config.modelesFournisseurs };
+            if (modele) modeles[f] = modele; else delete modeles[f];
+            config.modelesFournisseurs = modeles; sauverConfig(config);
+            bus.emit('notice', 'Modèle enregistré pour les prochaines conversations et tâches. Sa disponibilité sera vérifiée au premier message.');
+        } },
+        { nom: 'modele-session', args: '<session>', groupe: 'Agents', description: 'Choisir le modèle de la conversation au prochain tour', executer: async ({ args }) => {
+            const s = lireIntegree(args[0]); if (!s) throw new Error('Conversation intégrée introuvable.');
+            if (!capacitesFournisseur(s.fournisseur).modele) { bus.emit('notice', 'Ce fournisseur choisit son modèle automatiquement.'); return; }
+            const modele = validerModele((await saisir('Modèle du prochain message (vide = choix du fournisseur)', s.modele || '')).trim());
+            const { changerModeleIntegree } = await import('./sessionsIntegrees.js');
+            changerModeleIntegree(s.id, modele);
+            bus.emit('notice', `Modèle : ${modele || 'choix du fournisseur'} · conversation conservée`);
+        } },
         { nom: 'maitre-fournisseur', groupe: 'Config', description: 'Choisir l’agent qui organise les sessions et les équipes', executer: async () => {
             const fournisseur = await choisir<NonNullable<Config['maitre']['fournisseur']>>('Qui organise ton travail ?', [
                 { label: 'Automatique', valeur: 'auto', description: 'Ton agent par défaut s’il est disponible, sinon un agent configuré.' },

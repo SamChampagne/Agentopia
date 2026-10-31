@@ -7,6 +7,7 @@ import { ecrireAtomique, lireIntegree } from './sessionsIntegrees.js';
 import { equipeDe, rechargerEquipes, type Equipe } from './equipe.js';
 import { prendreVerrou, processusVivant, demarragePoste } from './verrou.js';
 import { citerPowerShell } from './lancementsWindows.js';
+import { detecterLangages } from './verificationLangages.js';
 
 export const LIMITE_VERIFICATION_MS = 5 * 60_000;
 export const LIMITE_JOURNAL = 512 * 1024;
@@ -15,7 +16,7 @@ const processusFermes = new WeakSet<ChildProcess>();
 const fermeturesForcees = new WeakSet<ChildProcess>();
 type Gestionnaire = 'npm' | 'pnpm' | 'yarn' | 'bun';
 export interface CommandeVerification {
-    gestionnaire: Gestionnaire; script: string; contenu: string; avant?: string; apres?: string;
+    gestionnaire: Gestionnaire | 'python' | 'dotnet' | 'projet'; script: string; contenu: string; avant?: string; apres?: string; args?: string[];
     commande: string; executable: string; manifeste: string;
 }
 export interface CibleVerification { equipe: string; tache?: string; dossier: string; titre: string }
@@ -42,9 +43,14 @@ function sauverPreuve(p: PreuveVerification): void {
 }
 
 export function detecterVerifications(dossier: string): { commandes: CommandeVerification[]; explication?: string } {
+    const js = detecterScripts(dossier), autres = detecterLangages(dossier);
+    const commandes = [...js.commandes, ...autres.commandes];
+    return { commandes, explication: [js.explication, ...autres.explications].filter(Boolean).join('\n') || (commandes.length ? undefined : 'Aucun package.json ni autre test détecté. Déclare tes commandes dans agentopia.json.') };
+}
+function detecterScripts(dossier: string): { commandes: CommandeVerification[]; explication?: string } {
     try {
         const fichier = path.join(dossier, 'package.json');
-        if (!fs.existsSync(fichier)) return { commandes: [], explication: 'Aucun package.json dans ce dossier. Cette première version propose les scripts JavaScript/TypeScript du dossier choisi.' };
+        if (!fs.existsSync(fichier)) return { commandes: [] };
         if (fs.statSync(fichier).size > 1024 * 1024) throw new Error('package.json dépasse la limite de lecture (1 Mo).');
         const texte = fs.readFileSync(fichier, 'utf8'), p = JSON.parse(texte);
         const declares = typeof p.packageManager === 'string' ? p.packageManager.match(/^(npm|pnpm|yarn|bun)@/) : undefined;
@@ -169,8 +175,9 @@ function surveillerSortieApplication(enfant: ChildProcess, confirmer: () => void
 }
 
 export function invocationVerification(c: CommandeVerification): { programme: string; args: string[] } {
-    if (process.platform !== 'win32' || /\.exe$/i.test(c.executable)) return { programme: c.executable, args: ['run', c.script] };
-    const script = `& ${citerPowerShell(c.executable)} 'run' ${citerPowerShell(c.script)}; exit $LASTEXITCODE`;
+    const args = c.args || ['run', c.script];
+    if (process.platform !== 'win32' || /\.exe$/i.test(c.executable)) return { programme: c.executable, args };
+    const script = `& ${citerPowerShell(c.executable)} ${args.map(citerPowerShell).join(' ')}; exit $LASTEXITCODE`;
     return { programme: path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
         args: ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')] };
 }
@@ -291,6 +298,7 @@ function preuveValide(p: any, equipe: string, fichier: string): p is PreuveVerif
         && texte(p.cible.dossier) && path.isAbsolute(p.cible.dossier) && texte(p.cible.titre) && (p.cible.tache === undefined || texte(p.cible.tache))
         && p.commande && ['gestionnaire', 'script', 'contenu', 'commande', 'executable', 'manifeste'].every((k) => texte(p.commande[k]))
         && ['avant', 'apres'].every((k) => p.commande[k] === undefined || texte(p.commande[k]))
+        && (p.commande.args === undefined || Array.isArray(p.commande.args) && p.commande.args.length <= 100 && p.commande.args.every((a: unknown) => typeof a === 'string' && a.length <= 4000 && !/[\x00-\x1f]/.test(a)))
         && ['en cours', 'reussi', 'echoue', 'interrompu'].includes(p.resultat)
         && date(p.debut) && (p.fin === undefined || date(p.fin)) && empreinte(p.avant) && (p.apres === undefined || empreinte(p.apres))
         && Number.isInteger(p.proprietaire) && p.proprietaire > 0 && date(p.demarragePoste)

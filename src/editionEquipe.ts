@@ -1,5 +1,5 @@
 import { choisir, choisirPlusieurs, saisir } from './ui/bus.js';
-import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
+import { FOURNISSEURS, capacitesFournisseur, type Fournisseur } from './providers/types.js';
 import { disponibilite } from './providers/config.js';
 import { empreintePlan, modifierPlan, peutModifierPlan, type Equipe } from './equipe.js';
 import { validerDefinitions } from './modelesEquipes.js';
@@ -32,15 +32,20 @@ export async function editerPlan(e: Equipe, services = servicesDefaut): Promise<
         const champ = await services.choisir(`Modifier t${i + 1} · ${t.titre}`, [
             { label: 'Mission et critères de réussite', valeur: 'consigne' }, { label: 'Fournisseur', valeur: 'fournisseur' },
             { label: 'Titre', valeur: 'titre' }, { label: 'Dépendances', valeur: 'dependances' }, { label: 'Retour au plan', valeur: 'retour' },
+            ...(capacitesFournisseur(t.fournisseur).modele ? [{ label: 'Modèle (vide = choix du fournisseur)', valeur: 'modele' }] : []),
+            { label: t.lectureSeule ? 'Autoriser le travail dans les fichiers' : 'Passer cette tâche en lecture seule', valeur: 'lecture' },
         ], false, t.consigne);
         const suivante = taches.map((t) => ({ ...t, dependances: [...t.dependances] }));
         if (champ === 'consigne' || champ === 'titre') suivante[i][champ] = await services.saisir(champ === 'titre' ? 'Titre de la tâche' : 'Mission et critères de réussite', t[champ]);
+        if (champ === 'modele') suivante[i].modele = (await services.saisir('Identifiant du modèle · vide pour le choix du fournisseur', t.modele || '')).trim() || undefined;
+        if (champ === 'lecture') suivante[i].lectureSeule = !t.lectureSeule;
         if (champ === 'fournisseur') suivante[i].fournisseur = await services.choisir('Quel agent pour cette tâche ?', (Object.keys(FOURNISSEURS) as Fournisseur[]).map((f) => ({
             label: FOURNISSEURS[f].nom, valeur: f, description: `${FOURNISSEURS[f].capacite} · ${disponibilite(f).texte}`,
         })), false, 'Perplexity fait de la recherche web ; choisis Claude ou Codex pour modifier les fichiers.');
         if (champ === 'dependances') suivante[i].dependances = await services.choisirPlusieurs('Attendre quelles tâches ? Espace pour cocher, Entrée pour valider', taches.flatMap((autre, j) => j === i ? [] : [{
             label: `t${j + 1} · ${autre.titre}`, valeur: `t${j + 1}`, coche: t.dependances.includes(`t${j + 1}`),
         }]));
+        if (!capacitesFournisseur(suivante[i].fournisseur).modele) suivante[i].modele = undefined;
         try { taches = validerDefinitions(suivante); }
         catch (err) { await services.choisir('Modification refusée · le brouillon précédent est conservé', [{ label: 'Revenir au plan', valeur: 'retour' }], false, (err as Error).message); }
     }

@@ -1,5 +1,31 @@
 import { GRAS } from './style.ts';
+import { useEffect, useRef } from 'react';
+import type { TextareaRenderable } from '@opentui/core';
+import { hauteurComposeur } from '../dist/ui/contexteProjet.js';
 import { theme, fond } from '../dist/theme.js';
+
+function Composeur({ valeur, changer, envoyer, placeholder }: { valeur: string; changer: (v: string) => void; envoyer: (v: string) => void; placeholder: string }) {
+    const champ = useRef<TextareaRenderable>(null);
+    const initial = useRef(valeur);
+    useEffect(() => { if (champ.current) champ.current.cursorOffset = initial.current.length; }, []);
+    useEffect(() => {
+        if (champ.current && champ.current.plainText !== valeur) {
+            champ.current.setText(valeur);
+            champ.current.cursorOffset = valeur.length;
+        }
+    }, [valeur]);
+    return <textarea ref={champ} flexGrow={1} height={hauteurComposeur(valeur)} focused initialValue={initial.current}
+        wrapMode="word" textColor={fond.texte} backgroundColor="transparent" focusedBackgroundColor="transparent"
+        onContentChange={() => {
+            // Initialisation, historique et changement de destination émettent aussi
+            // cet événement ; seule une vraie édition doit réinitialiser l’historique.
+            if (champ.current && champ.current.plainText !== valeur) changer(champ.current.plainText);
+        }}
+        onSubmit={() => envoyer(champ.current?.plainText ?? valeur)}
+        keyBindings={[{ name: 'return', action: 'submit' }, { name: 'return', shift: true, action: 'newline' },
+            { name: 'return', meta: true, action: 'newline' }, { name: 'j', ctrl: true, action: 'newline' }]}
+        placeholder={placeholder} />;
+}
 
 // Saisie commune : dans le chat d'une session, ou au bas des autres vues.
 
@@ -28,11 +54,11 @@ export function Barre({ valeur, cle, setValeur, soumettre, suggestions, indexSug
                 {avis && <text width={libelleAvis.length} height={1} flexShrink={0} fg={!avis.actif ? fond.discret : avis.nombre ? theme.accent : fond.eteint}
                     onMouseDown={() => avis.actif && avis.ouvrir()}>{libelleAvis}</text>}
             </box>
-            <box height={3} border borderStyle="rounded" borderColor={maitre ? '#a78bfa' : actif ? fond.bordure : fond.discret} flexDirection="row" paddingLeft={1}>
+            <box height={2 + hauteurComposeur(valeur)} border borderStyle="rounded" borderColor={maitre ? '#a78bfa' : actif ? fond.bordure : fond.discret} flexDirection="row" paddingLeft={1}>
                 <text fg={!actif ? fond.discret : maitre ? '#a78bfa' : theme.primaire}>{!actif ? '· ' : maitre ? '◈ ' : '❯ '}</text>
                 {/* key : changer la valeur depuis le code (historique, suggestion) recrée le champ avec ce texte */}
-                {actif ? <input key={cle} flexGrow={1} focused value={valeur} onInput={setValeur} onSubmit={(v: unknown) => { if (typeof v === 'string') soumettre(v); }}
-                    placeholder={placeholder ?? 'Message à la session ouverte · /session pour en créer une · / pour les commandes'} />
+                {actif ? <Composeur key={cle} valeur={valeur} changer={setValeur} envoyer={soumettre}
+                    placeholder={`${placeholder ?? 'Message · / pour les commandes'} · Ctrl+J : nouvelle ligne`} />
                     : <text fg={fond.discret} flexGrow={1} truncate>{raisonPause || (valeur ? `Brouillon conservé : ${valeur}` : 'Barre en pause : le clavier est utilisé dans la vue au-dessus.')}</text>}
             </box>
         </box>

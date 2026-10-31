@@ -245,10 +245,10 @@ export function lireTranscript(fichier: string, octets = 2_000_000): Message[] {
     }
 }
 
-function decoderTranscript(texte: string): Message[] {
+export function decoderTranscript(texte: string): Message[] {
     const messages: Message[] = [];
     for (const ligne of texte.split('\n')) {
-        if (!ligne.includes('"type":"user"') && !ligne.includes('"type":"assistant"')) continue;
+        if (!/"type"\s*:\s*"(?:user|assistant)"/.test(ligne)) continue;
         let o;
         try {
             o = JSON.parse(ligne);

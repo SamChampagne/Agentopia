@@ -4,7 +4,7 @@ import { Box, Text, useInput } from 'ink';
 import { useTailleVue, useClicsVue, Separateur, Titre } from './Vues.js';
 import { bus } from './bus.js';
 import { ilYa } from './Panneau.js';
-import { getProjets } from '../commandes.js';
+import { useProjets } from './projets.js';
 import { projetsRecents } from '../dashboard.js';
 import { Projet, EtatGit, etatGit } from '../projets.js';
 import { depotDe } from '../synchro.js';
@@ -32,6 +32,7 @@ function etatLisible(g?: EtatGit): { texte: string; couleur: string } {
 }
 
 export function VueRecents({ fermer }: { fermer: () => void }) {
+    const projets = useProjets();
     const { largeur, hauteur } = useTailleVue();
     const [lignes, setLignes] = useState<Ligne[]>();
     const [index, setIndex] = useState(0);
@@ -39,10 +40,10 @@ export function VueRecents({ fermer }: { fermer: () => void }) {
     // La lecture git (une commande par projet) se fait après le premier affichage
     useEffect(() => {
         const t = setTimeout(() => {
-            setLignes(projetsRecents(getProjets(), Math.max(5, hauteur - 5)).map(({ projet, date }) => ({ projet, date, git: etatGit(projet.chemin) })));
+            setLignes(projetsRecents(projets, Math.max(5, hauteur - 5)).map(({ projet, date }) => ({ projet, date, git: etatGit(projet.chemin) })));
         }, 20);
         return () => clearTimeout(t);
-    }, []);
+    }, [projets, hauteur]);
 
     const ouvrir = (l?: Ligne) => {
         if (!l) return;

@@ -1,4 +1,3 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import { Projet, depuis } from './projets.js';
 import { listerSessions } from './sessions.js';
@@ -59,7 +58,7 @@ export async function lancerAvecPrompt(projet: Projet, prompts: Record<string, s
     lancerClaude(projet, prompts[nom]);
 }
 
-// Crée un worktree pour la branche et y ouvre Claude (npm install d'abord si besoin)
+// Crée un worktree préparé selon le profil explicite du projet et y ouvre Claude.
 export async function nouvelleBranche(projet: Projet, branche?: string, base?: string): Promise<void> {
     const nom = branche || await saisir('Nom de la branche (ex. fix/mon-bug)');
     const { dossier, erreur } = await tache('Création du worktree', () => creerWorktree(projet.chemin, nom.trim(), base));
@@ -68,8 +67,7 @@ export async function nouvelleBranche(projet: Projet, branche?: string, base?: s
         return;
     }
     console.log(c.succes(`Worktree créé : ${dossier}`));
-    const npm = fs.existsSync(path.join(dossier, 'package.json')) ? 'npm install; ' : '';
-    ouvrirOnglet(dossier, `🤖 ${path.basename(dossier)}`, `${npm}claude`);
+    ouvrirOnglet(dossier, `🤖 ${path.basename(dossier)}`, 'claude');
 }
 
 // Propose de supprimer les worktrees dont la branche est mergée et sans modifs
@@ -96,7 +94,7 @@ export async function nettoyerWorktrees(projet: Projet): Promise<void> {
     })));
     if (!choix.length || !await confirmer(`Supprimer ${choix.length} worktree(s) et leur branche locale ?`)) return;
     for (const wt of choix) {
-        const res = supprimerWorktree(depot, wt);
+        const res = await supprimerWorktree(depot, wt);
         console.log(res.ok ? c.succes(`✓ ${path.basename(wt.chemin)} supprimé`) : c.erreur(res.sortie));
     }
 }

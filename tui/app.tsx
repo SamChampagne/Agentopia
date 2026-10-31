@@ -1,13 +1,14 @@
 import { proposerPlan } from '../dist/conseiller.js';
 import { nomAgentDefaut } from '../dist/providers/types.js';
 import { preparationAReprendre } from '../dist/preparation.js';
+import { installerDiagnostics } from '../dist/diagnostics.js';
 // Agentopia sous OpenTUI : même style que l'interface Ink, avec les mêmes données et les mêmes commandes.
 // Lancer : bun tui/app.tsx   (Ctrl+C pour quitter)
 import * as fs from 'fs';
 import * as path from 'path';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createCliRenderer, TextRenderable } from '@opentui/core';
-import { createRoot, extend, useKeyboard, useTerminalDimensions } from '@opentui/react';
+import { createRoot, extend, useKeyboard, useTerminalDimensions, useRenderer } from '@opentui/react';
 import { Ansi } from './ansi.tsx';
 import { GRAS } from './style.ts';
 import { Colonne } from './colonne.tsx';
@@ -26,6 +27,7 @@ import { retirerPiecesJointes, verifierPiecesJointes } from '../dist/ui/piecesJo
 import { CollageImage, type LireImage } from '../dist/ui/collageImage.js';
 import { historiqueAvis } from '../dist/ui/avis.js';
 import { contexteSaisie } from '../dist/ui/contexteSaisie.js';
+import { dossierContexte, hauteurComposeur } from '../dist/ui/contexteProjet.js';
 import { Journal } from './journal.tsx';
 import { QuelleTouche } from './quelleTouche.tsx';
 import { Accueil, Mascotte } from './accueil.tsx';
@@ -137,6 +139,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
     const disp = disposition();
     const d = lireDonnees();
     const { width, height } = useTerminalDimensions();
+    const renderer = useRenderer();
     const [selection, setSelectionEtat] = useState<string>();
     // Panneau de détail (projet, serveur, conteneur) : il remplace la conversation dans la zone principale, et inversement
     const [detail, setDetailEtat] = useState<any>();
@@ -190,7 +193,8 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
     const [indexSugg, setIndexSugg] = useState(0);
     const historiqueSaisie = useRef(new HistoriqueSaisie());
     const [survolHaut, setSurvolHaut] = useState<string>();
-    const [projets] = useState(() => getProjets());
+    const [projets, setProjets] = useState(() => getProjets());
+    useEffect(() => { const maj = () => setProjets(getProjets()); bus.on('projets', maj); return () => { bus.off('projets', maj); }; }, []);
     const [quelleTouche, setQuelleTouche] = useState<string>();
     const ctrlC = useRef(0);
     // La vue affichée (la commande qui l'a ouverte) : gardée pour la rouvrir au prochain lancement
@@ -241,6 +245,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
     // silencieux : lancé par un clic, une action ou une vue ; la commande n'est ni affichée ni gardée dans l'historique
     async function lancer(ligne: string, silencieux = false, puisQuitter = false) {
         let texte = ligne.trim();
+        const contexte = { dossier: dossierContexte(session, detail) };
         const cmd = trouverCommande(texte.split(' ')[0]);
         if (cmd?.nom === 'exit') return quitter();
         if (cmd?.nom === 'clear') {
@@ -264,7 +269,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
         occupeRef.current = true;
         setOccupe(true);
         try {
-            await (silencieux ? executerLigne(texte) : avecRetrait(() => executerLigne(texte)));
+            await (silencieux ? executerLigne(texte, contexte) : avecRetrait(() => executerLigne(texte, contexte)));
             return true;
         } catch (err) {
             if (err instanceof Annule || (err as Error)?.name === 'Annule') {
@@ -637,6 +642,10 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
     });
 
     useKeyboard((k) => {
+        // Les événements natifs du textarea peuvent précéder sa notification React.
+        // Lire le contenu réel évite qu’un espace tapé vite ouvre les raccourcis.
+        const champ = renderer.currentFocusedRenderable as { plainText?: string } | null;
+        if (!demande && typeof champ?.plainText === 'string') valeurRef.current = champ.plainText;
         // Ctrl+C : vide la saisie ; deux fois de suite pour quitter
         if (k.ctrl && k.name === 'c') {
             if (valeurRef.current) return remplacer('');
@@ -727,7 +736,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
             return;
         }
         if (k.name === 'tab' && suggestions[sugg]) return remplacer(suggestions[sugg].texte);
-        if (k.name === 'up' || k.name === 'down') {
+        if ((k.name === 'up' || k.name === 'down') && !valeurRef.current.includes('\n')) {
             const sens = k.name === 'up' ? -1 : 1;
             if (suggestions.length && !historiqueSaisie.current.enCours) return setIndexSugg(Math.max(0, Math.min(Math.min(8, suggestions.length) - 1, sugg + sens)));
             // Historique : ↑ remonte, ↓ redescend
@@ -755,7 +764,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
                 ? { texte: '◈ le maître réfléchit… attends sa réponse', couleur: '#a78bfa' }
                 : { texte: '◈ au maître : il gère tes sessions (fermer, relancer, écrire, créer, résumer…) · Échap pour revenir', couleur: '#a78bfa' };
         }
-        if (t.startsWith('!')) return { texte: `commande PowerShell dans ${path.basename(process.cwd())}`, couleur: theme.accent };
+        if (t.startsWith('!')) return { texte: `PowerShell · ${dossierContexte(session, detail)}`, couleur: theme.accent };
         if (session) {
             if (session.integree) {
                 if (session.terminalExterne) return { texte: 'Même conversation contrôlée dans le terminal Codex · ferme Codex pour reprendre ici · brouillon conservé', couleur: theme.secondaire };
@@ -771,7 +780,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
             if (session.statut === 'bloquee') return { texte: `${session.nom} attend une permission : Entrée pour le rejoindre (Alt+J : à côté)`, couleur: '#fb923c' };
             return { texte: `↳ envoyé à la conversation ${session.nom} (${session.titre || session.id})${t ? '' : ' · Entrée vide = la rejoindre'}`, couleur: couleurProjet(session.nom) };
         }
-        return { texte: `↳ nouvelle conversation · ${nomAgentDefaut(config.fournisseurDefaut)} · ${path.basename(process.cwd())} · Ctrl+K pour tout le reste`, couleur: fond.discret };
+        return { texte: `↳ nouvelle conversation · ${nomAgentDefaut(config.fournisseurDefaut)} · ${path.basename(dossierContexte(session, detail))} · Ctrl+K pour tout le reste`, couleur: fond.discret };
     }
 
     const compact = width < 100;
@@ -786,7 +795,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
     const nbSugg = Math.min(8, suggestions.length);
     const barreDansChat = !!session && !demande && !detail && !modeMaitre;
     const hauteurRaccourcis = quelleTouche !== undefined ? 2 + Math.ceil(Object.keys(noeudA(quelleTouche).enfants).length / 3) : 0;
-    const corps = height - haut - hauteurRaccourcis - (barreDansChat ? 0 : 4 + nbSugg + (!recherche && images.length ? 1 : 0));
+    const corps = Math.max(1, height - haut - hauteurRaccourcis - (barreDansChat ? 0 : 3 + hauteurComposeur(valeur) + nbSugg + (!recherche && images.length ? 1 : 0)));
     // Une seule saisie montée : mêmes brouillons, commandes et recherche dans les deux emplacements.
     const saisie = <>
         <Barre key={destination} valeur={valeur} cle={cle} setValeur={surSaisie} soumettre={soumettre} suggestions={recherche ? [] : suggestions} indexSugg={sugg}
@@ -811,7 +820,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
     else if (session) {
         zone = (
             <box flexGrow={1} onMouseDown={(e: any) => droit(e) && ouvrirMenu(menuSession(session, () => undefined))}>
-                <Conversation key={session.cle} s={session} largeur={principal} cout={d.cout.parSession[session.sessionId]} agir={agir} position={compact ? 'cachees' : disp.actions}
+                <Conversation key={session.cle} s={session} largeur={principal} cout={d.cout.parSession[session.sessionId]} agir={agir} position={compact ? 'cachees' : disp.actions} rechercheActive={recherche}
                     recherche={recherche ? valeur.trim() : ''} occurrence={occurrence} surTrouvees={setTrouvees} diff={diffDirect} saisie={barreDansChat ? saisie : undefined}
                     navigationActive={!modeMaitre && quelleTouche === undefined} compact={compact} menuActions={() => void ouvrirMenu(menuSession(session, () => undefined))} />
             </box>
@@ -902,6 +911,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
 }
 
 if (import.meta.main) {
+    installerDiagnostics();
     // « sp commit saniplan » : exécute la commande dans l'interface puis quitte
     const commandeInitiale = process.argv.slice(2).join(' ').trim() || undefined;
     // Première fois sur ce poste : l'assistant demande l'essentiel ; juste après l'installation (CLAUDETOPIA_SCAN) : le scan du poste

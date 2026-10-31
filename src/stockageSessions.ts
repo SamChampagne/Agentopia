@@ -2,7 +2,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { ecrireAtomique } from './stockageAtomique.js';
+import { randomUUID } from 'node:crypto';
+import { prendreVerrou, sousVerrou, processusVivant } from './verrou.js';
+import { lireFichierBorne, verifierCheminLocal } from './fichiersProteges.js';
 import type { SessionIntegree, ReponsePermission } from './providers/types.js';
+import { estFournisseur, validerModele } from './providers/types.js';
 
 export const RACINE_SESSIONS = path.resolve(process.env.CLAUDETOPIA_DATA_DIR || path.join(os.homedir(), '.claudetopia-agents'));
 const MAX_ETAT = 8 * 1024 * 1024;
@@ -46,7 +50,7 @@ function permission(v: unknown): boolean {
 }
 export function validerEtatSession(v: unknown, id: string): asserts v is SessionIntegree {
     const valide = objet(v) && v.id === id && estIdentifiantSession(v.id)
-        && ['claude', 'codex', 'perplexity'].includes(v.fournisseur) && texte(v.cwd) && path.isAbsolute(v.cwd)
+        && estFournisseur(v.fournisseur) && texte(v.cwd) && path.isAbsolute(v.cwd)
         && texte(v.titre) && nombre(v.creee) && nombre(v.maj) && texte(v.tour) && v.tour.length <= 512
         && ['attend', 'travaille', 'bloquee', 'erreur', 'arretee'].includes(v.etat)
         && ['modele', 'threadId', 'resultat', 'erreur', 'dernierPrompt', 'recuUsage'].every((k) => option(v, k, texte))
@@ -59,6 +63,7 @@ export function validerEtatSession(v: unknown, id: string): asserts v is Session
             && option(c, 'codeSortie', Number.isInteger)) && ['fichiers', 'resume'].every((k) => option(b, k, texte))
             && option(b, 'durees', (d) => objet(d) && nombre(d.travailMs) && nombre(d.attenteMs)));
     if (!valide) throw new Error('Métadonnées de session corrompues ou identité incohérente. État et conversation conservés ; restaure une copie valide avant de reprendre.');
+    validerModele(v.modele);
 }
 /** Absence seulement = undefined. Une donnée existante invalide n'est jamais une session neuve. */
 export function lireEtatSession(id: string): SessionIntegree | undefined {
@@ -79,8 +84,43 @@ export function sauverEtatSession(s: SessionIntegree): void {
     const nouvelle = { ...s, maj: Date.now() };
     validerEtatSession(nouvelle, s.id);
     if (Buffer.byteLength(JSON.stringify(nouvelle), 'utf8') > MAX_ETAT) throw new Error('Métadonnées de session trop volumineuses. Dernier état conservé.');
-    lireEtatSession(s.id); // Ne pas écraser une erreur d'accès, un fichier corrompu ou une autre identité.
+    const ancienne = lireEtatSession(s.id); // Ne pas écraser une erreur d'accès, un fichier corrompu ou une autre identité.
+    ecrireAtomique(fichierSession(s.id, 'etat.sauvegarde.json'), ancienne || nouvelle);
     ecrireAtomique(fichierSession(s.id, 'etat.json'), nouvelle); s.maj = nouvelle.maj;
+}
+export interface ProblemeSession { id: string; message: string; sauvegarde: boolean; importAbandonne: boolean }
+export function problemesSessions(): ProblemeSession[] {
+    let noms: string[]; try { noms = fs.readdirSync(RACINE_SESSIONS); } catch { return []; }
+    return noms.filter(estIdentifiantSession).flatMap(id => {
+        let message = '', sauvegarde = false, importAbandonne = false;
+        try { if (!lireEtatSession(id)) message = 'État absent : conversation conservée.'; } catch (e) { message = (e as Error).message; }
+        try { const v = JSON.parse(lireFichierBorne(fichierSession(id, 'etat.sauvegarde.json'), MAX_ETAT).toString('utf8')); validerEtatSession(v, id); sauvegarde = true; } catch { /* Offre seulement une copie validée. */ }
+        try { importAbandonne = Date.now() - fs.statSync(fichierSession(id, 'importation')).mtimeMs > 30_000; } catch { /* Ancien import absent. */ }
+        if (importAbandonne) message ||= 'Ancien import interrompu : verrou conservé.';
+        return message ? [{ id, message, sauvegarde, importAbandonne }] : [];
+    });
+}
+export function restaurerEtatSession(id: string, source = fichierSession(id, 'etat.sauvegarde.json')): string {
+    return sousVerrou(fichierSession(id, 'operation'), () => {
+        const liberer = prendreVerrou(fichierSession(id, 'execution')); if (!liberer) throw new Error('Session encore utilisée : récupération refusée.');
+        try {
+            const verrou = fichierSession(id, 'verrou');
+            try { const v = JSON.parse(lireFichierBorne(verrou, 8192).toString('utf8')); if (processusVivant(v.pid || v.lancement, v.demarragePoste)) throw new Error('Un processus utilise encore cette session.'); }
+            catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
+            const s = JSON.parse(lireFichierBorne(source, MAX_ETAT).toString('utf8')); validerEtatSession(s, id);
+            const copie = fichierSession(id, `etat.avant-recuperation-${randomUUID()}.json`);
+            try { fs.writeFileSync(copie, lireFichierBorne(fichierSession(id, 'etat.json'), MAX_ETAT), { flag: 'wx', mode: 0o600 }); }
+            catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
+            s.etat = 'arretee'; s.issue = 'cancelled'; s.erreur = 'Session récupérée : relis la conversation avant de reprendre.';
+            s.pid = undefined; s.demarragePoste = undefined; s.permission = undefined; s.terminalExterne = undefined; s.maj = Date.now();
+            ecrireAtomique(fichierSession(id, 'etat.json'), s);
+            for (const nom of ['verrou', 'requete.json', 'importation']) {
+                const f = fichierSession(id, nom); verifierCheminLocal(f);
+                if (fs.existsSync(f)) fs.renameSync(f, fichierSession(id, `${nom}.recup-${randomUUID()}`));
+            }
+            return copie;
+        } finally { liberer(); }
+    });
 }
 export function validerReponsePermission(r: unknown): ReponsePermission {
     if (!objet(r) || typeof r.accepte !== 'boolean' || !option(r, 'reponses', (v) => objet(v) && Object.values(v).every(texte)))

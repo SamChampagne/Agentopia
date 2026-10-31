@@ -1,5 +1,13 @@
 # Agentopia 1.4 — bêta Windows
 
+La bêta **1.4.0-beta.13** reprend les 12 priorités de stabilisation et les 8 améliorations de l’audit. [Guide et portée des changements](ameliorations-mn.md).
+
+- **Conversations** : saisie multiligne, recherche dans l’historique, export Markdown/JSONL, choix du modèle et événements Claude progressifs.
+- **Équipes** : file globale et plafonds par fournisseur, conservation des tentatives et coûts connus, reprise des conflits dans le même worktree, préparation explicite des dépendances, recettes comparaison et revue croisée.
+- **Fiabilité et sécurité** : origine GitLab stricte, coffre atomique avec récupération, planifications corrompues bloquées, processus Git annulables, import transactionnel, sauvegarde du profil et diagnostics locaux sans contenu des conversations.
+- **Vérifications** : JS/TS, Python, .NET et commandes explicites de `agentopia.json`, avec commande visible, confirmation, journal borné et preuve liée au projet.
+- **Windows** : entretien des anciennes versions et désinstallation qui conserve les données. Signature d’éditeur prévue dans la construction/CI ; cette bêta reste non signée en l’absence de certificat configuré.
+
 La bêta **1.4.0-beta.12** renforce la sécurité des sessions, des lancements Windows et de l’installation, tout en conservant les écrans actuels. [Audit détaillé, preuves et limites](https://github.com/SamChampagne/Agentopia/blob/agentopia-1.4.0-beta.12/docs/audit-securite-2026-10-30.md).
 
 - **Sessions** : les identités incohérentes, réponses de permission invalides et fichiers redirigés sont refusés. Un réimport Codex ne vide plus un historique dont l’état est corrompu ou absent.

@@ -85,7 +85,10 @@ test('commande réelle : code, dates, HEAD, journal persistent ; aucun changemen
     assert.equal(v.etatVerification(p, await v.capturerProjet(f.dossier)), 'reussi');
     assert.equal(fs.readFileSync(CHEMINS.equipes, 'utf8'), etat, 'Une commande réussie ne doit ni fusionner ni terminer une équipe');
     assert.equal(v.lirePreuvesVerification(f.equipe.id)[0].codeSortie, 0);
-    assert.equal(v.etatVerification({ ...p, resultat: 'en cours' }), 'inconnu', 'Un reçu final non écrit ne prouve pas l’arrêt des descendants');
+    // Windows réutilise vite les PID sous la suite parallèle. Modéliser un reçu
+    // orphelin avec un PID vérifié absent, sans dépendre de l'ancien PID du runner.
+    let pidAbsent = 1_000_000_000; while (processusVivant(pidAbsent)) pidAbsent++;
+    assert.equal(v.etatVerification({ ...p, pidExecution: pidAbsent, resultat: 'en cours' }), 'inconnu', 'Un reçu final non écrit ne prouve pas l’arrêt des descendants');
     assert.ok(!path.relative(f.dossier, p.journal).startsWith('runtime'));
     fs.writeFileSync(path.join(f.dossier, 'source.txt'), 'après vérification');
     assert.equal(v.etatVerification(p, await v.capturerProjet(f.dossier)), 'perime');
@@ -216,4 +219,31 @@ test('parent terminé et fermeture des flux non confirmée : conserver le marque
         if (fs.existsSync(fichier)) await arreterPID(Number(fs.readFileSync(fichier, 'utf8')));
         await arreterPID(p?.pidExecution);
     }
+});
+
+test('commande projet explicite : vraie exécution Node et preuve invalidée si arguments modifiés', async () => {
+    const f = fixture('verification-personnalisee');
+    const manifeste = { verifications: [{ nom: 'smoke', programme: 'node', args: ['-e', "console.log('VERIFICATION_EXPLICITE_OK')"] }] };
+    const fichier = path.join(f.dossier, 'agentopia.json');
+    fs.writeFileSync(fichier, JSON.stringify(manifeste));
+    const commande = v.detecterVerifications(f.dossier).commandes.find((c) => c.script === 'projet:smoke');
+    assert.ok(commande);
+    const preuve = await v.executerVerification(f.cible, commande);
+    assert.equal(preuve.resultat, 'reussi');
+    assert.match(v.lireJournalVerification(preuve), /VERIFICATION_EXPLICITE_OK/);
+    manifeste.verifications[0].args[1] = 'process.exit(2)';
+    fs.writeFileSync(fichier, JSON.stringify(manifeste));
+    await assert.rejects(v.executerVerification(f.cible, commande), /changé/);
+});
+
+test('Python réel : unittest détecté, résultat et journal conservés', async (t) => {
+    const f = fixture('verification-python');
+    fs.writeFileSync(path.join(f.dossier, 'pyproject.toml'), '[project]\nname="fixture-agentopia"\nversion="0.0.0"\n');
+    fs.mkdirSync(path.join(f.dossier, 'tests'));
+    fs.writeFileSync(path.join(f.dossier, 'tests', 'test_fixture.py'), 'import unittest\nclass Fixture(unittest.TestCase):\n    def test_execution(self):\n        self.assertEqual(2 + 2, 4)\n');
+    const commande = v.detecterVerifications(f.dossier).commandes.find((c) => c.script === 'python:unittest');
+    if (!commande) { t.skip('Python absent du PATH de ce runner'); return; }
+    const preuve = await v.executerVerification(f.cible, commande);
+    assert.equal(preuve.resultat, 'reussi', v.lireJournalVerification(preuve));
+    assert.match(v.lireJournalVerification(preuve), /Ran 1 test/);
 });

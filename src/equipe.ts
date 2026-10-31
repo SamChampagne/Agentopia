@@ -11,15 +11,18 @@ import { trouverDepot } from './git.js';
 import { toast } from './notifications.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { validerDependances } from './equipePlan.js';
-import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
+import { FOURNISSEURS, capacitesFournisseur, type Fournisseur } from './providers/types.js';
 import { disponibilite } from './providers/config.js';
-import { RACINE_SESSIONS, creerIntegree, envoyerIntegree, lireIntegree, ecrireAtomique } from './sessionsIntegrees.js';
+import { RACINE_SESSIONS, creerIntegree, envoyerIntegree, lireIntegree, sauverIntegree, ecrireAtomique } from './sessionsIntegrees.js';
 import { commanderMoteur, localAuMoteur, moteurEnPause } from './moteurClient.js';
 import { sousVerrou } from './verrou.js';
 import { validerDefinitions, type DefinitionTache } from './modelesEquipes.js';
 import { lireStockageEquipes, ecrireStockageEquipes, restaurerStockageEquipes, sauvegardeEquipes } from './stockageEquipes.js';
 import { listerIntegrees, interrompreIntegree } from './sessionsIntegrees.js';
 import { dependanteDemarree, erreurSelectionIntegration, verifierIntegration } from './validationEquipe.js';
+import { gitVerifieAsync as gitVerifie, gitExecution } from './gitExecution.js';
+import { capaciteAgents, raisonCapacite, reserverCapacite, reserverPreparationAgent, ordreFile, equipeServie } from './fileAgents.js';
+import { preparerWorktree } from './preparationWorktrees.js';
 
 // Équipe d'agents sur un projet :
 //   1. un chef d'équipe (claude -p, lecture seule) découpe l'objectif en tâches, chacune avec un rôle métier
@@ -63,6 +66,11 @@ export const MODELES_EQUIPE: { nom: string; objectif: string }[] = [
 export type EtatTache = 'attente' | 'en cours' | 'bloquee' | 'faite' | 'erreur' | 'arretee';
 
 export interface Tache {
+    modele?: string;
+    lectureSeule?: boolean;
+    tentatives?: Omit<Tache, 'tentatives'>[];
+    preparation?: { etat: 'en cours' | 'conflit' | 'erreur' | 'prete'; message?: string; journal?: string };
+    attenteFile?: string;
     fournisseur?: Fournisseur;
     tentative?: string;
     id: string;
@@ -186,7 +194,7 @@ export const equipeDe = (id: string): Equipe | undefined => liste.find((e) => e.
 export const peutModifierPlan = (e: Equipe): boolean => !!e.mixte && !e.archivee && e.etat === 'plan' && !e.integrateur
     && e.taches.every((t) => t.etat === 'attente' && !t.agentId && !t.cwd && !t.debut);
 export const empreintePlan = (e: Equipe): string => createHash('sha256').update(JSON.stringify({ objectif: e.objectif,
-    taches: e.taches.map(({ id, titre, fournisseur, consigne, dependances }) => ({ id, titre, fournisseur, consigne, dependances })) })).digest('hex');
+    taches: e.taches.map(({ id, titre, fournisseur, consigne, dependances, modele, lectureSeule }) => ({ id, titre, fournisseur, consigne, dependances, modele, lectureSeule })) })).digest('hex');
 export interface ModificationPlan { attendu: string; objectif: string; taches: DefinitionTache[] }
 export async function modifierPlan(id: string, modification: ModificationPlan): Promise<string | undefined> {
     if (!localAuMoteur()) return commanderMoteur('modifier-plan', id, undefined, modification);
@@ -230,7 +238,7 @@ export function estDeConfiance(dossier: string): boolean {
     }
 }
 
-const git = (args: string[], cwd: string) => spawnSync('git', args, { cwd, encoding: 'utf-8' }).stdout?.trim() ?? '';
+const git = (args: string[], cwd: string) => spawnSync('git', args, { cwd, encoding: 'utf-8', windowsHide: true, timeout: 10_000 }).stdout?.trim() ?? '';
 
 // ─── Création et plan ────────────────────────────────────────────────────────
 
@@ -318,13 +326,13 @@ export async function planifier(e: Equipe): Promise<void> {
 
 // ─── Exécution ───────────────────────────────────────────────────────────────
 
-function erreurAvantLancement(e: Equipe, taches: Tache[]): string | undefined {
+async function erreurAvantLancement(e: Equipe, taches: Tache[]): Promise<string | undefined> {
     try { validerDependances(e.taches); } catch (err) { return (err as Error).message; }
     if (e.mixte) {
         for (const f of new Set(taches.map((t) => t.fournisseur!))) {
             const d = disponibilite(f); if (!d.pret) return `${FOURNISSEURS[f].nom} : ${d.texte}`;
         }
-        if (modifsLocales(e)) return 'Commite ou range tes modifications locales avant de lancer : les agents partent du dernier commit.';
+        if (await modifsLocalesAsync(e)) return 'Commite ou range tes modifications locales avant de lancer : les agents partent du dernier commit.';
     } else if (!estDeConfiance(e.projet)) {
         return `Claude n'a jamais été ouvert dans ${e.projet} : lance-le une fois dans un onglet et accepte « Trust this folder », puis relance l'équipe`;
     }
@@ -340,11 +348,22 @@ function erreurAvantRelance(e: Equipe, taches: Tache[]): string | undefined {
 }
 
 function reinitialiserTache(t: Tache): void {
+    if (t.agentId || t.cwd || t.debut) {
+        const { tentatives, ...avant } = t;
+        t.tentatives = [...(tentatives || []), structuredClone(avant)];
+    }
     Object.assign(t, { etat: 'attente', agentId: undefined, sessionId: undefined, branche: undefined, cwd: undefined,
-        resultat: undefined, debut: undefined, fin: undefined, vuTravailler: false, absentDepuis: undefined, tentative: randomUUID().slice(0, 8) });
+        resultat: undefined, debut: undefined, fin: undefined, vuTravailler: false, absentDepuis: undefined, preparation: undefined, attenteFile: undefined, tentative: randomUUID().slice(0, 8) });
 }
 
-export async function lancerEquipe(id: string): Promise<string | undefined> {
+const mutations = new Set<string>();
+const integrationsReservees = new Map<string, string>();
+async function mutationEquipe(id: string, action: () => Promise<string | undefined>): Promise<string | undefined> {
+    if (mutations.has(id)) return 'Une autre opération est en cours sur cette équipe';
+    mutations.add(id); try { return await action(); } finally { mutations.delete(id); }
+}
+export function lancerEquipe(id: string): Promise<string | undefined> { return mutationEquipe(id, () => lancerEquipeInterne(id)); }
+async function lancerEquipeInterne(id: string): Promise<string | undefined> {
     if (!localAuMoteur()) return commanderMoteur('lancer', id);
     const e = equipeDe(id);
     if (!e || e.archivee) return 'équipe introuvable';
@@ -354,10 +373,10 @@ export async function lancerEquipe(id: string): Promise<string | undefined> {
     if (e.etat === 'integration') return 'L’intégration est déjà en cours';
     if (e.integrateur) return 'Une intégration a déjà démarré. Reprends-la depuis Actions pour conserver ses changements';
     const relancees = e.taches.filter((t) => t.etat === 'arretee' || t.etat === 'erreur');
-    const erreur = erreurAvantRelance(e, relancees) || erreurAvantLancement(e, e.taches);
+    const erreur = erreurAvantRelance(e, relancees) || await erreurAvantLancement(e, e.taches);
     if (erreur) return erreur;
     // Le projet peut avoir avancé depuis la création du plan. Les reprises gardent leur base.
-    if (e.mixte && peutModifierPlan(e)) e.base = gitVerifie(['rev-parse', '--verify', 'HEAD'], e.projet);
+    if (e.mixte && peutModifierPlan(e)) e.base = await gitVerifie(['rev-parse', '--verify', 'HEAD'], e.projet);
     for (const t of relancees) reinitialiserTache(t);
     e.etat = 'en cours';
     e.message = undefined;
@@ -399,8 +418,13 @@ Termine par un résumé : branches fusionnées, conflits résolus, état de la c
 }
 
 const enLancement = new Set<Tache>();
+const preparations = new Map<Tache, { equipe: string; controle: AbortController }>();
+export function interromprePreparationEquipe(id?: string): void {
+    for (const p of preparations.values()) if (!id || p.equipe === id) p.controle.abort();
+}
 const lancements = new Set<Promise<void>>();
 export async function attendreLancements(): Promise<void> { await Promise.allSettled([...lancements]); }
+export const lancementsEnCours = () => lancements.size > 0;
 function suivreLancement(p: Promise<void>): void { lancements.add(p); void p.finally(() => lancements.delete(p)).catch(() => {}); }
 
 async function demarrer(e: Equipe, t: Tache, dansWorktree: boolean, envoyer = envoyerIntegree): Promise<void> {
@@ -427,12 +451,6 @@ async function demarrer(e: Equipe, t: Tache, dansWorktree: boolean, envoyer = en
     } finally { enLancement.delete(t); sauver(); }
 }
 
-function gitVerifie(args: string[], cwd: string): string {
-    const r = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
-    if (r.status !== 0) throw new Error(r.stderr?.trim() || r.error?.message || 'Git a échoué');
-    return r.stdout.trim();
-}
-
 export function contexteDependances(e: Equipe, t: Tache): string {
     return t.dependances.map((id) => e.taches.find((d) => d.id === id)!).map((d) =>
         `--- ${d.id} · ${d.titre} · ${d.fournisseur || 'claude'} ---\n${d.resultat || '(aucun résumé)'}\n${d.branche ? `Branche : ${d.branche}` : ''}`).join('\n\n');
@@ -440,12 +458,17 @@ export function contexteDependances(e: Equipe, t: Tache): string {
 
 async function demarrerMixte(e: Equipe, t: Tache, dansWorktree: boolean, envoyer = envoyerIntegree): Promise<void> {
     enLancement.add(t);
+    const controle = new AbortController(); preparations.set(t, { equipe: e.id, controle });
     t.debut = Date.now(); t.etat = 'en cours';
+    t.preparation = { etat: 'en cours', message: 'Préparation du dossier de travail' };
     fs.mkdirSync(RACINE_SESSIONS, { recursive: true });
     t.tentative ||= randomUUID().slice(0, 8);
     const reservation = path.join(RACINE_SESSIONS, `equipe-${e.id}-${t.id}-${t.tentative}.json`);
     let possede = false;
+    let place: ReturnType<typeof reserverPreparationAgent> | undefined;
     try {
+        try { place = reserverPreparationAgent(`${e.id}/${t.id}/${t.tentative}`, t.fournisseur!); }
+        catch (err) { t.etat = 'attente'; t.attenteFile = (err as Error).message; t.debut = undefined; return; }
         try {
             fs.writeFileSync(reservation, JSON.stringify({ debut: t.debut }), { flag: 'wx', mode: 0o600 });
             possede = true;
@@ -458,30 +481,54 @@ async function demarrerMixte(e: Equipe, t: Tache, dansWorktree: boolean, envoyer
             return;
         }
         let cwd = e.projet;
-        if (dansWorktree && t.fournisseur !== 'perplexity') {
+        if (dansWorktree && capacitesFournisseur(t.fournisseur!).code) {
             const branche = `ct/equipe-${e.id}/${t.id}-${t.tentative}`;
             cwd = path.join(RACINE_SESSIONS, 'worktrees', `${e.id}-${t.id}-${t.tentative}`);
             fs.mkdirSync(path.dirname(cwd), { recursive: true });
-            gitVerifie(['worktree', 'add', '-b', branche, cwd, e.base || 'HEAD'], e.projet);
+            await gitVerifie(['worktree', 'add', '-b', branche, cwd, e.base || 'HEAD'], e.projet, { signal: controle.signal, timeoutMs: 120_000 });
             t.cwd = cwd; t.branche = branche;
-            for (const id of t.dependances) {
-                const d = e.taches.find((x) => x.id === id)!;
-                if (d.branche) gitVerifie(['merge', '--no-edit', d.branche], cwd);
-            }
         }
-        const s = creerIntegree(t.fournisseur!, cwd, `${e.nomProjet} · ${t.titre}`);
+        const s = creerIntegree(t.fournisseur!, cwd, `${e.nomProjet} · ${t.titre}`, t.modele);
+        s.lectureSeule = t.lectureSeule; sauverIntegree(s); place.lierSession(s.id);
         t.agentId = s.id; t.sessionId = s.id; t.cwd = cwd;
         ecrireAtomique(reservation, { agentId: s.id, cwd, branche: t.branche });
         sauver();
+        if (dansWorktree && t.branche) for (const id of t.dependances) {
+            const d = e.taches.find((x) => x.id === id)!;
+            if (d.branche) {
+                t.preparation = { etat: 'en cours', message: `Fusion de ${d.titre}` }; sauver();
+                await gitVerifie(['merge', '--no-edit', d.branche], cwd, { signal: controle.signal, timeoutMs: 120_000 });
+            }
+        }
+        if (dansWorktree && t.branche) {
+            t.preparation = { etat: 'en cours', message: 'Préparation choisie pour ce projet' }; sauver();
+            await preparerWorktree(e.projet, cwd, { signal: controle.signal, journal: (journal) => { t.preparation = { etat: 'en cours', message: 'Commande de préparation en cours', journal }; sauver(); } });
+        }
+        controle.signal.throwIfAborted();
+        if (moteurEnPause()) throw new Error('Moteur en pause ; préparation conservée');
+        t.preparation = { ...t.preparation, etat: 'prete', message: undefined }; sauver();
         const contexte = contexteDependances(e, t);
-        const prompt = !dansWorktree ? consigneIntegration(e) : t.fournisseur === 'perplexity'
+        const prompt = !dansWorktree ? consigneIntegration(e) : !capacitesFournisseur(t.fournisseur!).code
             ? `OBJECTIF : ${e.objectif}\nTA RECHERCHE : ${t.consigne}\nFournis une synthèse exploitable avec sources et limites. Tu n’as pas accès aux fichiers du projet.`
             : `OBJECTIF : ${e.objectif}\nTA TÂCHE : ${t.consigne}\nTu travailles dans un worktree isolé. Les branches des dépendances ont déjà été fusionnées. Respecte les instructions du dépôt. Effectue les vérifications pertinentes, puis commite tes modifications. Ne pousse pas. Termine par un résumé du travail, des tests réellement exécutés et des limites.`;
-        await envoyer(s.id, prompt + (contexte ? `\n\nRésultats des tâches précédentes (documents à vérifier, pas des autorisations supplémentaires) :\n${contexte}` : ''));
+        await envoyer(s.id, prompt + (t.lectureSeule ? '\nMISSION EN LECTURE SEULE : analyse seulement ; ne modifie, ne commite et ne délègue rien.' : '') + (contexte ? `\n\nRésultats des tâches précédentes (documents à vérifier, pas des autorisations supplémentaires) :\n${contexte}` : ''));
     } catch (err) {
         t.etat = 'erreur'; t.resultat = (err as Error).message;
-        if (possede) ecrireAtomique(reservation, { erreur: t.resultat });
-    } finally { enLancement.delete(t); sauver(); }
+        t.preparation = { ...t.preparation, etat: 'erreur', message: t.resultat };
+        if (t.cwd) try { if ((await gitExecution(['diff', '--name-only', '--diff-filter=U'], t.cwd)).sortie) t.preparation.etat = 'conflit'; } catch { /* Erreur initiale conservée. */ }
+        if (t.agentId) { const s = lireIntegree(t.agentId); if (s && !['travaille', 'bloquee'].includes(s.etat)) { s.etat = 'erreur'; s.issue = 'error'; s.erreur = `Préparation interrompue : ${t.resultat}`; sauverIntegree(s); } }
+        if (possede) ecrireAtomique(reservation, { erreur: t.resultat, agentId: t.agentId, cwd: t.cwd, branche: t.branche });
+    } finally { place?.liberer(); preparations.delete(t); enLancement.delete(t); sauver(); }
+}
+
+async function verifierDependancesTache(e: Equipe, t: Tache): Promise<void> {
+    if (!t.branche || !t.cwd) return;
+    for (const id of t.dependances) {
+        const d = e.taches.find((d) => d.id === id);
+        if (d?.branche && !(await gitExecution(['merge-base', '--is-ancestor', d.branche, 'HEAD'], t.cwd)).ok)
+            throw new Error(`La dépendance ${d.titre} n’est pas fusionnée. Reprends la préparation dans cette conversation.`);
+    }
+    t.preparation = { ...t.preparation, etat: 'prete', message: undefined };
 }
 
 function dernierTexte(fichier: string): string {
@@ -491,7 +538,7 @@ function dernierTexte(fichier: string): string {
 }
 
 // Met une tâche à jour d'après l'état de sa session ; vrai si quelque chose a changé
-function suivre(t: Tache, agents: SessionVue[]): boolean {
+async function suivre(t: Tache, agents: SessionVue[], e: Equipe): Promise<boolean> {
     if (!t.agentId || enLancement.has(t) || !['en cours', 'bloquee'].includes(t.etat)) return false;
     const avant = JSON.stringify(t);
     if (t.fournisseur) {
@@ -501,8 +548,9 @@ function suivre(t: Tache, agents: SessionVue[]): boolean {
         else if (s.etat === 'travaille') t.etat = 'en cours';
         else if (s.issue === 'success') {
             try {
-                if (t.fournisseur !== 'perplexity' && gitVerifie(['status', '--porcelain'], s.cwd)) throw new Error('L’agent a terminé avec des modifications non commitées. Ouvre sa session pour les vérifier et les commiter, puis relance la tâche.');
+                if (capacitesFournisseur(t.fournisseur).code && await gitVerifie(['status', '--porcelain'], s.cwd)) throw new Error('L’agent a terminé avec des modifications non commitées. Ouvre sa session pour les vérifier et les commiter, puis relance la tâche.');
                 if (!s.resultat?.trim()) throw new Error('L’agent a terminé sans résumé exploitable');
+                await verifierDependancesTache(e, t);
                 t.etat = 'faite'; t.fin = Date.now(); t.resultat = s.resultat;
             } catch (err) { t.etat = 'erreur'; t.resultat = (err as Error).message; }
         } else if (s.issue) { t.etat = s.issue === 'cancelled' ? 'arretee' : 'erreur'; t.resultat = s.erreur; }
@@ -530,10 +578,10 @@ function suivre(t: Tache, agents: SessionVue[]): boolean {
             t.resultat = dernierTexte(a.fichier);
             try {
                 if (!t.resultat) throw new Error('La session est terminée sans résumé exploitable');
-                if (gitVerifie(['status', '--porcelain'], a.cwd)) throw new Error('La session a laissé des modifications non commitées');
+                if (await gitVerifie(['status', '--porcelain'], a.cwd)) throw new Error('La session a laissé des modifications non commitées');
                 t.etat = 'faite'; t.fin = maintenant;
                 // L'intégrateur garde sa destination initiale pour détecter un changement de branche.
-                if (t.role !== 'integrateur') t.branche = gitVerifie(['branch', '--show-current'], a.cwd) || undefined;
+                if (t.role !== 'integrateur') t.branche = await gitVerifie(['branch', '--show-current'], a.cwd) || undefined;
             } catch (err) { t.etat = 'erreur'; t.resultat = (err as Error).message; }
         } else if (a.statut === 'attend') {
             t.etat = 'bloquee';
@@ -544,16 +592,26 @@ function suivre(t: Tache, agents: SessionVue[]): boolean {
 }
 
 // Appelé à chaque relevé des sessions (toutes les 2,5 s)
-export function avancerEquipes(agents: SessionVue[], services = { envoyer: envoyerIntegree, notifier: toast }): void {
+export async function avancerEquipes(agents: SessionVue[], services = { envoyer: envoyerIntegree, notifier: toast }): Promise<void> {
     let change = false;
-    for (const e of lireEquipes()) {
+    // Le moteur tient cette réservation en mémoire jusqu'à la création effective des sessions.
+    const capacite = capaciteAgents(lireEquipes());
+    for (const e of ordreFile(lireEquipes())) {
         if (e.etat === 'en cours') {
-            for (const t of e.taches) change = suivre(t, agents) || change;
+            for (const t of e.taches) change = await suivre(t, agents, e) || change;
             const parallele = Math.max(1, chargerConfig().equipe?.parallele || 3);
             let actives = e.taches.filter((t) => t.etat === 'en cours' || t.etat === 'bloquee').length;
             const prete = (t: Tache) => t.etat === 'attente' && t.dependances.every((d) => e.taches.find((x) => x.id === d)?.etat === 'faite');
+            for (const t of e.taches.filter((t) => t.etat === 'attente')) {
+                const raison = !prete(t) ? 'Attend les dépendances' : actives >= parallele ? `Plafond par équipe atteint (${actives}/${parallele})` : raisonCapacite(capacite, t.fournisseur);
+                if (t.attenteFile !== raison) { t.attenteFile = raison; change = true; }
+            }
             for (const t of e.taches.filter(prete)) {
                 if (actives >= parallele) break;
+                const raison = raisonCapacite(capacite, t.fournisseur);
+                if (raison) { t.attenteFile = raison; change = true; continue; }
+                reserverCapacite(capacite, t.fournisseur); t.attenteFile = undefined;
+                equipeServie(e.id);
                 actives++;
                 suivreLancement(demarrer(e, t, true, services.envoyer));
             }
@@ -567,9 +625,9 @@ export function avancerEquipes(agents: SessionVue[], services = { envoyer: envoy
                 change = true;
             }
         } else if (e.etat === 'integration' && e.integrateur) {
-            change = suivre(e.integrateur, agents) || change;
+            change = await suivre(e.integrateur, agents, e) || change;
             if (e.integrateur.etat === 'faite') {
-                try { verifierIntegration(e); }
+                try { await verifierIntegration(e); }
                 catch (err) { e.integrateur.etat = 'erreur'; e.integrateur.fin = undefined; e.integrateur.resultat = (err as Error).message; }
             }
             if (e.integrateur.etat === 'faite') {
@@ -590,18 +648,29 @@ export function avancerEquipes(agents: SessionVue[], services = { envoyer: envoy
 export function modifsLocales(e: Equipe): number {
     return git(['status', '--porcelain'], e.projet).split('\n').filter(Boolean).length;
 }
+async function modifsLocalesAsync(e: Equipe): Promise<number> { return (await gitVerifie(['status', '--porcelain'], e.projet)).split('\n').filter(Boolean).length; }
 
 const cheminComparable = (p: string): string => {
     let n = path.resolve(p); try { n = fs.realpathSync.native(n); } catch { /* Le diagnostic Git précis suit si le dossier est inaccessible. */ }
     return process.platform === 'win32' ? n.toLowerCase() : n;
 };
 function autreIntegration(e: Equipe): string | undefined {
+    const reservee = integrationsReservees.get(cheminComparable(e.projet));
+    if (reservee && reservee !== e.id) return `Une autre équipe prépare déjà l’intégration dans ce dossier (${reservee})`;
     // Ranger une équipe demande l'arrêt ; le worker peut être encore en train de terminer.
     const autre = liste.find((a) => a.id !== e.id && cheminComparable(a.projet) === cheminComparable(e.projet)
         && ((!a.archivee && a.etat === 'integration') || !!a.integrateur?.agentId && ['travaille', 'bloquee'].includes(lireIntegree(a.integrateur.agentId)?.etat || '')));
     return autre ? `Une autre équipe intègre déjà dans ce dossier (${autre.id}). Attends sa fin avant d’intégrer` : undefined;
 }
-export async function integrer(id: string, envoyer = envoyerIntegree): Promise<string | undefined> {
+async function reserverIntegration(id: string, action: () => Promise<string | undefined>): Promise<string | undefined> {
+    const e = equipeDe(id); if (!e) return 'équipe introuvable';
+    const cle = cheminComparable(e.projet), autre = integrationsReservees.get(cle);
+    if (autre && autre !== id) return `Une autre équipe prépare déjà l’intégration dans ce dossier (${autre})`;
+    integrationsReservees.set(cle, id);
+    try { return await action(); } finally { if (integrationsReservees.get(cle) === id) integrationsReservees.delete(cle); }
+}
+export function integrer(id: string, envoyer = envoyerIntegree): Promise<string | undefined> { return mutationEquipe(id, () => reserverIntegration(id, () => integrerInterne(id, envoyer))); }
+async function integrerInterne(id: string, envoyer = envoyerIntegree): Promise<string | undefined> {
     if (!localAuMoteur()) return commanderMoteur('integrer', id);
     const e = equipeDe(id);
     if (!e || e.archivee) return 'équipe introuvable';
@@ -610,17 +679,19 @@ export async function integrer(id: string, envoyer = envoyerIntegree): Promise<s
     if (e.etat === 'finie') return 'Cette équipe est déjà intégrée';
     const occupee = autreIntegration(e); if (occupee) return occupee;
     if (e.mixte && e.integrateur?.agentId) return 'Reprends l’intégration existante dans Actions pour conserver sa conversation et ses changements';
+    const capacite = raisonCapacite(capaciteAgents(lireEquipes()), e.taches.find((t) => t.fournisseur && capacitesFournisseur(t.fournisseur).code)?.fournisseur);
+    if (capacite) return `${capacite} · consulte /file-agents, puis réessaie l’intégration`;
     const selection = erreurSelectionIntegration(e); if (selection) return selection;
-    if (modifsLocales(e)) return 'Le dossier du projet contient des modifications non commitées : range-les avant l’intégration';
+    if (await modifsLocalesAsync(e)) return 'Le dossier du projet contient des modifications non commitées : range-les avant l’intégration';
     if (e.mixte && e.taches.some((t) => !t.ecartee && t.etat !== 'faite')) return 'Attends la fin des tâches ou écarte celles qui ont échoué avant d’intégrer';
     if (!e.taches.some((t) => t.branche && !t.ecartee)) return 'aucune branche à fusionner (toutes écartées ?)';
     let branche: string | undefined;
-    try { branche = gitVerifie(['branch', '--show-current'], e.projet); }
+    try { branche = await gitVerifie(['branch', '--show-current'], e.projet); }
     catch (err) { return (err as Error).message; }
     if (!branche) return 'Le projet n’est sur aucune branche. Choisis une branche Git avant d’intégrer';
     e.integrateur = { id: 'integration', titre: 'Intégration', role: 'integrateur', consigne: '', dependances: [], etat: 'attente',
         branche,
-        fournisseur: e.mixte ? e.taches.find((t) => t.fournisseur !== 'perplexity')?.fournisseur : undefined, tentative: randomUUID().slice(0, 8) };
+        fournisseur: e.mixte ? e.taches.find((t) => t.fournisseur && capacitesFournisseur(t.fournisseur).code)?.fournisseur : undefined, tentative: randomUUID().slice(0, 8) };
     e.etat = 'integration';
     e.message = undefined;
     await demarrer(e, e.integrateur, false, envoyer);
@@ -630,6 +701,8 @@ export async function integrer(id: string, envoyer = envoyerIntegree): Promise<s
 export async function arreterEquipe(id: string): Promise<void> {
     if (!localAuMoteur()) return commanderMoteur('arreter', id);
     const e = equipeDe(id);
+    interromprePreparationEquipe(id);
+    for (let i = 0; i < 350 && [...preparations.values()].some((p) => p.equipe === id); i++) await new Promise((ok) => setTimeout(ok, 20));
     if (!e || e.archivee || e.etat === 'finie') return;
     const actives = [...e.taches, ...(e.integrateur ? [e.integrateur] : [])].filter((t) => t.agentId && (t.etat === 'en cours' || t.etat === 'bloquee'));
     await Promise.all(actives.map((t) => arreterArrierePlan(t.agentId!)));
@@ -641,7 +714,8 @@ export async function arreterEquipe(id: string): Promise<void> {
     sauver();
 }
 
-export async function relancerTache(id: string, tache: string): Promise<string | undefined> {
+export function relancerTache(id: string, tache: string): Promise<string | undefined> { return mutationEquipe(id, () => relancerTacheInterne(id, tache)); }
+async function relancerTacheInterne(id: string, tache: string): Promise<string | undefined> {
     if (!localAuMoteur()) return commanderMoteur('relancer', id, tache);
     const e = equipeDe(id);
     const t = e?.taches.find((x) => x.id === tache);
@@ -650,7 +724,7 @@ export async function relancerTache(id: string, tache: string): Promise<string |
     if (e.integrateur) return 'Une intégration a déjà démarré. Reprends-la depuis Actions pour conserver ses changements';
     if (moteurEnPause()) return 'Moteur en pause · Reprends le moteur avant de relancer';
     if (['en cours', 'bloquee'].includes(t.etat)) return 'Cette tâche est encore active ; interromps-la avant de la relancer';
-    const erreur = erreurAvantRelance(e, [t]) || erreurAvantLancement(e, [t]);
+    const erreur = erreurAvantRelance(e, [t]) || await erreurAvantLancement(e, [t]);
     if (erreur) return erreur;
     reinitialiserTache(t);
     e.etat = 'en cours'; e.message = undefined;
@@ -658,7 +732,16 @@ export async function relancerTache(id: string, tache: string): Promise<string |
     return undefined;
 }
 
-export async function reprendreTache(id: string, tache: string, envoyer = envoyerIntegree): Promise<string | undefined> {
+export async function annulerAttenteTache(id: string, tache: string): Promise<void> {
+    if (!localAuMoteur()) return commanderMoteur('annuler-attente', id, tache);
+    const e = equipeDe(id), t = e?.taches.find((t) => t.id === tache);
+    if (!e || !t || t.etat !== 'attente') throw new Error('Cette tâche a déjà quitté la file. Consulte son état.');
+    t.etat = 'arretee'; t.attenteFile = undefined; t.resultat = 'Attente annulée par l’utilisateur ; aucune nouvelle exécution.';
+    sauver();
+}
+
+export function reprendreTache(id: string, tache: string, envoyer = envoyerIntegree): Promise<string | undefined> { return mutationEquipe(id, () => tache === 'integration' ? reserverIntegration(id, () => reprendreTacheInterne(id, tache, envoyer)) : reprendreTacheInterne(id, tache, envoyer)); }
+async function reprendreTacheInterne(id: string, tache: string, envoyer = envoyerIntegree): Promise<string | undefined> {
     if (!localAuMoteur()) return commanderMoteur('reprendre', id, tache);
     const e = equipeDe(id), integration = tache === 'integration', t = integration ? e?.integrateur : e?.taches.find((t) => t.id === tache);
     if (!e?.mixte || !t?.agentId || !t.fournisseur) return 'Cette tâche ne possède pas de conversation intégrée à reprendre';
@@ -674,9 +757,10 @@ export async function reprendreTache(id: string, tache: string, envoyer = envoye
     const s = lireIntegree(t.agentId);
     if (!s || s.fournisseur !== t.fournisseur || path.resolve(s.cwd) !== path.resolve(t.cwd || e.projet)) return 'La conversation ne correspond plus au dossier de cette tâche';
     if (['travaille', 'bloquee'].includes(s.etat)) return 'L’agent est encore actif. Attends son arrêt ou réponds à sa permission';
+    const capacite = raisonCapacite(capaciteAgents(lireEquipes()), t.fournisseur); if (capacite) return `${capacite} · consulte /file-agents`;
     if (!fs.existsSync(s.cwd)) return 'Le dossier de travail a disparu. Recommence dans une nouvelle branche';
     if (t.branche) {
-        try { if (gitVerifie(['branch', '--show-current'], s.cwd) !== t.branche) return `La branche du dossier a changé. Rétablis ${t.branche} avant de reprendre cette tâche`; }
+        try { if (await gitVerifie(['branch', '--show-current'], s.cwd) !== t.branche) return `La branche du dossier a changé. Rétablis ${t.branche} avant de reprendre cette tâche`; }
         catch (err) { return `Impossible de vérifier la branche : ${(err as Error).message}`; }
     }
     const d = disponibilite(t.fournisseur); if (!d.pret) return d.texte;
@@ -686,6 +770,7 @@ export async function reprendreTache(id: string, tache: string, envoyer = envoye
         + (FOURNISSEURS[t.fournisseur].code
             ? 'Les fichiers et la branche de la tentative précédente sont conservés. Commence par vérifier leur état. Ne réinitialise pas le dépôt et ne jette pas les changements existants. Termine le travail restant, exécute les vérifications pertinentes puis commite les changements. Ne pousse pas.'
             : 'Continue la recherche à partir des résultats déjà présents. Vérifie les sources et explique les incertitudes.')
+        + (t.preparation && t.preparation.etat !== 'prete' ? `\nPRÉPARATION INTERROMPUE : ${t.preparation.message || ''}\nInspecte l’état Git. Résous la fusion en cours en conservant les deux intentions, puis vérifie que toutes ces branches sont ancêtres de HEAD et fusionne celles qui manquent : ${t.dependances.map((id) => e.taches.find((d) => d.id === id)?.branche).filter(Boolean).join(', ') || 'aucune'}. Conserve ce worktree ; ne recommence pas dans un autre dossier. Ensuite termine la mission.` : '')
         + '\nTermine par le résultat, les vérifications réellement exécutées et les points restant à vérifier.';
     // Conserver agentId, tentative, branche et cwd. Aucune réservation de nouveau worktree.
     t.etat = 'en cours'; t.fin = undefined; t.resultat = undefined; e.etat = integration ? 'integration' : 'en cours'; e.message = undefined; sauver();
@@ -712,7 +797,11 @@ export function diffTache(id: string, tache: string): { resume: string; diff: st
     const e = equipeDe(id);
     const t = e?.taches.find((x) => x.id === tache);
     if (!e || !t?.branche) return undefined;
-    const lire = (args: string[]) => spawnSync('git', args, { cwd: e.projet, encoding: 'utf-8', maxBuffer: 20_000_000 }).stdout ?? '';
+    const lire = (args: string[]) => {
+        const r = spawnSync('git', args, { cwd: e.projet, encoding: 'utf-8', windowsHide: true, timeout: 10_000, maxBuffer: 20_000_000 });
+        if (r.error || r.status !== 0) throw new Error('Diff Git indisponible ou limite atteinte. Réessaie après vérification du dépôt.');
+        return r.stdout ?? '';
+    };
     return { resume: lire(['diff', '--stat', `HEAD...${t.branche}`]), diff: lire(['diff', '--color=always', `HEAD...${t.branche}`]) };
 }
 

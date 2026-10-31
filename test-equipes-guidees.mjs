@@ -100,7 +100,7 @@ test('reprise : mêmes fichiers, branche et conversation après échec, une seul
         fs.writeFileSync(path.join(s.cwd, 'travail.txt'), 'travail partiel');
         s.etat = 'erreur'; s.issue = 'error'; s.erreur = 'Interruption fixture'; sessions.sauverIntegree(s);
     } };
-    equipes.avancerEquipes([], services); await equipes.attendreLancements(); equipes.avancerEquipes([], services);
+    await equipes.avancerEquipes([], services); await equipes.attendreLancements(); await equipes.avancerEquipes([], services);
     const t = e.taches[0]; assert.equal(e.etat, 'erreur');
     const avant = { agentId: t.agentId, sessionId: t.sessionId, tentative: t.tentative, cwd: t.cwd, branche: t.branche };
     git(t.cwd, 'checkout', '--detach');
@@ -115,8 +115,10 @@ test('reprise : mêmes fichiers, branche et conversation après échec, une seul
         git(s.cwd, 'add', '.'); git(s.cwd, 'commit', '-m', 'Terminer');
         s.etat = 'attend'; s.issue = 'success'; s.resultat = 'Travail terminé et vérifié'; sessions.sauverIntegree(s);
     });
-    assert.match(await equipes.reprendreTache(e.id, t.id, async () => { envois++; }), /arrêtée ou en erreur/);
-    terminer(); assert.equal(await reprise, undefined); equipes.avancerEquipes([], services);
+    assert.match(await equipes.reprendreTache(e.id, t.id, async () => { envois++; }), /arrêtée ou en erreur|opération est en cours/);
+    for (let i = 0; i < 100 && !terminer; i++) await new Promise((ok) => setTimeout(ok, 30));
+    assert.ok(terminer, 'La reprise a atteint le fournisseur simulé');
+    terminer(); assert.equal(await reprise, undefined); await equipes.avancerEquipes([], services);
     assert.equal(envois, 1); assert.equal(e.etat, 'prete');
     for (const [cle, valeur] of Object.entries(avant)) assert.equal(t[cle], valeur);
     assert.equal(sessions.listerIntegrees().length, 1);

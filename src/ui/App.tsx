@@ -8,7 +8,9 @@ import * as os from 'os';
 import * as path from 'path';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
-import TextInput from 'ink-text-input';
+import { Composeur } from './Composeur.js';
+import { dossierContexte, hauteurComposeur } from './contexteProjet.js';
+import { rechercherHistoriqueConversation } from '../historiqueConversation.js';
 import { bus, Demande, Annule, choisir, confirmer } from './bus.js';
 import { terminaux } from '../terminaux.js';
 import { SECTIONS, Section, sectionMasquee } from './sections.js';
@@ -132,6 +134,9 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     const [recherche, setRecherche] = useState(false);
     const destinationSaisie = destinationBrouillon(selection, modeMaitre, recherche);
     const { texte: saisie, images, setTexte: setSaisie, setImages, carnet } = useBrouillon(destinationSaisie);
+    const [, majProjets] = useState(0);
+    useEffect(() => { const maj = () => majProjets((v) => v + 1); bus.on('projets', maj); return () => { bus.off('projets', maj); }; }, []);
+    m.corps = Math.max(1, m.corps - hauteurComposeur(saisie) + 1);
     const [collage] = useState(() => new CollageImage(carnet));
     const collageEnCours = useSyncExternalStore(collage.abonner, collage.lire);
     useEffect(() => () => collage.fermer(), [collage]);
@@ -169,6 +174,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     const [vueActive, setVueActive] = useState<string>();
     const [, setVersionMaitre] = useState(0);
     const [messages, setMessages] = useState<Message[]>([]);
+    const [resultatsRecherche, setResultatsRecherche] = useState<{ messages: Message[]; total: number; enCours: boolean; erreur?: string }>({ messages: [], total: 0, enCours: false });
     const [defilement, setDefilement] = useState(0);
     // Le cockpit est l'accueil ; le journal complet s'ouvre pour un long résultat, un clic ou /journal
     const [journalOuvert, setJournalOuvert] = useState(false);
@@ -402,15 +408,24 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
 
     // ─── Ctrl+F : chercher dans la conversation ouverte ───
     // La barre du bas devient le champ de recherche ; Entrée = occurrence suivante (en remontant le temps)
+    useEffect(() => {
+        if (!recherche || !session || saisie.trim().length < 2) { setResultatsRecherche({ messages: [], total: 0, enCours: false }); return; }
+        const controle = new AbortController(); setResultatsRecherche({ messages: [], total: 0, enCours: true });
+        const t = setTimeout(() => { void rechercherHistoriqueConversation(session.fichier, saisie.trim(), { signal: controle.signal }).then((r) => {
+            if (!controle.signal.aborted) setResultatsRecherche({ ...r, enCours: false });
+        }, (e) => { if (!controle.signal.aborted) setResultatsRecherche({ messages: [], total: 0, enCours: false, erreur: (e as Error).message }); }); }, 180);
+        return () => { clearTimeout(t); controle.abort(); };
+    }, [recherche, saisie, session?.fichier]);
+    const messagesAffiches = recherche && saisie.trim().length >= 2 ? resultatsRecherche.messages : messages;
     const [occurrence, setOccurrence] = useState(0);
     const trouvees = useMemo(() => {
         if (!recherche || !session || saisie.trim().length < 2) return [];
         const terme = saisie.trim().toLowerCase();
-        const lignes = toutesLesLignes(lignesTranscript(messages, m.principal - 2), m.principal - 2);
+        const lignes = toutesLesLignes(lignesTranscript(messagesAffiches, m.principal - 2), m.principal - 2);
         const indices: number[] = [];
         lignes.forEach((l, i) => l.replace(/\x1b\[[0-9;]*m/g, '').toLowerCase().includes(terme) && indices.push(i));
         return indices.reverse().map((i) => lignes.length - i);   // distance depuis la fin, la plus récente d'abord
-    }, [recherche, saisie, messages, m.principal, session?.cle]);
+    }, [recherche, saisie, messagesAffiches, m.principal, session?.cle]);
     useEffect(() => setOccurrence(0), [saisie, recherche]);
     useEffect(() => {
         if (!trouvees.length) return;
@@ -446,6 +461,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     // dans le journal ni gardée dans l'historique : on ne voit que son résultat
     async function lancer(ligne: string, puisQuitter = false, silencieux = false) {
         let texte = ligne.trim();
+        const contexte = { dossier: dossierContexte(session, detail) };
         const cmd = trouverCommande(texte.split(' ')[0]);
         if (cmd?.nom === 'exit') return quitter();
         if (cmd?.nom === 'clear') {
@@ -469,7 +485,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         setDefilement(0);
         setOccupe(true);
         try {
-            await (silencieux ? executerLigne(texte) : avecRetrait(() => executerLigne(texte)));
+            await (silencieux ? executerLigne(texte, contexte) : avecRetrait(() => executerLigne(texte, contexte)));
             return true;
         } catch (err) {
             if (err instanceof Annule) {
@@ -612,9 +628,9 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         if (t.startsWith('/')) return { texte: 'commande du CLI', couleur: 'gray' };
         if (recherche) {
             const n = trouvees.length;
-            return { texte: `⌕ chercher dans la conversation : ${t.length < 2 ? 'tape au moins 2 lettres' : n ? `${(occurrence % n) + 1}/${n} · Entrée = suivante` : 'aucun résultat'} · Échap fermer`, couleur: theme.secondaire };
+            return { texte: `⌕ Historique complet : ${t.length < 2 ? 'au moins 2 lettres' : resultatsRecherche.enCours ? 'recherche…' : resultatsRecherche.erreur || `${resultatsRecherche.total} message(s) · ${n ? `${(occurrence % n) + 1}/${n}` : 'aucun résultat'}${resultatsRecherche.total > resultatsRecherche.messages.length ? ' · derniers résultats affichés' : ''}`} · Échap fermer`, couleur: theme.secondaire };
         }
-        if (t.startsWith('!')) return { texte: `commande PowerShell dans ${path.basename(statut.cwd)}`, couleur: theme.accent };
+        if (t.startsWith('!')) return { texte: `PowerShell · ${dossierContexte(session, detail, statut.cwd)}`, couleur: theme.accent };
         if (modeMaitre) {
             return etatMaitre().enCours
                 ? { texte: '◈ le maître réfléchit… attends sa réponse', couleur: '#a78bfa' }
@@ -1039,12 +1055,12 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             if (key.downArrow) setIndexSugg((sugg + 1) % suggestions.length);
             return;
         }
-        if (key.upArrow && historique.length) {
+        if (key.upArrow && historique.length && !saisie.includes('\n')) {
             const pos = Math.min(historique.length - 1, posHistorique + 1);
             setPosHistorique(pos);
             remplacer(historique[pos]);
         }
-        if (key.downArrow) {
+        if (key.downArrow && !saisie.includes('\n')) {
             const pos = posHistorique - 1;
             setPosHistorique(Math.max(-1, pos));
             remplacer(pos >= 0 ? historique[pos] : '');
@@ -1071,7 +1087,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     } else if (demande?.type === 'vue') {
         principal = demande.rendu(demande.resoudre);
     } else if (session) {
-        principal = <VueSession s={session} messages={messages} boutons={boutonsS} largeur={m.principal} hauteur={hauteurPrincipale} defilement={defilement} git={gitSession} surligne={recherche ? saisie.trim() : undefined} cout={donnees.cout.parSession[session.sessionId]} survol={survol}
+        principal = <VueSession s={session} messages={messagesAffiches} boutons={boutonsS} largeur={m.principal} hauteur={hauteurPrincipale} defilement={defilement} git={gitSession} surligne={recherche ? saisie.trim() : undefined} cout={donnees.cout.parSession[session.sessionId]} survol={survol}
             colonne={posActions === 'gauche' || posActions === 'droite' ? { cote: posActions, liste: actionsS } : undefined} ecart={2} />;
     } else {
         principal = contenuOuvert
@@ -1142,13 +1158,13 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                     : !demande && !occupe && <Text color={destination().couleur} wrap="truncate-end">{destination().texte}</Text>}
             </Box>
             <Box borderStyle="round" borderColor={modeShell ? theme.accent : modeMaitre ? '#a78bfa' : recherche ? theme.secondaire : fond.bordure} paddingX={1}
-                width={m.largeur} height={3} flexShrink={0} overflow="hidden">
+                width={m.largeur} height={2 + hauteurComposeur(saisie)} flexShrink={0} overflow="hidden">
                 {demande || occupe
                     ? <Text color="gray">{occupe && !demande ? 'commande en cours…' : 'réponds dans la zone ci-dessus'}</Text>
                     : (
                         <>
                             {!modeShell && <Text color={theme.primaire}>❯ </Text>}
-                            <TextInput
+                            <Composeur
                                 key={`${destinationSaisie}:${cleSaisie}`}
                                 focus={quelleTouche === undefined}
                                 value={saisie}

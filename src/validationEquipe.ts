@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { gitVerifieAsync as git, gitExecution } from './gitExecution.js';
 import type { Equipe, Tache } from './equipe.js';
 
 /** Une dépendance est aussi héritée par les tâches qui dépendent d'elle. */
@@ -30,32 +30,24 @@ export function erreurSelectionIntegration(e: Equipe, basculer?: string): string
     return undefined;
 }
 
-function git(args: string[], cwd: string): string {
-    const r = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true, timeout: 15_000 });
-    if (r.status !== 0) throw new Error(r.stderr?.trim() || r.error?.message || 'Git a échoué');
-    return r.stdout.trim();
-}
-
 /** Le résumé d'un agent ne prouve pas que les branches ont réellement été intégrées. */
-export function verifierIntegration(e: Equipe): void {
+export async function verifierIntegration(e: Equipe): Promise<void> {
     const selection = erreurSelectionIntegration(e);
     if (selection) throw new Error(selection);
     const destination = e.integrateur?.branche;
     if (!destination) throw new Error('La branche de destination de cette ancienne intégration n’a pas été enregistrée. Vérifie manuellement la fusion dans le projet.');
-    if (git(['branch', '--show-current'], e.projet) !== destination)
+    if (await git(['branch', '--show-current'], e.projet) !== destination)
         throw new Error(`La branche du projet a changé. Rétablis ${destination}, puis reprends l’intégration.`);
-    if (git(['status', '--porcelain'], e.projet)) throw new Error('Le projet contient encore des modifications non commitées. Reprends l’intégration pour les vérifier.');
-    const sommet = git(['rev-parse', '--verify', 'HEAD'], e.projet);
+    if (await git(['status', '--porcelain'], e.projet)) throw new Error('Le projet contient encore des modifications non commitées. Reprends l’intégration pour les vérifier.');
+    const sommet = await git(['rev-parse', '--verify', 'HEAD'], e.projet);
     const branches = e.taches.filter((t) => t.branche && !t.ecartee);
     if (!branches.length) throw new Error('Aucune branche retenue à vérifier.');
     for (const t of branches) {
-        const commit = git(['rev-parse', '--verify', '--end-of-options', `refs/heads/${t.branche}^{commit}`], e.projet);
-        const r = spawnSync('git', ['merge-base', '--is-ancestor', commit, sommet], {
-            cwd: e.projet, encoding: 'utf8', windowsHide: true, timeout: 15_000,
-        });
-        if (r.status === 1) throw new Error(`La branche « ${t.titre} » (${t.branche}) n’est pas intégrée dans ${destination}. Reprends l’intégration pour terminer sa fusion.`);
-        if (r.status !== 0) throw new Error(r.stderr?.trim() || r.error?.message || `Impossible de vérifier la fusion de ${t.branche}`);
+        const commit = await git(['rev-parse', '--verify', '--end-of-options', `refs/heads/${t.branche}^{commit}`], e.projet);
+        const r = await gitExecution(['merge-base', '--is-ancestor', commit, sommet], e.projet);
+        if (r.code === 1) throw new Error(`La branche « ${t.titre} » (${t.branche}) n’est pas intégrée dans ${destination}. Reprends l’intégration pour terminer sa fusion.`);
+        if (!r.ok) throw new Error(r.sortie || `Impossible de vérifier la fusion de ${t.branche}`);
     }
-    if (git(['branch', '--show-current'], e.projet) !== destination || git(['rev-parse', '--verify', 'HEAD'], e.projet) !== sommet)
+    if (await git(['branch', '--show-current'], e.projet) !== destination || await git(['rev-parse', '--verify', 'HEAD'], e.projet) !== sommet)
         throw new Error('Le projet a changé pendant la vérification Git. Reprends l’intégration pour vérifier son nouvel état.');
 }

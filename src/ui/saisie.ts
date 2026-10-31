@@ -28,6 +28,8 @@ export function actionsSession(s: SessionVue): ActionSession[] {
         ...(!['travaille', 'bloquee'].includes(s.statut) ? [{ label: '≡ Bilan', action: 'bilan', aide: 'Résultat, commandes observées, état Git et coût disponible.' }] : []),
         ...(s.issue === 'success' && s.resultat ? [{ label: '⇄ Passer à un agent', action: 'transmettre', aide: 'Transmettre la réponse et ses sources à Claude, Codex ou Perplexity.' }] : []),
         { label: '⎘ Copier la réponse', action: 'copier-reponse', aide: 'Copier la dernière réponse.' },
+        { label: '↥ Exporter le chat', action: 'exporter', aide: 'Exporter tout l’historique en Markdown ou JSONL dans un fichier local.' },
+        { label: '◇ Modèle de l’agent', action: 'modele', aide: 'Choisir le modèle utilisé pour les prochains tours de cette session.' },
         ...(s.fournisseur !== 'perplexity' ? [{ label: '± Changements', action: 'changements', aide: 'Voir les fichiers modifiés dans cette session.' }] : []),
         { label: '◧ VS Code', action: 'code', aide: 'Ouvrir ce dossier dans VS Code.' },
         { label: '▤ Dossier', action: 'dossier', aide: 'Ouvrir le dossier de cette session.' },
@@ -43,6 +45,7 @@ export function actionsSession(s: SessionVue): ActionSession[] {
         { label: '± Changements', action: 'changements', aide: 'Les fichiers que cette session a modifiés et leur diff, prêts à commiter.' },
         { label: '⎘ Copier le code', action: 'copier-code', aide: 'Copier le dernier bloc de code de Claude dans le presse-papiers.' },
         { label: '⎘ Copier la réponse', action: 'copier-reponse', aide: 'Copier la dernière réponse de Claude dans le presse-papiers.' },
+        { label: '↥ Exporter le chat', action: 'exporter', aide: 'Exporter tout l’historique dans un fichier local.' },
         { label: '⌕ Revue du diff', action: 'revue', aide: 'Faire relire les changements par l’agent choisi.' },
         { label: '✓ Commit', action: 'commit', aide: 'Commiter les changements avec un message écrit par l’agent choisi.' },
         { label: '◧ VS Code', action: 'code', aide: 'Ouvrir le dossier du projet dans VS Code.' },
@@ -54,6 +57,8 @@ export function actionsSession(s: SessionVue): ActionSession[] {
 }
 
 export function commandeSession(action: string, s: SessionVue): string | undefined {
+    if (action === 'exporter') return `/export-conversation ${s.sessionId}`;
+    if (action === 'modele' && s.integree) return `/modele-session ${s.sessionId}`;
     if (s.integree && action === 'reconnecter') return `/fournisseurs ${s.fournisseur}`;
     if (s.integree && ['reprendre-agent', 'bilan'].includes(action)) return `/${action} ${s.sessionId}`;
     if (['autorisation', 'interrompre', 'transmettre'].includes(action) && s.integree) return `/${action} ${s.sessionId}`;
@@ -81,7 +86,7 @@ export interface Suggestion {
 }
 
 export function calculerSuggestions(saisie: string): Suggestion[] {
-    if (!saisie) return [];
+    if (!saisie || saisie.includes('\n')) return [];
     const mots = saisie.split(' ');
     const dernier = mots[mots.length - 1];
     if (dernier.startsWith('@')) {

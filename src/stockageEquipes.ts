@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { CHEMINS } from './chemins.js';
 import { ecrireAtomique } from './sessionsIntegrees.js';
 import type { Equipe, Tache } from './equipe.js';
+import { estFournisseur } from './providers/types.js';
 
 export const SAUVEGARDE_EQUIPES = `${CHEMINS.equipes}.sauvegarde`;
 const objet = (v: any) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -10,7 +11,13 @@ function tacheValide(t: any): t is Tache {
     return objet(t) && ['id', 'titre', 'role', 'consigne'].every((k) => typeof t[k] === 'string')
         && Array.isArray(t.dependances) && t.dependances.every((d: any) => typeof d === 'string')
         && ['attente', 'en cours', 'bloquee', 'faite', 'erreur', 'arretee'].includes(t.etat)
-        && (t.fournisseur === undefined || ['claude', 'codex', 'perplexity'].includes(t.fournisseur));
+        && (t.fournisseur === undefined || estFournisseur(t.fournisseur))
+        && (t.modele === undefined || typeof t.modele === 'string')
+        && (t.lectureSeule === undefined || typeof t.lectureSeule === 'boolean')
+        && (t.attenteFile === undefined || typeof t.attenteFile === 'string')
+        && (t.preparation === undefined || objet(t.preparation) && ['en cours', 'conflit', 'erreur', 'prete'].includes(t.preparation.etat)
+            && ['message', 'journal'].every((k) => t.preparation[k] === undefined || typeof t.preparation[k] === 'string'))
+        && (t.tentatives === undefined || Array.isArray(t.tentatives) && t.tentatives.every((a: any) => !a?.tentatives && tacheValide(a)));
 }
 export function decoderEquipes(contenu: string): Equipe[] {
     const valeur = JSON.parse(contenu);

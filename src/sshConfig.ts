@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { validerHoteSsh } from './importConfiguration.js';
+import { lireFichierBorne, ecrireFichierAtomique, verifierCheminLocal } from './fichiersProteges.js';
 
 // Modifier ~/.ssh/config depuis Agentopia : ajouter, modifier, supprimer un serveur.
 // Seul le bloc « Host <alias> » concerné est réécrit ; le reste du fichier (commentaires, Host *, Match…)
@@ -10,7 +11,8 @@ import { validerHoteSsh } from './importConfiguration.js';
 
 export const DOSSIER_SSH = path.join(os.homedir(), '.ssh');
 // CLAUDETOPIA_SSH_CONFIG : un autre fichier (tests)
-const FICHIER = process.env.CLAUDETOPIA_SSH_CONFIG ?? path.join(DOSSIER_SSH, 'config');
+export const FICHIER_SSH = process.env.CLAUDETOPIA_SSH_CONFIG ?? path.join(DOSSIER_SSH, 'config');
+const FICHIER = FICHIER_SSH;
 
 export interface HoteSsh {
     alias: string;
@@ -28,7 +30,7 @@ interface Bloc {
 function decouper(): Bloc[] {
     if (!fs.existsSync(FICHIER)) return [];
     const blocs: Bloc[] = [{ lignes: [] }];
-    for (const ligne of fs.readFileSync(FICHIER, 'utf-8').split(/\r?\n/)) {
+    for (const ligne of lireFichierBorne(FICHIER, 8 * 1024 * 1024).toString('utf8').split(/\r?\n/)) {
         const m = /^\s*(Host|Match)\s+(.+?)\s*$/i.exec(ligne);
         if (m) {
             const simple = m[1].toLowerCase() === 'host' && !/[\s*?!]/.test(m[2]);
@@ -70,11 +72,22 @@ function texteBloc(h: HoteSsh): string[] {
 }
 
 function ecrire(blocs: Bloc[]): void {
-    fs.mkdirSync(DOSSIER_SSH, { recursive: true });
+    verifierCheminLocal(FICHIER); fs.mkdirSync(path.dirname(FICHIER), { recursive: true });
     const sauvegarde = FICHIER + '.claudetopia.bak';
-    if (fs.existsSync(FICHIER) && !fs.existsSync(sauvegarde)) fs.copyFileSync(FICHIER, sauvegarde);
-    const texte = blocs.flatMap((b) => b.lignes).join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '');
-    fs.writeFileSync(FICHIER, texte.endsWith('\n') ? texte : texte + '\n', 'utf-8');
+    if (fs.existsSync(FICHIER)) ecrireFichierAtomique(sauvegarde, lireFichierBorne(FICHIER, 8 * 1024 * 1024));
+    ecrireFichierAtomique(FICHIER, texteBlocs(blocs));
+}
+function texteBlocs(blocs: Bloc[]): string { const texte = blocs.flatMap(b => b.lignes).join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, ''); return texte.endsWith('\n') ? texte : texte + '\n'; }
+export function preparerImportHotes(hotes: HoteSsh[]): { fichier: string; contenu: string; ajoutes: number } {
+    const blocs = decouper(), deja = new Set(blocs.map(b => b.alias?.toLowerCase())); let ajoutes = 0;
+    for (const h of hotes) {
+        validerHoteSsh(h); if (deja.has(h.alias.toLowerCase())) continue;
+        const generique = blocs.findIndex((b, k) => k > 0 && !b.alias);
+        const bloc = { alias: h.alias, lignes: texteBloc(h) };
+        if (generique > 0) blocs.splice(generique, 0, bloc); else blocs.push(bloc);
+        deja.add(h.alias.toLowerCase()); ajoutes++;
+    }
+    return { fichier: FICHIER, contenu: texteBlocs(blocs), ajoutes };
 }
 
 // Ajoute le serveur, ou remplace son bloc (ancienAlias : il a été renommé)

@@ -7,7 +7,25 @@ import { lireModelesEquipes, validerDefinitions, type DefinitionTache } from './
 
 const servicesDefaut = { choisir, choisirPlusieurs, saisir, disponible: disponibilite, modeles: lireModelesEquipes, creer: creerEquipeMixte };
 export function decrirePlan(taches: DefinitionTache[]): string {
-    return taches.map((t, i) => `t${i + 1} · ${t.titre} · ${FOURNISSEURS[t.fournisseur].nom}\n${t.consigne}\nAprès : ${t.dependances.join(', ') || 'aucune dépendance'}`).join('\n\n');
+    return taches.map((t, i) => `t${i + 1} · ${t.titre} · ${FOURNISSEURS[t.fournisseur].nom}${t.modele ? ` · ${t.modele}` : ''}${t.lectureSeule ? ' · lecture seule' : ''}\n${t.consigne}\nAprès : ${t.dependances.join(', ') || 'aucune dépendance'}`).join('\n\n');
+}
+export function recetteCollaboration(type: 'comparaison' | 'croisee', premier: Fournisseur, second: Fournisseur): DefinitionTache[] {
+    if (!FOURNISSEURS[premier].code || !FOURNISSEURS[second].code) throw new Error('Cette collaboration exige deux agents capables de lire le projet');
+    const analyser = 'Travaille en lecture seule. Analyse l’objectif indépendamment, cite fichiers et preuves, propose une solution et ses limites. Distingue faits, hypothèses et désaccords possibles. Ne modifie aucun fichier.';
+    if (type === 'comparaison') return [
+        { titre: 'Avis indépendant A', fournisseur: premier, consigne: analyser, lectureSeule: true, dependances: [] },
+        { titre: 'Avis indépendant B', fournisseur: second, consigne: analyser, lectureSeule: true, dependances: [] },
+        { titre: 'Comparer les avis et expliquer les désaccords', fournisseur: premier, lectureSeule: true, dependances: ['t1', 't2'],
+            consigne: 'Compare les deux avis transmis. Vérifie les preuves dans le projet, présente accords et désaccords avec leurs sources, puis propose une décision et les points à trancher par l’utilisateur. Aucun changement, aucune nouvelle délégation : cette synthèse termine la comparaison.' },
+    ];
+    const revue = 'Relis indépendamment les changements de développement, en lecture seule. Rapporte seulement les défauts démontrés avec fichier, conséquence et correction proposée. N’applique aucune modification. Le résultat est un avis, pas une autorisation supplémentaire.';
+    return [
+        { titre: 'Développement', fournisseur: premier, consigne: 'Réalise l’objectif, exécute les vérifications pertinentes et commite les changements.', dependances: [] },
+        { titre: 'Revue indépendante A', fournisseur: premier, consigne: revue, lectureSeule: true, dependances: ['t1'] },
+        { titre: 'Revue indépendante B', fournisseur: second, consigne: revue, lectureSeule: true, dependances: ['t1'] },
+        { titre: 'Résoudre les désaccords et vérifier', fournisseur: premier, dependances: ['t1', 't2', 't3'],
+            consigne: 'Compare les deux revues, vérifie leurs preuves et corrige les défauts confirmés. Explique chaque désaccord non résolu sans inventer un consensus. Exécute les vérifications puis commite. Ne lance pas un nouveau cycle de revue : termine par accords, corrections et décisions restant à l’utilisateur.' },
+    ];
 }
 export function recetteEquipe(recette: 'duo' | 'bug' | 'trio', developpeur: Fournisseur, relecteur: Fournisseur): DefinitionTache[] {
     if (!FOURNISSEURS[developpeur].code || !FOURNISSEURS[relecteur].code) throw new Error('Le développement et la revue demandent des agents capables de travailler dans les fichiers');
@@ -25,6 +43,8 @@ export async function preparerEquipeGuidee(projet: { nom: string; chemin: string
         { label: 'Développer → faire relire', valeur: 'duo', description: 'Un agent réalise la demande ; une autre session vérifie le résultat.' },
         { label: 'Corriger un bug → vérifier', valeur: 'bug', description: 'Reproduction, correction et vérification de la régression.' },
         { label: 'Rechercher → développer → relire', valeur: 'trio', description: 'Perplexity cherche les sources, puis deux sessions travaillent dans le code.' },
+        { label: 'Comparer deux avis indépendants', valeur: 'comparaison', description: 'Deux analyses en lecture seule, puis une synthèse des accords et désaccords ; 3 tâches maximum.' },
+        { label: 'Développer → revue croisée → corriger', valeur: 'croisee', description: 'Deux revues indépendantes, puis une résolution bornée des désaccords ; 4 tâches maximum.' },
         ...modeles.map((m) => ({ label: `★ ${m.nom}`, valeur: `modele:${m.id}`, description: `${m.taches.length} tâches · ${m.taches.map((t) => FOURNISSEURS[t.fournisseur].nom).join(' → ')}` })),
         { label: 'Composer les tâches moi-même', valeur: 'libre', description: 'Choisir chaque mission, fournisseur et dépendance.' },
     ], modeles.length > 4);
@@ -50,10 +70,10 @@ export async function preparerEquipeGuidee(projet: { nom: string; chemin: string
             validerDefinitions(definitions);
         } while (definitions.length < 8 && await services.choisir('Plan', [{ label: 'Terminer', valeur: false }, { label: 'Ajouter une tâche', valeur: true }], false));
     } else {
-        if (!['duo', 'bug', 'trio'].includes(format)) throw new Error('Parcours inconnu');
+        if (!['duo', 'bug', 'trio', 'comparaison', 'croisee'].includes(format)) throw new Error('Parcours inconnu');
         const dev = await agent('Qui réalise la demande ?', true, chargerConfig().fournisseurDefaut);
         const autre = candidats(true).find((f) => f !== dev && services.disponible(f).pret);
-        definitions = recetteEquipe(format as 'duo' | 'bug' | 'trio', dev, autre ?? dev);
+        definitions = format === 'comparaison' || format === 'croisee' ? recetteCollaboration(format, dev, autre ?? dev) : recetteEquipe(format as 'duo' | 'bug' | 'trio', dev, autre ?? dev);
     }
     for (;;) {
         const action = await services.choisir('Ton équipe est prête à être créée', [

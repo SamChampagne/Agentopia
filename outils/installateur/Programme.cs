@@ -16,7 +16,7 @@ namespace Agentopia.Installation {
     }
     internal sealed class Options {
         public string archive, destination, journal;
-        public bool silencieux, sansLancer, sansRaccourci;
+        public bool silencieux, sansLancer, sansRaccourci, sansEnregistrement;
         public static Options Lire(string[] args) {
             var o = new Options();
             for (int i = 0; i < args.Length; i++) {
@@ -24,6 +24,7 @@ namespace Agentopia.Installation {
                     case "--silencieux": o.silencieux = true; break;
                     case "--sans-lancer": o.sansLancer = true; break;
                     case "--sans-raccourci": o.sansRaccourci = true; break;
+                    case "--sans-enregistrement": o.sansEnregistrement = true; break;
                     case "--archive": case "--destination": case "--journal":
                         string cle = args[i];
                         if (++i >= args.Length || args[i].StartsWith("--")) throw new Exception("Valeur manquante : " + cle);

@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { setTimeout as attendre } from 'node:timers/promises';
+import { pathToFileURL } from 'node:url';
 
 const ps = (s) => `'${s.replace(/['\u2018-\u201b]/g, (c) => c + c)}'`;
 const dans = (racine, cible) => { const rel = path.relative(path.resolve(racine), path.resolve(cible)); return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel)); };
@@ -175,6 +176,17 @@ function remplacerFichier(temporaire, fichier, renommer) {
     }
 }
 export function activerVersion(destination, id, renommer = fs.renameSync) {
+    verifierDestination(destination);
+    const verrou = path.join(destination, 'installation.lock'); verifierCheminPhysique(verrou);
+    let possede = false;
+    try {
+        if (fs.existsSync(verrou)) {
+            if (fs.statSync(verrou).size > 4096 || JSON.parse(fs.readFileSync(verrou, 'utf8')).pid !== process.pid) throw new Error('Une maintenance utilise déjà cette installation. Réessaie ensuite.');
+        } else { const fd = fs.openSync(verrou, 'wx'); fs.writeFileSync(fd, JSON.stringify({ pid: process.pid })); fs.closeSync(fd); possede = true; }
+        return activerVersionVerrouillee(destination, id, renommer);
+    } finally { if (possede) fs.unlinkSync(verrou); }
+}
+function activerVersionVerrouillee(destination, id, renommer) {
     if (!identifiantValide(id)) throw new Error('Identifiant de version invalide');
     verifierDestination(destination);
     const version = path.join(destination, 'versions', id);
@@ -271,6 +283,19 @@ export async function installerArchive(archive, hashAttendu, options = {}) {
         if (options.raccourci !== false) {
             powershell(`$bureau=[Environment]::GetFolderPath('Desktop'); $s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $bureau 'Agentopia.lnk')); $s.TargetPath=$env:ComSpec; $s.Arguments='/c ""' + ${ps(path.join(destination, 'Agentopia.cmd'))} + '""'; $s.WorkingDirectory=$env:USERPROFILE; $s.Description='Agentopia : projets et agents'; $s.Save()`);
         }
+        const maintenance = path.join(cible, 'outils', 'maintenance-windows.mjs');
+        if (fs.existsSync(maintenance)) try {
+            const preferences = path.join(destination, 'installation-options.json'); verifierCheminPhysique(preferences);
+            let enregistrer = true;
+            if (fs.existsSync(preferences)) {
+                if (fs.statSync(preferences).size > 4096) throw new Error('Options d’installation invalides');
+                enregistrer = JSON.parse(fs.readFileSync(preferences, 'utf8')).enregistrerDesinstallation !== false;
+            }
+            if (options.enregistrerDesinstallation !== undefined) enregistrer = options.enregistrerDesinstallation !== false;
+            fs.writeFileSync(preferences, JSON.stringify({ enregistrerDesinstallation: enregistrer }));
+            const { preparerDesinstallation } = await import(pathToFileURL(maintenance).href);
+            preparerDesinstallation(destination, enregistrer);
+        } catch (e) { console.warn(`Installation prête ; gestion du retrait à rétablir en relançant Setup : ${e.message}`); }
         console.log('Agentopia est installé. Tes réglages et conversations sont conservés.');
         return { destination, id };
     } finally {

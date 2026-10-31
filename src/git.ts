@@ -2,8 +2,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import { Projet, estWorktree } from './projets.js';
-import { Hebergeur, jeton } from './jetons.js';
+import { Hebergeur, jeton, originesGitLab, ancienGitLabPresent } from './jetons.js';
 import { surPath } from './chemins.js';
+import { appelGitAuthentifie } from './originesGit.js';
 
 // État git de tous les projets : ce qui reste à pousser / tirer, modifs, PR
 
@@ -58,7 +59,7 @@ function git(args: string[], cwd: string, delai = 15_000): Promise<{ ok: boolean
 // URL du remote → hébergeur, page web, page des PR
 export function decrireRemote(url: string): Pick<Depot, 'hebergeur' | 'web' | 'pagePR' | 'depot' | 'api'> {
     const propre = url.trim().replace(/\.git$/, '').replace(/^git@([^:]+):/, 'https://$1/').replace(/\/\/[^@/]+@/, '//');
-    const github = /github\.com\/([^/]+\/[^/]+)/.exec(propre);
+    const github = /^https?:\/\/github\.com\/([^/]+\/[^/]+)$/.exec(propre);
     if (github) return { hebergeur: 'GitHub', web: propre, pagePR: `${propre}/pulls`, depot: github[1] };
     // https://dev.azure.com/<organisation>/<projet>/_git/<dépôt>
     const azure = /dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+)/.exec(propre);
@@ -68,10 +69,11 @@ export function decrireRemote(url: string): Pick<Depot, 'hebergeur' | 'web' | 'p
             api: { organisation: azure[1], projet: decodeURIComponent(azure[2]), nom: decodeURIComponent(azure[3]) },
         };
     }
-    if (/gitlab/.test(propre)) {
-        const u = /^(\w+:\/\/[^/]+)\/(.+)$/.exec(propre);
-        return { hebergeur: 'GitLab', web: propre, pagePR: `${propre}/-/merge_requests`, api: { base: u?.[1], chemin: u?.[2] } };
-    }
+    try {
+        const u = new URL(propre);
+        if (u.protocol === 'https:' && !u.username && !u.password && (u.hostname === 'gitlab.com' || originesGitLab().includes(u.origin)))
+            return { hebergeur: 'GitLab', web: propre, pagePR: `${propre}/-/merge_requests`, api: { base: u.origin, chemin: u.pathname.slice(1) } };
+    } catch { /* Un remote local ou inconnu n'obtient aucun jeton. */ }
     if (/bitbucket/.test(propre)) return { hebergeur: 'Bitbucket', web: propre, pagePR: `${propre}/pull-requests` };
     return { hebergeur: propre.replace(/^\w+:\/\//, '').split('/')[0], web: propre };
 }
@@ -205,12 +207,7 @@ export function etatGh(): 'absent' | 'deconnecte' | 'connecte' {
 export const etatPR: Partial<Record<Hebergeur, string>> = {};
 
 export async function appel(url: string, entetes: Record<string, string>): Promise<{ ok: boolean; statut: number; json?: any }> {
-    try {
-        const res = await fetch(url, { headers: { 'User-Agent': 'claudetopia', ...entetes }, signal: AbortSignal.timeout(15_000) });
-        return { ok: res.ok, statut: res.status, json: res.ok ? await res.json() : undefined };
-    } catch {
-        return { ok: false, statut: 0 };
-    }
+    return appelGitAuthentifie(url, entetes);
 }
 
 const raison = (statut: number) => (statut === 401 || statut === 403 ? 'jeton refusé ou sans droits' : statut === 404 ? 'introuvable (droits ?)' : statut ? `erreur ${statut}` : 'injoignable');
@@ -248,9 +245,11 @@ async function prsAzure(depots: Depot[], cle: string): Promise<void> {
     etatPR['Azure DevOps'] = erreur || 'ok';
 }
 
-async function prsGitLab(depots: Depot[], cle: string): Promise<void> {
-    let erreur = '';
+async function prsGitLab(depots: Depot[]): Promise<void> {
+    let erreur = ancienGitLabPresent() ? 'ancien jeton à associer : /connecter gitlab' : '';
     await Promise.all(depots.map(async (d) => {
+        const cle = d.api?.base ? jeton('GitLab', d.api.base) : undefined;
+        if (!cle) { erreur ||= 'compte à connecter pour cette origine : /connecter gitlab'; return; }
         const r = await appel(`${d.api!.base}/api/v4/projects/${encodeURIComponent(d.api!.chemin!)}/merge_requests?state=opened&per_page=50`, { 'PRIVATE-TOKEN': cle });
         if (!r.ok) {
             erreur = raison(r.statut);
@@ -264,10 +263,10 @@ async function prsGitLab(depots: Depot[], cle: string): Promise<void> {
 export async function ajouterPRs(depots: Depot[]): Promise<void> {
     const parHebergeur = (h: string) => depots.filter((d) => d.hebergeur === h && !d.worktree && (d.depot || d.api));
     const taches: Promise<void>[] = [];
-    const cleGitHub = jeton('GitHub'), cleAzure = jeton('Azure DevOps'), cleGitLab = jeton('GitLab');
+    const cleGitHub = jeton('GitHub'), cleAzure = jeton('Azure DevOps');
     if (cleGitHub) taches.push(prsGitHub(parHebergeur('GitHub'), cleGitHub));
     if (cleAzure) taches.push(prsAzure(parHebergeur('Azure DevOps'), cleAzure));
-    if (cleGitLab) taches.push(prsGitLab(parHebergeur('GitLab'), cleGitLab));
+    taches.push(prsGitLab(parHebergeur('GitLab')));
     await Promise.all(taches);
     // Les worktrees affichent les PR de leur dépôt principal
     for (const d of depots.filter((x) => x.worktree)) d.prs = depots.find((x) => !x.worktree && x.remote === d.remote)?.prs;
@@ -325,7 +324,7 @@ export function cleDepot(url: string): string {
 
 export async function depotsDistants(locaux: Depot[]): Promise<DepotDistant[]> {
     const liste: DepotDistant[] = [];
-    const cleGitHub = jeton('GitHub'), cleAzure = jeton('Azure DevOps'), cleGitLab = jeton('GitLab');
+    const cleGitHub = jeton('GitHub'), cleAzure = jeton('Azure DevOps');
     const taches: Promise<void>[] = [];
     if (cleGitHub) {
         taches.push((async () => {
@@ -354,9 +353,9 @@ export async function depotsDistants(locaux: Depot[]): Promise<DepotDistant[]> {
             })());
         }
     }
-    if (cleGitLab) {
-        const bases = new Set(locaux.map((d) => d.api?.base).filter((b): b is string => !!b));
-        for (const base of bases) {
+    {
+        for (const base of originesGitLab()) {
+            const cleGitLab = jeton('GitLab', base); if (!cleGitLab) continue;
             taches.push((async () => {
                 const r = await appel(`${base}/api/v4/projects?membership=true&archived=false&per_page=100&order_by=last_activity_at`, { 'PRIVATE-TOKEN': cleGitLab });
                 for (const d of r.ok && Array.isArray(r.json) ? r.json : []) {

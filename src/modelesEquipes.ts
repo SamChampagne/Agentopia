@@ -3,11 +3,11 @@ import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { CHEMINS } from './chemins.js';
 import { ecrireAtomique } from './sessionsIntegrees.js';
-import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
+import { FOURNISSEURS, capacitesFournisseur, validerModele, type Fournisseur } from './providers/types.js';
 import { validerDependances } from './equipePlan.js';
 import type { Equipe } from './equipe.js';
 
-export interface DefinitionTache { titre: string; fournisseur: Fournisseur; consigne: string; dependances: string[] }
+export interface DefinitionTache { titre: string; fournisseur: Fournisseur; consigne: string; dependances: string[]; modele?: string; lectureSeule?: boolean }
 export interface ModeleEquipe { id: string; nom: string; cree: number; taches: DefinitionTache[] }
 export function validerDefinitions(taches: unknown): DefinitionTache[] {
     if (!Array.isArray(taches)) throw new Error('Le modèle ne contient pas de tâches');
@@ -15,7 +15,11 @@ export function validerDefinitions(taches: unknown): DefinitionTache[] {
         if (!t || !Object.hasOwn(FOURNISSEURS, t.fournisseur) || typeof t.titre !== 'string' || !t.titre.trim() || t.titre.length > 160
             || typeof t.consigne !== 'string' || !t.consigne.trim() || t.consigne.length > 32_000
             || !Array.isArray(t.dependances) || t.dependances.some((d: unknown) => typeof d !== 'string')) throw new Error('Tâche de modèle invalide');
-        return { titre: t.titre.trim(), fournisseur: t.fournisseur as Fournisseur, consigne: t.consigne.trim(), dependances: [...t.dependances] as string[] };
+        const modele = validerModele(t.modele);
+        if (modele && !capacitesFournisseur(t.fournisseur).modele) throw new Error('Ce fournisseur choisit automatiquement son modèle');
+        if (t.lectureSeule !== undefined && typeof t.lectureSeule !== 'boolean') throw new Error('Mode lecture seule invalide');
+        return { titre: t.titre.trim(), fournisseur: t.fournisseur as Fournisseur, consigne: t.consigne.trim(), dependances: [...t.dependances] as string[],
+            ...(modele ? { modele } : {}), ...(t.lectureSeule !== undefined ? { lectureSeule: t.lectureSeule } : {}) };
     });
     validerDependances(nettoyees.map((t, i) => ({ id: `t${i + 1}`, dependances: t.dependances })));
     return nettoyees;
@@ -40,7 +44,7 @@ export function enregistrerModeleEquipe(equipe: Equipe, nom: string): ModeleEqui
     if (!nom.trim() || nom.trim().length > 80) throw new Error('Donne un nom de 1 à 80 caractères');
     const ids = new Map(equipe.taches.map((t, i) => [t.id, `t${i + 1}`]));
     // Copie du plan seulement : jamais de session, résultat, coût, branche ou chemin de worktree.
-    const taches = validerDefinitions(equipe.taches.map((t) => ({ titre: t.titre, fournisseur: t.fournisseur, consigne: t.consigne,
+    const taches = validerDefinitions(equipe.taches.map((t) => ({ titre: t.titre, fournisseur: t.fournisseur, consigne: t.consigne, modele: t.modele, lectureSeule: t.lectureSeule,
         dependances: t.dependances.map((d) => ids.get(d) ?? d) })));
     const modele = { id: randomUUID(), nom: nom.trim(), cree: Date.now(), taches };
     fs.mkdirSync(CHEMINS.modelesEquipes, { recursive: true }); ecrireAtomique(fichier(modele.id), modele); return modele;

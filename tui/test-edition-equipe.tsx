@@ -23,16 +23,28 @@ const sauver = () => { fs.writeFileSync(CHEMINS.equipes, JSON.stringify([e])); e
 sauver();
 const ui = await createTestRenderer({ width: 130, height: 36, autoFocus: false }); const root = createRoot(ui.renderer);
 const dessiner = async () => { await new Promise((r) => setTimeout(r, 120)); await ui.flush(); await ui.renderOnce(); };
+let choixCourant: { type: string; choix: { label: string }[] } | undefined;
+const recevoirChoix = (d: any) => { choixCourant = d?.type === 'choix' ? d : undefined; };
+bus.on('demande', recevoirChoix);
+const choisirLibelle = async (libelle: RegExp) => {
+    assert.ok(choixCourant, 'un menu de choix est ouvert');
+    const index = choixCourant.choix.findIndex(c => libelle.test(c.label));
+    assert.ok(index >= 0, `action disponible : ${libelle}`);
+    // Le menu peut recevoir de nouvelles actions : partir du début puis naviguer
+    // au vrai libellé, sans résoudre le dialogue directement depuis le test.
+    for (let i = 0; i < choixCourant.choix.length; i++) ui.mockInput.pressArrow('up');
+    for (let i = 0; i < index; i++) ui.mockInput.pressArrow('down');
+    await dessiner(); ui.mockInput.pressEnter(); await dessiner();
+};
 try {
     root.render(<App quitter={() => {}} />); await dessiner();
     bus.emit('lancer', '/equipe-actions edition'); await dessiner();
     assert.match(ui.captureCharFrame(), /Modifier le plan/);
-    ui.mockInput.pressArrow('down'); ui.mockInput.pressEnter(); await dessiner();
+    await choisirLibelle(/Modifier le plan/);
     assert.match(ui.captureCharFrame(), /Enregistrer les modifications/);
-    ui.mockInput.pressEnter(); await dessiner(); assert.match(ui.captureCharFrame(), /Objectif de l’équipe/);
+    await choisirLibelle(/Modifier l’objectif/); assert.match(ui.captureCharFrame(), /Objectif de l’équipe/);
     ui.mockInput.pressKey('\u001b[F'); await ui.mockInput.typeText(' et tests'); ui.mockInput.pressEnter(); await dessiner();
-    for (let i = 0; i < 3; i++) ui.mockInput.pressArrow('down');
-    ui.mockInput.pressEnter(); await dessiner(); await dessiner();
+    await choisirLibelle(/Enregistrer les modifications/); await dessiner();
     const enregistre = JSON.parse(fs.readFileSync(CHEMINS.equipes, 'utf8'))[0];
     assert.equal(enregistre.objectif, 'Objectif initial et tests'); assert.equal(enregistre.etat, 'plan');
     assert.ok(enregistre.taches.every((t: any) => !t.agentId));
@@ -57,6 +69,7 @@ try {
     const seconde = saisir('Même question', 'seconde'); await dessiner(); ui.mockInput.pressEnter(); assert.equal(await seconde, 'seconde');
     process.stdout.write('✓ TUI : édition, reprise d’intégration, navigation et saisie rapides, filtres et cases indépendants entre dialogues\n');
 } finally {
+    bus.off('demande', recevoirChoix);
     root.render(<text>fin</text>); await dessiner(); await ui.dispose();
     const rel = path.relative(os.tmpdir(), dossier); if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) fs.rmSync(dossier, { recursive: true, force: true });
 }

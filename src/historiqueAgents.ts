@@ -9,6 +9,7 @@ import { chargerConfig } from './config.js';
 import { listerSessions } from './sessions.js';
 import { dossierIntegre, fichierIntegre, lireIntegreeStrict, sauverIntegree, ecrireAtomique, ajouterMessage, restaurerIntegree } from './sessionsIntegrees.js';
 import type { SessionIntegree } from './providers/types.js';
+import { prendreVerrou } from './verrou.js';
 
 export interface ConversationNative { fournisseur: 'codex' | 'claude-cli'; id: string; titre: string; cwd: string; maj: number }
 export interface Inventaire { conversations: ConversationNative[]; date: number; erreur?: string }
@@ -91,8 +92,9 @@ export async function importerCodex(c: ConversationNative, rpcFourni?: Pick<Code
         const messages = await messagesCodex(c.id, rpc);
         const dossier = dossierIntegre(id); fs.mkdirSync(dossier, { recursive: true });
         // Verrou de création partagé entre fenêtres ; jamais de deuxième transcript identique.
-        const verrou = fichierIntegre(id, 'importation');
-        const fd = fs.openSync(verrou, 'wx'); fs.closeSync(fd);
+        if (fs.existsSync(fichierIntegre(id, 'importation'))) throw new Error('Ancien import interrompu. /recuperer-sessions pour examiner les fichiers conservés.');
+        const finImport = prendreVerrou(fichierIntegre(id, 'importation.verrou'));
+        if (!finImport) throw new Error('Import déjà en cours dans une autre fenêtre.');
         try {
             const actuelle = lireIntegreeStrict(id); if (actuelle) return actuelle;
             // Une reprise ne doit jamais vider un transcript dont l'état a disparu ou été abîmé.
@@ -102,6 +104,6 @@ export async function importerCodex(c: ConversationNative, rpcFourni?: Pick<Code
                 creee: Date.now(), maj: c.maj, tour: '', etat: 'attend', threadId: c.id,
                 origine: { threadId: c.id, fournisseur: 'codex', copieAuProchainMessage: true } };
             sauverIntegree(s); return s;
-        } finally { fs.rmSync(verrou, { force: true }); }
+        } finally { finImport(); }
     } finally { if (!rpcFourni) (rpc as CodexRpc).fermer(); }
 }

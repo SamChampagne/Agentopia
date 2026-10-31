@@ -130,6 +130,9 @@ export function ajusterProjets(liste: Projet[]): void {
     const avant = new Set(projetsSuivis.map((p) => p.chemin));
     const apres = new Set(liste.map((p) => p.chemin));
     projetsSuivis = liste;
+    // Le watcher des racines et les scans manuels publient le même catalogue.
+    // Les vues déjà ouvertes ne doivent pas garder une copie devenue obsolète.
+    synchro.emit('projets', liste);
     if (!demarre) return;
     for (const chemin of avant) if (!apres.has(chemin)) arreterSurveillance(chemin);
     const nouveaux = liste.filter((p) => !avant.has(p.chemin));
