@@ -31,7 +31,10 @@ async function ouvrir(mode) {
     p.erreurs = () => erreurs; await once(p, 'spawn'); return p;
 }
 async function tuer(p) {
-    if (p.exitCode === null && p.signalCode === null) { const fin = once(p, 'close'); p.kill('SIGKILL'); await fin; }
+    // Le nettoyage revisite les enfants déjà arrêtés pendant le scénario.
+    // Leur ancien PID peut maintenant appartenir à un autre processus Windows.
+    if (p.exitCode !== null || p.signalCode !== null) return;
+    const fin = once(p, 'close'); p.kill('SIGKILL'); await fin;
     // Sous Windows, la fermeture des flux peut précéder la disparition du PID.
     // La reprise doit être testée après la mort confirmée, pas pendant sa terminaison.
     if (p.pid) await attendre(() => !processusVivant(p.pid));

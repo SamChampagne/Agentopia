@@ -1,0 +1,28 @@
+diff --git a/chunk-wfns8g9a.js b/chunk-wfns8g9a.js
+index 5857938113267e6c84ad1fc2476ee506e927f7da..748f26205845e8d1a7f294010875f4939ebed253 100644
+--- a/chunk-wfns8g9a.js
++++ b/chunk-wfns8g9a.js
+@@ -130,7 +130,7 @@ import React2 from "react";
+ import React from "react";
+ 
+ // jsx-dev-runtime.js
+-import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
++import { Fragment, jsxDEV } from "./jsx-dev-runtime.js";
+ 
+ // src/components/error-boundary.tsx
+ class ErrorBoundary extends React.Component {
+diff --git a/jsx-dev-runtime.js b/jsx-dev-runtime.js
+index 4c655f9a0a5c36a9bcf2111c972e03df1815d2c0..9343f3de5be9753ca227c9f0d80df62dbdc51219 100644
+--- a/jsx-dev-runtime.js
++++ b/jsx-dev-runtime.js
+@@ -1 +1,9 @@
+-export { Fragment, jsxDEV } from "react/jsx-dev-runtime"
++import * as developmentRuntime from "react/jsx-dev-runtime";
++import { Fragment, jsx, jsxs } from "react/jsx-runtime";
++
++// OpenTUI 0.7.0 ships jsxDEV callsites even when React runs in production.
++// Keep development diagnostics; production uses React's supported JSX runtime.
++const jsxDEV = developmentRuntime.jsxDEV ?? ((type, props, key, staticChildren) =>
++  (staticChildren ? jsxs : jsx)(type, props, key));
++
++export { Fragment, jsxDEV };
