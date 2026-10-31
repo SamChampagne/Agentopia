@@ -10,6 +10,7 @@ import { theme, fond, couleurProjet } from '../dist/theme.js';
 import { Boutons } from './vues/commun.tsx';
 import { DiffDirect } from './diffDirect.tsx';
 import { presenterPermission } from '../dist/presentationPermission.js';
+import { nomAgentSession, titreConversation } from '../dist/ui/identiteSession.js';
 import { useNavigationConversation } from './navigationConversation.ts';
 import { chargerHistoriqueConversation, rechercherHistoriqueConversation } from '../dist/historiqueConversation.js';
 
@@ -93,9 +94,9 @@ export function Conversation({ s, largeur, cout, agir, position = 'gauche', rech
         <box flexGrow={1} flexShrink={1} minWidth={0} minHeight={0} flexDirection="column">
             <box height={1} flexShrink={0} flexDirection="row" paddingLeft={1}>
                 <text flexGrow={1} truncate>
-                    <span fg={couleurProjet(s.nom)}>● </span>
-                    <span fg={fond.texte} attributes={GRAS}>{s.nom}</span>
-                    <span fg="gray">{`  ${s.fournisseur ? `${s.fournisseur} · ` : ''}${s.titre || s.id || ''}`}</span>
+                    <span fg={theme.accent} attributes={GRAS}>{`Agent : ${nomAgentSession(s)}`}</span>
+                    <span fg={couleurProjet(s.nom)}>{' · '}</span>
+                    <span fg={fond.texte}>{titreConversation(s)}</span>
                 </text>
                 {cout !== undefined && <text fg={fond.discret}>{`${dollars(cout)} `}</text>}
             </box>

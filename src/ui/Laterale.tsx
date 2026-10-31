@@ -1,4 +1,5 @@
 import { Box, Text } from 'ink';
+import { nomAgentSession } from './identiteSession.js';
 import wrapAnsi from 'wrap-ansi';
 import type { etatMaitre } from '../maitre.js';
 
@@ -116,7 +117,7 @@ function Carte({ s, a, active, largeur, tic, survole }: { s: SessionVue; a?: Act
     return (
         <Box height={CARTE} flexShrink={0} width={largeur} flexDirection="column">
             <LigneCarte {...commun} droite={`${icone} ${etat}`} couleurDroite={couleur} morceaux={[
-                { t: '● ', c: pause ? fond.discret : couleurProjet(s.nom) }, { t: s.nom, gras: true, c: active ? theme.accent : pause ? fond.eteint : fond.texte },
+                { t: '● ', c: pause ? fond.discret : couleurProjet(s.nom) }, { t: `${nomAgentSession(s)} · `, c: theme.secondaire }, { t: s.nom, gras: true, c: active ? theme.accent : pause ? fond.eteint : fond.texte },
                 { t: s.arrierePlan ? ' ⧉' : '', c: fond.discret },
             ]} />
             <LigneCarte {...commun} droite={!pause && a?.date ? ilYa(a.date) : undefined} morceaux={[

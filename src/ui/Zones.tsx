@@ -11,6 +11,7 @@ import { EtatGit } from '../projets.js';
 import { Bouton, nbRangees, COL_ACTIONS, ActionSession } from './mise.js';
 import { theme, couleurProjet, c, fond, degrade } from '../theme.js';
 import { lignesOutil, markdownConversation } from '../presentationConversation.js';
+import { nomAgentSession, titreConversation } from './identiteSession.js';
 
 // Découpe des lignes (avec couleurs) à la largeur, puis garde la fenêtre visible selon le défilement
 // Retire les espaces de fin (même entourés de codes couleur) : sinon les tableaux bourrés d'espaces
@@ -141,15 +142,16 @@ export function VueSession({ s, messages, boutons, largeur, hauteur, defilement,
             <Box height={1} flexShrink={0} paddingX={1} justifyContent="space-between" overflow="hidden">
                 <Box flexShrink={1} overflow="hidden">
                     <Text wrap="truncate-end">
-                        <Text color={couleurProjet(s.nom)}>● </Text>
-                        <Text bold>{s.nom}</Text>
-                        <Text color="gray">{`  ${s.arrierePlan ? `⧉ arrière-plan ${s.id}` : '▭ onglet'} · ${s.titre}${cout ? ` · ≈ ${dollars(cout)} auj.` : ''}`}</Text>
+                        <Text bold color={theme.accent}>{`Agent : ${nomAgentSession(s)}`}</Text>
+                        <Text color={couleurProjet(s.nom)}>{' · '}</Text>
+                        <Text>{titreConversation(s)}</Text>
+                        <Text color="gray">{`${s.integree ? '' : s.arrierePlan ? ` · ⧉ arrière-plan ${s.id}` : ' · ▭ onglet'}${cout ? ` · ≈ ${dollars(cout)} auj.` : ''}`}</Text>
                     </Text>
                 </Box>
                 {/* Ce que la session a changé dans son projet : modifs, commits à pousser */}
                 {git && (
-                    <Box flexShrink={0}>
-                        <Text>
+                    <Box flexShrink={0} width={Math.floor(largeur / 3)} justifyContent="flex-end" overflow="hidden">
+                        <Text wrap="truncate-end">
                             <Text color={theme.secondaire}>{`  ⎇ ${git.branche}`}</Text>
                             {git.modifs ? <Text color="#facc15">{` ✎ ${git.modifs} fichier${git.modifs > 1 ? 's' : ''}`}</Text> : <Text color="#4ade80"> ✓ propre</Text>}
                             {git.enAvance ? <Text color="#facc15">{` ↑${git.enAvance} à pousser`}</Text> : null}

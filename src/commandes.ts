@@ -1031,7 +1031,7 @@ export async function executerLigne(ligne: string, contexte: { dossier?: string 
             const proches = suggestionsCommande(premier, COMMANDES.filter((c) => !c.cache).flatMap((c) => [c.nom, ...(c.alias ?? [])]));
             throw new Error(`Commande inconnue : ${premier}.${proches.length ? ` Essaie ${proches.join(', ')}.` : ' Ouvre /aide ou Ctrl+K.'} Aucun agent lancé.`);
         }
-        // Même parcours que /session : choix explicite ou préférence, jamais de Claude implicite.
+        // Même parcours que /session : choix explicite, avec la préférence présélectionnée.
         const ici = await resoudreProjet(dossier);
         return COMMANDES.find((c) => c.nom === 'session')!.executer({ args: [], reste: texte, projet: ici, apresProjet: developperPrompts(texte) });
     }

@@ -2,7 +2,7 @@ import type { Commande, Contexte } from './commandes.js';
 import { presenterPermission } from './presentationPermission.js';
 import { sauverConfig, type Config } from './config.js';
 import { bus, choisir, saisir } from './ui/bus.js';
-import { FOURNISSEURS, capacitesFournisseur, validerModele, type Fournisseur } from './providers/types.js';
+import { FOURNISSEURS, capacitesFournisseur, estFournisseur, validerModele, type Fournisseur } from './providers/types.js';
 import { disponibilite } from './providers/config.js';
 import { guiderConnexion } from './providers/assistantConnexion.js';
 import { creerIntegree, envoyerIntegree, lireIntegree, listerIntegrees, restaurerIntegree, repondrePermission, interrompreIntegree } from './sessionsIntegrees.js';
@@ -12,12 +12,19 @@ export async function choisirFournisseur(message = 'Avec quel agent ?', codeSeul
         label: FOURNISSEURS[f].nom, valeur: f, description: `${FOURNISSEURS[f].capacite} · ${disponibilite(f).texte}`,
     })), false);
 }
-async function ouvrir({ projet, apresProjet }: Contexte, fournisseur?: Fournisseur): Promise<void> {
-    const f = fournisseur || await choisirFournisseur();
+async function ouvrir({ projet, apresProjet }: Contexte, fournisseur?: Fournisseur, prefere?: Config['fournisseurDefaut']): Promise<void> {
+    // Une préférence présélectionne une option ; seule la validation crée la session.
+    const fournisseurs = (Object.keys(FOURNISSEURS) as Fournisseur[])
+        .sort((a, b) => Number(b === prefere) - Number(a === prefere));
+    const f = fournisseur ?? await choisir('Nouvelle session : quel agent ?', fournisseurs.map((agent) => ({
+        label: `${FOURNISSEURS[agent].nom}${agent === prefere ? ' · par défaut' : ''}`, valeur: agent,
+        description: `${disponibilite(agent).texte} · ${FOURNISSEURS[agent].capacite}`,
+    })), false, `Projet : ${projet!.nom}\n${projet!.chemin}\n\nL’agent choisi répondra dans cette session.${apresProjet.trim() ? '\nTon message sera envoyé après ce choix et la connexion.' : '\nTu pourras ensuite écrire ton premier message.'}`);
+    if (!estFournisseur(f)) throw new Error('Choisis un agent enregistré pour créer la session.');
     await guiderConnexion(f, true);
     const s = creerIntegree(f, projet!.chemin, `${FOURNISSEURS[f].nom} · ${projet!.nom}`);
     bus.emit('selectionner', s.id);
-    bus.emit('notice', `${FOURNISSEURS[f].nom} : écris dans la barre ci-dessous`);
+    bus.emit('notice', `Session créée · Agent : ${FOURNISSEURS[f].nom} · Projet : ${projet!.nom}${apresProjet.trim() ? '' : ' · écris dans le chat'}`);
     if (apresProjet.trim()) await envoyerIntegree(s.id, apresProjet.trim());
 }
 export function commandesSessions(config: Config): Commande[] {
@@ -52,11 +59,11 @@ export function commandesSessions(config: Config): Commande[] {
             const { revoirAgentsPreparation } = await import('./preparation.js');
             await revoirAgentsPreparation(config, { tous: true });
         } },
-        { nom: 'agent-defaut', groupe: 'Config', description: 'Agent des nouvelles conversations, ou choisir à chaque fois', executer: async () => {
+        { nom: 'agent-defaut', groupe: 'Config', description: 'Agent proposé à la création des conversations', executer: async () => {
             const fournisseur = await choisir<NonNullable<Config['fournisseurDefaut']>>('Agent des nouvelles conversations', [
-                { label: 'Choisir à chaque fois', valeur: 'choisir', description: 'Demander avant de créer une conversation.' },
+                { label: 'Aucune préférence', valeur: 'choisir', description: 'Afficher les agents dans leur ordre habituel.' },
                 ...(Object.keys(FOURNISSEURS) as Fournisseur[]).map((f) => ({ label: FOURNISSEURS[f].nom, valeur: f, description: FOURNISSEURS[f].capacite })),
-            ], false, 'Concerne /session et la saisie sans conversation sélectionnée. Les conversations existantes gardent leur agent.');
+            ], false, 'Cet agent sera présélectionné dans /session et à la première saisie sans conversation. Tu confirmes toujours le choix avant la création. Les conversations existantes gardent leur agent.');
             config.fournisseurDefaut = fournisseur;
             sauverConfig(config);
             bus.emit('notice', 'Agent par défaut enregistré · les conversations existantes sont conservées');
@@ -97,7 +104,7 @@ export function commandesSessions(config: Config): Commande[] {
             setTimeout(() => bus.emit('lancer', `/equipe ${e.id}`), 100);
         } },
         { nom: 'session', alias: ['nouvelle'], projet: true, args: '[projet] [message]', groupe: 'Agents',
-            description: 'Conversation intégrée · agent par défaut ou choix du fournisseur', executer: (c) => ouvrir(c, config.fournisseurDefaut === 'choisir' ? undefined : config.fournisseurDefaut) },
+            description: 'Nouvelle conversation · choisir explicitement son agent', executer: (c) => ouvrir(c, undefined, config.fournisseurDefaut) },
         ...(Object.keys(FOURNISSEURS) as Fournisseur[]).map((f): Commande => ({ nom: f, projet: true, args: '[projet] [message]', groupe: 'Agents',
             description: `${FOURNISSEURS[f].nom} directement dans cette interface`, executer: (c) => ouvrir(c, f) })),
         { nom: 'fournisseurs', args: '[fournisseur]', groupe: 'Config', description: 'Connecter et vérifier les agents, gérer leurs clés API chiffrées', executer: async ({ args }) => {

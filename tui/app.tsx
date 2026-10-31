@@ -1,5 +1,5 @@
 import { proposerPlan } from '../dist/conseiller.js';
-import { nomAgentDefaut } from '../dist/providers/types.js';
+import { indicationNouvelleSession, nomAgentSession } from '../dist/ui/identiteSession.js';
 import { preparationAReprendre } from '../dist/preparation.js';
 import { installerDiagnostics } from '../dist/diagnostics.js';
 // Agentopia sous OpenTUI : même style que l'interface Ink, avec les mêmes données et les mêmes commandes.
@@ -343,8 +343,8 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
         if (!await fermerOuvert()) return void bus.emit('notice', 'Attends la fin de la commande en cours.');
         try {
             const id = await choisir('Sessions ouvertes', [
-                ...lireDonnees().agents.map((s: any) => ({ label: `${s.nom} · ${s.fournisseur ?? 'Claude'} · ${s.titre || s.id}`, valeur: s.cle })),
-                { label: '+ Nouvelle session', valeur: 'nouvelle-session' },
+                ...lireDonnees().agents.map((s: any) => ({ label: `${nomAgentSession(s)} · ${s.nom} · ${s.titre || s.id}`, valeur: s.cle })),
+                { label: '+ Session · choisir l’agent', valeur: 'nouvelle-session' },
             ], true);
             if (id === 'nouvelle-session') void lancer('/session', true);
             else setSelection(id);
@@ -757,7 +757,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
         if (notice) return { texte: notice, couleur: theme.secondaire };
         if (occupe) return { texte: 'commande en cours…', couleur: 'gray' };
         const t = valeur.trim();
-        if (images.length && !t.startsWith('/')) return { texte: `${session ? `${session.fournisseur ?? 'Claude'} · ${session.nom} · ${session.titre || session.id}` : 'Nouvelle conversation'} · 📎 ${images.length} pièce(s) jointe(s)`, couleur: theme.accent };
+        if (images.length && !t.startsWith('/')) return { texte: `${session ? `${nomAgentSession(session)} · ${session.nom} · ${session.titre || session.id}` : indicationNouvelleSession(config.fournisseurDefaut)} · 📎 ${images.length} pièce(s) jointe(s)`, couleur: theme.accent };
         if (t.startsWith('/')) return { texte: 'commande du CLI', couleur: 'gray' };
         if (modeMaitre) {
             return etatMaitre().enCours
@@ -768,9 +768,9 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
         if (session) {
             if (session.integree) {
                 if (session.terminalExterne) return { texte: 'Même conversation contrôlée dans le terminal Codex · ferme Codex pour reprendre ici · brouillon conservé', couleur: theme.secondaire };
-                if (session.permission) return { texte: `${session.fournisseur} attend ta décision · Entrée vide ou « Répondre à l’agent » · brouillon conservé`, couleur: '#fb923c' };
-                if (session.statut === 'travaille') return { texte: `${session.fournisseur} travaille · prépare ton prochain message, il restera en brouillon · Interrompre pour arrêter`, couleur: theme.secondaire };
-                return { texte: `↳ ${session.fournisseur} · ${session.nom} · ${session.titre || session.id} · Entrée pour envoyer${session.erreur ? ' · dernier tour interrompu ou en erreur' : ''}`, couleur: couleurProjet(session.nom) };
+                if (session.permission) return { texte: `${nomAgentSession(session)} attend ta décision · Entrée vide ou « Répondre à l’agent » · brouillon conservé`, couleur: '#fb923c' };
+                if (session.statut === 'travaille') return { texte: `${nomAgentSession(session)} travaille · prépare ton prochain message, il restera en brouillon · Interrompre pour arrêter`, couleur: theme.secondaire };
+                return { texte: `↳ ${nomAgentSession(session)} · ${session.nom} · ${session.titre || session.id} · Entrée pour envoyer${session.erreur ? ' · dernier tour interrompu ou en erreur' : ''}`, couleur: couleurProjet(session.nom) };
             }
             if (!session.arrierePlan) return { texte: `${session.nom} tourne dans un onglet : écris-y, ou « ⑂ Continuer ici » pour lui écrire d'ici`, couleur: '#facc15' };
             if (session.statut === 'travaille') return { texte: `${session.nom} travaille : attends qu'il ait fini pour lui écrire, ou Entrée pour le rejoindre`, couleur: '#facc15' };
@@ -780,7 +780,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
             if (session.statut === 'bloquee') return { texte: `${session.nom} attend une permission : Entrée pour le rejoindre (Alt+J : à côté)`, couleur: '#fb923c' };
             return { texte: `↳ envoyé à la conversation ${session.nom} (${session.titre || session.id})${t ? '' : ' · Entrée vide = la rejoindre'}`, couleur: couleurProjet(session.nom) };
         }
-        return { texte: `↳ nouvelle conversation · ${nomAgentDefaut(config.fournisseurDefaut)} · ${path.basename(dossierContexte(session, detail))} · Ctrl+K pour tout le reste`, couleur: fond.discret };
+        return { texte: `↳ ${indicationNouvelleSession(config.fournisseurDefaut)} · ${path.basename(dossierContexte(session, detail))}`, couleur: fond.discret };
     }
 
     const compact = width < 100;
@@ -804,7 +804,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
             pieces={recherche ? [] : images} gererPieces={() => void gererPieces()}
             avis={{ nombre: avis.filter((a) => !a.lu).length, actif: !demande && !occupe, ouvrir: () => void lancer('/avis', true) }}
             raisonPause={!demande && session?.terminalExterne && !recherche && !modeMaitre ? 'Lecture seule : cette conversation est ouverte dans le terminal Codex.' : undefined}
-            placeholder={recherche ? 'Rechercher dans les messages · Entrée / ↑ ↓ pour parcourir' : barreDansChat ? `Écrire à ${session.fournisseur ?? 'Claude'} · Entrée pour envoyer` : undefined} maitre={modeMaitre} />
+            placeholder={recherche ? 'Rechercher dans les messages · Entrée / ↑ ↓ pour parcourir' : barreDansChat ? `Écrire à ${nomAgentSession(session)} · Entrée pour envoyer` : undefined} maitre={modeMaitre} />
     </>;
 
     let zone;
