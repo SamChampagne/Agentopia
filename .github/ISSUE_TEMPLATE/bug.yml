@@ -1,0 +1,25 @@
+name: Bug
+description: Décrire un défaut avec reproduction ou preuve datée
+labels: [bug]
+body:
+  - type: textarea
+    id: observation
+    attributes:
+      label: Observation et preuve
+      description: Version/SHA, environnement, comportement réel et résultat attendu. Séparer preuve et hypothèse.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Étapes, commande ou lien de CI. Si non reproduit, le préciser.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critères de correction
+      description: Résultat observable, validation attendue et impact.
+    validations:
+      required: true
