@@ -74,7 +74,12 @@ export async function selectProjectAccess(config, candidates, readProject) {
       continue;
     }
     // An accessible wrong identity is a configuration problem, not a reason to try another secret.
-    return { ...candidate, identity: projectIdentity(config, project) };
+    const identity = projectIdentity(config, project);
+    if (!project.viewerCanUpdate) {
+      failures.push(`${candidate.name}: lecture seule`);
+      continue;
+    }
+    return { ...candidate, identity };
   }
   throw new Error(
     `Accès au tableau impossible. Configurer PROJECTS_TOKEN et/ou PROJECTS_TOKEN_INTEBEC avec les droits du propriétaire réel. ${failures.join('; ')}`,

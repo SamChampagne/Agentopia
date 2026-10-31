@@ -167,7 +167,7 @@ export class GitHub {
           'POST',
           {
             query:
-              'query($id:ID!){node(id:$id){... on ProjectV2{id number url closed owner{__typename ... on User{login} ... on Organization{login}}}}}',
+              'query($id:ID!){node(id:$id){... on ProjectV2{id number url closed viewerCanUpdate owner{__typename ... on User{login} ... on Organization{login}}}}}',
             variables: { id: this.config.id },
           },
           token,

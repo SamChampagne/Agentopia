@@ -28,6 +28,7 @@ const project = (owner) => ({
   number: owner === 'Intebec' ? 9 : 3,
   url: `https://github.com/${owner === 'Intebec' ? 'orgs' : 'users'}/${owner}/projects/${owner === 'Intebec' ? 9 : 3}`,
   closed: false,
+  viewerCanUpdate: true,
 });
 test('identité stable avant et après transfert; contexte Actions lié au même dépôt', () => {
   for (const owner of ['SamChampagne', 'Intebec'])
@@ -198,4 +199,23 @@ test('comparaison accepte les nouvelles URLs mais refuse pertes de données, cha
   unknown.protection = { available: false, error: '403' };
   assert.equal(compareSnapshots(before, unknown).automatedComparisonPassed, false);
   assert.ok(compareSnapshots(before, unknown).warnings.length);
+});
+
+test('un accès futur en lecture seule ne masque pas un accès source capable de synchroniser', async () => {
+  const selected = await selectProjectAccess(
+    config,
+    [
+      { name: 'future', token: 'fixture-future' },
+      { name: 'source', token: 'fixture-source' },
+    ],
+    async (token) => ({ ...project('SamChampagne'), viewerCanUpdate: token === 'fixture-source' }),
+  );
+  assert.equal(selected.name, 'source');
+  await assert.rejects(
+    selectProjectAccess(config, [{ name: 'readonly', token: 'fixture' }], async () => ({
+      ...project('Intebec'),
+      viewerCanUpdate: false,
+    })),
+    /lecture seule/,
+  );
 });
