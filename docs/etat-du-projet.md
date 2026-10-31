@@ -1,6 +1,6 @@
 # État d'Agentopia
 
-Relevé du 31 octobre 2026, avant l'intégration du standard : main `63b08986fc04`, bêta 13. La bêta 16 (`e9f856d`) est publiée séparément et la [PR #2](https://github.com/SamChampagne/Agentopia/pull/2) reste ouverte à cette date. Ses contrôles Windows ont réussi. Une publication de tag ne signifie pas que main a intégré la correction.
+Relevé actualisé le 31 octobre 2026 : la [PR #2](https://github.com/SamChampagne/Agentopia/pull/2) a été fusionnée pendant le ménage. Main `7dc0c74655be` intègre désormais la bêta 16 (`e9f856d`), également publiée. Ses contrôles Windows ont réussi. La branche documentaire a été synchronisée avec ce nouveau main.
 
 ## Structure
 
@@ -20,4 +20,4 @@ Le ménage documentaire n'exécute pas une session modèle réelle, SSH/SFTP ou 
 - [#5 — signature et distribution Windows](https://github.com/SamChampagne/Agentopia/issues/5), P2.
 - [#3 — documentation et standard](https://github.com/SamChampagne/Agentopia/issues/3).
 
-Les branches `opentui` et `codex/sessions-multi-agents` sont intégrées à la base observée. La branche de la PR #2 est conservée.
+Les branches `opentui` et `codex/sessions-multi-agents` sont intégrées à la base observée. La branche de la PR #2, encore active localement lors du relevé initial, est conservée. Le manifeste de nettoyage garde la base observée avant cette fusion.
