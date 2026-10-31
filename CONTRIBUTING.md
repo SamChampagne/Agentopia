@@ -1,6 +1,8 @@
 # Contribuer à Agentopia
 
-Standard commun, version 1 — 31 octobre 2026.
+Le [suivi GitHub obligatoire v2](docs/github-workflow.md) complète ce guide : toute tâche doit être décrite, estimée, rattachée au projet et suivie jusqu’à la clôture.
+
+Standard commun, version 2 — 31 octobre 2026.
 
 ## Parcours obligatoire des changements
 
@@ -15,7 +17,7 @@ Standard commun, version 1 — 31 octobre 2026.
 
 ## Projet GitHub
 
-Configuration non secrète : [.github/project.json](.github/project.json). L'agent utilise son accès GitHub existant; aucun jeton personnel n'est ajouté au dépôt ou aux workflows.
+Configuration non secrète : [.github/project.json](.github/project.json). L'agent utilise son accès GitHub existant. L'automatisation utilise le secret chiffré dédié `PROJECTS_TOKEN`; aucune valeur de jeton ne doit apparaître dans les fichiers versionnés.
 
 ```sh
 gh issue list --repo SamChampagne/Agentopia
@@ -35,7 +37,7 @@ git diff --check
 
 Le workflow **Standard de développement** vérifie les chemins des liens Markdown des entrées racines et de `docs/`, puis la présence d'une vraie issue du dépôt et de rubriques de validation/limites dans les PR. Les ancres et URL externes ne sont pas vérifiées. Les guides produit conservés ailleurs restent à relire lors d'un changement les concernant.
 
-Ce contrôle ne valide ni l'appartenance au projet privé, ni la qualité du code ou du produit. Les agents doivent encore exécuter les contrôles décrits dans [l'état du projet](docs/etat-du-projet.md). Aucune protection serveur de branche n'est supposée active sans vérification.
+Le contrôle complémentaire `workflow-projet` vérifie l'appartenance au projet privé, les estimations, les descriptions, les liens natifs et les statuts. Ces contrôles ne valident pas la qualité du code ou du produit. Les agents doivent encore exécuter les contrôles décrits dans [l'état du projet](docs/etat-du-projet.md). Aucune protection serveur de branche n'est supposée active sans vérification.
 
 ## Documentation
 

@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - run: node --test .github/scripts/check-development.test.mjs
+      - run: node --test .github/scripts/check-development.test.mjs .github/scripts/project-workflow.test.mjs
       - run: node .github/scripts/check-development.mjs
       - run: git diff --check
   suivi-pr:
