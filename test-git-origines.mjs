@@ -12,7 +12,8 @@ const context = vm.createContext({ process: { env: {} }, URL, AbortSignal, Buffe
 class Coffre { lire() { return {...coffre}; } modifier(fn) { fn(coffre); } }
 const stubs = { fs: {}, path: {}, child_process: {
  spawn: () => { throw Error('Processus interdit'); }, spawnSync: (_p,_a,o) => { dechiffrements++; return {status:0,stdout:o.input === 'enc-approved' ? 'TOKEN_APPROUVE_FACTICE' : 'TOKEN_ANCIEN_FACTICE'}; }
-}, './projets.js': {estWorktree:()=>false}, './chemins.js': {surPath:()=>undefined,CHEMINS:{jetons:'/coffre-en-memoire'}}, './coffreSecrets.js': {CoffreSecrets:Coffre} };
+}, './projets.js': {estWorktree:()=>false}, './chemins.js': {surPath:()=>undefined,CHEMINS:{jetons:'/coffre-en-memoire'}}, './coffreSecrets.js': {CoffreSecrets:Coffre},
+ './compteGitHub.js': {cleGitHub:async()=>undefined}, './config.js':{chargerConfig:()=>({})}, './authGitReseau.js':{argumentsGitCompte:a=>a} };
 const modules = new Map();
 async function charger(spec) {
  if (modules.has(spec)) return modules.get(spec);

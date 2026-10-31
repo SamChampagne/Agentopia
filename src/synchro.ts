@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 import { Projet, listerProjets } from './projets.js';
-import { Depot, DepotDistant, lireDepot, ajouterPRs, fetchTout, depotsDistants, cleDepot, trouverDepot } from './git.js';
+import { Depot, DepotDistant, lireDepot, ajouterPRs, fetchTout, depotsDistants, cleDepot, trouverDepot, etatPR } from './git.js';
 import { chargerConfig } from './config.js';
 import { prechargerJetons } from './jetons.js';
 
@@ -29,6 +29,7 @@ let pret = false;
 let dernierFetch: Date | undefined;
 let activite = '';                                     // "fetch…", "lecture des dépôts…"
 let demarre = false;
+let generationComptes = 0;
 
 // Regroupe les mises à jour : au plus une notification aux vues toutes les 250 ms
 let publication: NodeJS.Timeout | undefined;
@@ -183,13 +184,29 @@ export async function fetchMaintenant(surProgres?: (n: number) => void): Promise
 }
 
 async function rafraichirPRs(): Promise<void> {
-    await ajouterPRs([...depots.values()]);
+    const generation = generationComptes, compte = chargerConfig().compteGitHub;
+    const copies = [...depots.values()].map(d => ({ ...d }));
+    await ajouterPRs(copies);
+    if (generation !== generationComptes || compte !== chargerConfig().compteGitHub) return;
+    for (const d of copies) { const courant = depots.get(d.projet.chemin); if (courant && courant.remote === d.remote) courant.prs = d.prs; }
     publier();
 }
 
 export async function rafraichirDistants(): Promise<void> {
-    distants = await depotsDistants([...depots.values()]);
+    const generation = generationComptes, compte = chargerConfig().compteGitHub;
+    const nouveaux = await depotsDistants([...depots.values()]);
+    if (generation !== generationComptes || compte !== chargerConfig().compteGitHub) return;
+    distants = nouveaux;
     publier();
+}
+
+export async function actualiserCompteGitHub(): Promise<void> {
+    generationComptes++;
+    delete etatPR.GitHub;
+    for (const d of depots.values()) if (d.hebergeur === 'GitHub') d.prs = undefined;
+    distants = distants.filter(d => d.hebergeur !== 'GitHub');
+    publier();
+    await Promise.all([rafraichirPRs(), rafraichirDistants()]);
 }
 
 function toutesLes(delai: number, fn: () => Promise<unknown>): void {

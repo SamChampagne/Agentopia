@@ -9,6 +9,7 @@
 
 ## Guides et rapports existants
 
+- [Choisir son compte GitHub local](comptes-github.md)
 - [ameliorations-mn](ameliorations-mn.md)
 - [audit-securite-2026-10-30](audit-securite-2026-10-30.md)
 - [audit-stabilite-2026-10-30](audit-stabilite-2026-10-30.md)

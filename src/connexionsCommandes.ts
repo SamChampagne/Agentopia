@@ -1,4 +1,6 @@
 import type { Commande } from './commandes.js';
+import { chargerConfig, sauverConfig, type Config } from './config.js';
+import { choisirCompteGitHub } from './compteGitHubCommande.js';
 import { AIDE_JETONS, Hebergeur, pageJeton, jetonsConfigures, enregistrerJeton, oublierJeton, originesGitLab, ancienGitLabPresent, ancienJetonGitLab, associerAncienGitLab } from './jetons.js';
 import { origineGitLab } from './originesGit.js';
 import { OUTILS, DOCKER_DESKTOP, identiteJeton, oublierIdentite, remotesDuPoste, lirePressePapiers, viderPressePapiers, existe } from './connexions.js';
@@ -53,7 +55,7 @@ function installerAvecWinget(nom: string, id: string): void {
     ouvrirFenetrePowerShell(scriptInstallationWinget(nom, id));
 }
 
-export function commandesConnexions(): Commande[] {
+export function commandesConnexions(config: Config = chargerConfig()): Commande[] {
     return [
         {
             nom: 'connexions', alias: ['connecter-tout'], groupe: 'Config',
@@ -78,6 +80,7 @@ export function commandesConnexions(): Commande[] {
                         description: `${nb(h) ? `${nb(h)} dépôt${nb(h) > 1 ? 's' : ''} sur ce poste` : 'aucun dépôt détecté'}${deja.includes(h) ? ' · déjà connecté' : ''}`,
                     })), false);
                 if (site === 'GitLab') return connecterGitLab();
+                if (site === 'GitHub' && !args.includes('--jeton') && await choisirCompteGitHub(config) !== 'jeton') return;
                 if (deja.includes(site)) {
                     const quoi = await choisir(`${site} est déjà connecté`, [
                         { label: '⇄ Le reconnecter avec un nouveau jeton', valeur: 'nouveau' },
@@ -85,7 +88,12 @@ export function commandesConnexions(): Commande[] {
                     ], false);
                     if (quoi === 'oublier') {
                         oublierJeton(site);
+                        if (site === 'GitHub') { delete config.compteGitHub; sauverConfig(config); }
                         oublierIdentite(site);
+                        if (site === 'GitHub') {
+                            const { actualiserCompteGitHub } = await import('./synchro.js');
+                            void actualiserCompteGitHub().catch(() => undefined);
+                        }
                         return console.log(c.succes(`${site} déconnecté`));
                     }
                 }
@@ -110,12 +118,13 @@ export function commandesConnexions(): Commande[] {
                 const id = await tache(`Vérification du jeton ${site}`, () => identiteJeton(site, secret, remotes));
                 if (!id.ok) return console.log(c.erreur(`✕ ${site} : ${id.texte} · rien n'a été enregistré`));
                 if (!enregistrerJeton(site, secret)) return console.log(c.erreur('✕ Impossible de chiffrer le jeton'));
+                if (site === 'GitHub') { delete config.compteGitHub; sauverConfig(config); }
                 oublierIdentite(site);
                 if (comment === 'presse') viderPressePapiers();
                 console.log(c.succes(`✓ Connecté à ${site} : ${id.texte} · jeton chiffré pour ton compte Windows`));
                 // Pull requests et dépôts en ligne, tout de suite
                 const synchro = await import('./synchro.js');
-                void synchro.rafraichirDistants();
+                void (site === 'GitHub' ? synchro.actualiserCompteGitHub() : synchro.rafraichirDistants()).catch(() => undefined);
             },
         },
         {

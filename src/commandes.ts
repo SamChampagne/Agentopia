@@ -757,7 +757,7 @@ export const COMMANDES: Commande[] = [
     {
         nom: 'jetons', groupe: 'Git',
         description: 'Jetons GitHub / Azure DevOps / GitLab pour voir les pull requests',
-        executer: (ctx) => commandesConnexions().find((cmd) => cmd.nom === 'connecter')!.executer(ctx),
+        executer: (ctx) => commandesConnexions(config).find((cmd) => cmd.nom === 'connecter')!.executer(ctx),
     },
     {
         nom: 'git', alias: ['depots', 'repos'], groupe: 'Git',
@@ -796,7 +796,9 @@ export const COMMANDES: Commande[] = [
             for (const p of cibles) {
                 if (!p) continue;
                 console.log(`${puce(p.nom)} ${p.nom}`);
-                await tache(`git pull · ${p.nom}`, () => executer('git pull --ff-only', p.chemin, (l) => console.log(c.discret('  ' + l))));
+                const { gitExecution } = await import('./gitExecution.js');
+                const r = await tache(`git pull · ${p.nom}`, () => gitExecution(['pull', '--ff-only'], p.chemin, { timeoutMs: 120_000 }));
+                console.log(r.ok ? c.discret(r.sortie) : c.erreur(r.sortie));
             }
         },
     },
@@ -956,7 +958,7 @@ export const COMMANDES: Commande[] = [
     },
     ...commandesConfig(config),
     ...commandesSsh(config),
-    ...commandesConnexions(),
+    ...commandesConnexions(config),
     ...commandesSessions(config),
     ...commandesMissions(config),
     ...commandesEquipes(),

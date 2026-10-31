@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { citerPowerShell } from './lancementsWindows.js';
 import { surPath } from './chemins.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { argumentsGitCompte } from './authGitReseau.js';
 
 export interface OptionsExecution { signal?: AbortSignal; timeoutMs?: number; maxOctets?: number; progression?: (texte: string) => void }
 export interface ResultatExecution { ok: boolean; sortie: string; code: number | null }
@@ -59,7 +60,7 @@ export async function executerProcessus(programme: string, args: string[], cwd: 
     } finally { operations.delete(control); }
 }
 export function gitExecution(args: string[], cwd: string, options: OptionsExecution = {}): Promise<ResultatExecution> {
-    return executerProcessus('git', args, cwd, options);
+    return executerProcessus('git', argumentsGitCompte(args), cwd, options);
 }
 export async function gitVerifieAsync(args: string[], cwd: string, options: OptionsExecution = {}): Promise<string> {
     const r = await gitExecution(args, cwd, options);

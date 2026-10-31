@@ -10,6 +10,7 @@ import { nomPalette, theme, fond } from '../theme.js';
 import { FOURNISSEURS, nomAgentDefaut } from '../providers/types.js';
 import { lirePreparation, projetsIgnores } from '../preparation.js';
 import { problemesSessions } from '../stockageSessions.js';
+import { etatCompteGitHub, type EtatCompteGitHub } from '../compteGitHub.js';
 
 export type LigneConfig =
     | { type: 'section'; texte: string }
@@ -29,13 +30,15 @@ const ajuste = (s: string, n: number) => (s.length > n - 1 ? s.slice(0, n - 2) +
 export function VueConfig({ fermer }: { fermer: () => void }) {
     const { largeur, hauteur } = useTailleVue();
     const [claude, setClaude] = useState<CompteClaude>();
+    const [github, setGitHub] = useState<EtatCompteGitHub>();
     const [index, setIndex] = useState(1);
     useEffect(() => {
         compteClaude().then(setClaude);
+        void etatCompteGitHub().then(setGitHub);
     }, []);
 
     const [etat] = useState(lireEtatConfig);
-    const lignes = lignesConfig(etat, claude);
+    const lignes = lignesConfig(etat, claude, github);
     const reglages = lignes.map((l, i) => (l.type === 'reglage' ? i : -1)).filter((i) => i >= 0);
     const courant = reglages.includes(index) ? index : reglages[0];
     const visibles = Math.max(1, hauteur - 2);
@@ -94,7 +97,7 @@ export function VueConfig({ fermer }: { fermer: () => void }) {
 }
 
 // Les réglages affichés, pour l'interface Ink comme pour la nouvelle (tui/)
-export function lignesConfig({ config, git, jetons, raccourci, preparation, sessionsIllisibles = 0 }: EtatConfig, claude?: CompteClaude): LigneConfig[] {
+export function lignesConfig({ config, git, jetons, raccourci, preparation, sessionsIllisibles = 0 }: EtatConfig, claude?: CompteClaude, github?: EtatCompteGitHub): LigneConfig[] {
     const projetsReportes = preparation ? projetsIgnores(preparation, config).length : 0;
     return [
         ...(etatRecuperationConfig() ? [{ type: 'reglage' as const, label: 'Réglages récupérés', valeur: etatRecuperationConfig()!.message, couleur: '#facc15', commande: '/diagnostic', aide: 'voir la sauvegarde' }] : []),
@@ -110,7 +113,10 @@ export function lignesConfig({ config, git, jetons, raccourci, preparation, sess
             type: 'reglage', label: 'Git (commits)', commande: '/compte git', aide: 'modifier',
             valeur: git.nom || git.email ? `${git.nom} <${git.email}>` : 'non configuré', couleur: git.nom ? undefined : '#facc15',
         },
-        ...(['GitHub', 'Azure DevOps', 'GitLab'] as const).map((h): Ligne => ({
+        { type: 'reglage', label: 'Compte GitHub', commande: '/compte github', aide: 'choisir un compte local',
+            valeur: github?.texte || (config.compteGitHub ? `@${config.compteGitHub} · vérification…` : 'Choisir parmi les comptes de ce poste'),
+            couleur: github?.ok ? '#4ade80' : github ? '#facc15' : undefined },
+        ...(['Azure DevOps', 'GitLab'] as const).map((h): Ligne => ({
             type: 'reglage', label: h, commande: '/jetons', aide: jetons.includes(h) ? 'remplacer le jeton' : 'ajouter un jeton',
             valeur: jetons.includes(h) ? 'jeton enregistré (pull requests visibles)' : 'aucun jeton', couleur: jetons.includes(h) ? '#4ade80' : 'gray',
         })),

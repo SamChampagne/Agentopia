@@ -5,6 +5,9 @@ import { Projet, estWorktree } from './projets.js';
 import { Hebergeur, jeton, originesGitLab, ancienGitLabPresent } from './jetons.js';
 import { surPath } from './chemins.js';
 import { appelGitAuthentifie } from './originesGit.js';
+import { cleGitHub as lireCleGitHub } from './compteGitHub.js';
+import { chargerConfig } from './config.js';
+import { argumentsGitCompte } from './authGitReseau.js';
 
 // État git de tous les projets : ce qui reste à pousser / tirer, modifs, PR
 
@@ -42,7 +45,7 @@ const ENV_GIT = { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'ne
 
 function git(args: string[], cwd: string, delai = 15_000): Promise<{ ok: boolean; sortie: string }> {
     return new Promise((ok) => {
-        const proc = spawn('git', args, { cwd, env: ENV_GIT });
+        const proc = spawn('git', argumentsGitCompte(args), { cwd, env: ENV_GIT, windowsHide: true });
         let sortie = '', erreurs = '';
         proc.stdout.setEncoding('utf-8');
         proc.stdout.on('data', (d: string) => (sortie += d));
@@ -212,7 +215,7 @@ export async function appel(url: string, entetes: Record<string, string>): Promi
 
 const raison = (statut: number) => (statut === 401 || statut === 403 ? 'jeton refusé ou sans droits' : statut === 404 ? 'introuvable (droits ?)' : statut ? `erreur ${statut}` : 'injoignable');
 
-async function prsGitHub(depots: Depot[], cle: string): Promise<void> {
+async function prsGitHub(depots: Depot[], cle: string, compte: string | undefined): Promise<void> {
     const entetes = { Authorization: `Bearer ${cle}`, Accept: 'application/vnd.github+json' };
     let erreur = '';
     await Promise.all(depots.map(async (d) => {
@@ -223,7 +226,7 @@ async function prsGitHub(depots: Depot[], cle: string): Promise<void> {
         }
         d.prs = r.json.map((p: any) => ({ numero: p.number, titre: p.title, auteur: p.user?.login ?? '', brouillon: !!p.draft, branche: p.head?.ref ?? '', url: p.html_url }));
     }));
-    etatPR['GitHub'] = erreur || 'ok';
+    if (compte === chargerConfig().compteGitHub) etatPR['GitHub'] = erreur || 'ok';
 }
 
 async function prsAzure(depots: Depot[], cle: string): Promise<void> {
@@ -263,14 +266,18 @@ async function prsGitLab(depots: Depot[]): Promise<void> {
 export async function ajouterPRs(depots: Depot[]): Promise<void> {
     const parHebergeur = (h: string) => depots.filter((d) => d.hebergeur === h && !d.worktree && (d.depot || d.api));
     const taches: Promise<void>[] = [];
-    const cleGitHub = jeton('GitHub'), cleAzure = jeton('Azure DevOps');
-    if (cleGitHub) taches.push(prsGitHub(parHebergeur('GitHub'), cleGitHub));
+    let cleGitHub: string | undefined;
+    const compte = chargerConfig().compteGitHub, selectionExplicite = !!compte;
+    try { if (parHebergeur('GitHub').length) cleGitHub = await lireCleGitHub(); }
+    catch { if (compte === chargerConfig().compteGitHub) etatPR.GitHub = 'Compte sélectionné indisponible : /compte github'; }
+    const cleAzure = jeton('Azure DevOps');
+    if (cleGitHub) taches.push(prsGitHub(parHebergeur('GitHub'), cleGitHub, compte));
     if (cleAzure) taches.push(prsAzure(parHebergeur('Azure DevOps'), cleAzure));
     taches.push(prsGitLab(parHebergeur('GitLab')));
     await Promise.all(taches);
     // Les worktrees affichent les PR de leur dépôt principal
     for (const d of depots.filter((x) => x.worktree)) d.prs = depots.find((x) => !x.worktree && x.remote === d.remote)?.prs;
-    if (!cleGitHub) await prsViaGh(depots);
+    if (!cleGitHub && !selectionExplicite) await prsViaGh(depots);
 }
 
 // Secours : GitHub CLI s'il est installé et connecté
@@ -324,7 +331,10 @@ export function cleDepot(url: string): string {
 
 export async function depotsDistants(locaux: Depot[]): Promise<DepotDistant[]> {
     const liste: DepotDistant[] = [];
-    const cleGitHub = jeton('GitHub'), cleAzure = jeton('Azure DevOps');
+    const compte = chargerConfig().compteGitHub, cleAzure = jeton('Azure DevOps');
+    let cleGitHub: string | undefined;
+    try { cleGitHub = await lireCleGitHub(); }
+    catch { if (compte === chargerConfig().compteGitHub) etatPR.GitHub = 'Compte sélectionné indisponible : /compte github'; }
     const taches: Promise<void>[] = [];
     if (cleGitHub) {
         taches.push((async () => {

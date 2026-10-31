@@ -3,11 +3,12 @@ import * as path from 'node:path';
 import { spawn } from 'node:child_process';
 import { surPath } from './chemins.js';
 import { estDistribution, maintenirDistribution } from './distribution.js';
+import { argumentsGitCompte } from './authGitReseau.js';
 
 export interface ResultatCommande { ok: boolean; sortie: string }
 export type Lanceur = (cmd: string, args: string[], cwd: string) => Promise<ResultatCommande>;
 export const lancerMaintenance: Lanceur = (cmd, args, cwd) => new Promise((resoudre) => {
-    const proc = spawn(cmd, args, { cwd, windowsHide: true, shell: process.platform === 'win32' && cmd === 'npm', stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn(cmd, cmd === 'git' ? argumentsGitCompte(args) : args, { cwd, windowsHide: true, shell: process.platform === 'win32' && cmd === 'npm', stdio: ['ignore', 'pipe', 'pipe'] });
     let sortie = '';
     const lire = (d: Buffer) => { sortie = (sortie + d.toString()).slice(-16_000); };
     proc.stdout?.on('data', lire); proc.stderr?.on('data', lire);

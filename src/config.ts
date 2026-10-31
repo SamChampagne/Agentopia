@@ -4,6 +4,7 @@ import * as path from 'path';
 import { CHEMINS, NOM, nomBanniere } from './chemins.js';
 import { FOURNISSEURS, estFournisseur, capacitesFournisseur, validerModele, type Fournisseur } from './providers/types.js';
 import { StockageConfig } from './stockageConfig.js';
+import { loginGitHubValide } from './githubLocal.js';
 
 // Fichier de config dans le dossier utilisateur : ~/.claudetopia.json
 export const CHEMIN_CONFIG = CHEMINS.config;
@@ -21,6 +22,7 @@ export interface Config {
     prenom: string;                     // pour le "Bonjour" (sinon : git user.name / user.email)
     lancement: 'fond' | 'onglet';       // où /claude-cli ouvre les sessions natives
     fournisseurDefaut?: Fournisseur | 'choisir'; // nouvelles conversations intégrées
+    compteGitHub?: string;              // login GitHub CLI choisi pour Agentopia ; aucun secret
     modelesFournisseurs?: Partial<Record<Fournisseur, string>>;
     preparationProjets?: { projet: string; commande?: { programme: string; args: string[] }; fichiersLocaux?: string[] }[];
     limitesAgents?: { toursJour: number; dureeMinutes: number };
@@ -80,6 +82,7 @@ export let premierLancement = false;
 export function normaliserConfig(valeur: unknown): Config {
     if (!valeur || typeof valeur !== 'object' || Array.isArray(valeur)) throw new Error('Configuration invalide');
     const brut = valeur as Record<string, any>;
+    if (brut.compteGitHub !== undefined && !loginGitHubValide(brut.compteGitHub)) throw new Error('Compte GitHub invalide');
     for (const cle of ['racines', 'extras', 'dockerDistant', 'sectionsMasquees', 'sectionsRepliees']) {
         if (brut[cle] !== undefined && (!Array.isArray(brut[cle]) || !brut[cle].every((v: unknown) => typeof v === 'string'))) throw new Error(`Réglage invalide : ${cle}`);
     }

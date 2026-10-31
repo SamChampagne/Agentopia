@@ -14,6 +14,7 @@ import { lireDonnees } from './ui/donnees.js';
 import { surPath } from './chemins.js';
 import { FOURNISSEURS, type Fournisseur } from './providers/types.js';
 import { disponibilite } from './providers/config.js';
+import { etatCompteGitHub } from './compteGitHub.js';
 
 // Tout ce que Agentopia peut connecter, avec son état et l'action qui le règle en un clic.
 // Les vérifications tournent en parallèle ; les plus lentes (API, versions) sont mises en cache.
@@ -72,6 +73,7 @@ export const oublierIdentite = (h: Hebergeur) => { for (const k of identites.key
 // ─── Outils installables avec winget ─────────────────────────────────────────
 
 export const OUTILS: Record<string, { nom: string; commande: string; winget: string; pour: string }> = {
+    gh: { nom: 'GitHub CLI', commande: 'gh', winget: 'GitHub.cli', pour: 'comptes GitHub locaux, PR et dépôts' },
     git: { nom: 'Git', commande: 'git', winget: 'Git.Git', pour: 'projets, commits, équipes' },
     wt: { nom: 'Windows Terminal', commande: 'wt', winget: 'Microsoft.WindowsTerminal', pour: 'onglets, souris' },
     code: { nom: 'VS Code', commande: 'code', winget: 'Microsoft.VisualStudioCode', pour: 'ouvrir projets et fichiers' },
@@ -127,6 +129,11 @@ export async function etatConnexions(): Promise<Element[]> {
     for (const h of ['GitHub', 'Azure DevOps', 'GitLab'] as Hebergeur[]) {
         const n = depots.filter((x) => x.hebergeur === h).length;
         const cle = h === 'GitHub' ? 'github' : h === 'Azure DevOps' ? 'azure' : 'gitlab';
+        if (h === 'GitHub') {
+            const id = await etatCompteGitHub();
+            elements.push({ groupe: 'GIT', nom: 'Compte GitHub', etat: id.ok ? 'ok' : 'avert', detail: id.texte, action: 'choisir un compte', commande: '/compte github' });
+            continue;
+        }
         if (h === 'GitLab') {
             const origines = originesGitLab();
             if (ancienGitLabPresent()) elements.push({ groupe: 'GIT', nom: 'GitLab · ancien compte', etat: 'avert', detail: 'adresse à confirmer : aucun jeton envoyé automatiquement', action: 'associer', commande: '/connecter gitlab' });
@@ -182,7 +189,7 @@ export async function etatConnexions(): Promise<Element[]> {
         : { groupe: 'OUTILS', nom: 'Notifications cliquables', etat: 'neutre', detail: 'un clic sur une notification ouvrirait la session concernée', action: 'activer', commande: '/notifications-cliquables oui' });
 
     // Outils
-    for (const cle of ['wt', 'code', 'rg']) {
+    for (const cle of ['gh', 'wt', 'code', 'rg']) {
         const o = OUTILS[cle];
         elements.push(outilPresent[cle]
             ? { groupe: 'OUTILS', nom: o.nom, etat: 'ok', detail: 'installé', action: '', commande: '' }

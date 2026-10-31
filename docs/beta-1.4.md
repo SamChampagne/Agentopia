@@ -1,5 +1,13 @@
 # Agentopia 1.4 — bêta Windows
 
+## 1.4.0-beta.18 — choisir son compte GitHub local
+
+- Sélecteur dans Config, Connexions et `/compte github`, avec compte choisi visible et annulation sans changement.
+- Réutilisation des comptes GitHub CLI locaux, contrôle de leur identité et préférence limitée à Agentopia.
+- PR, tickets, CI, dépôts et Git HTTPS suivent le choix. Les clés SSH et l’identité des commits restent séparées.
+- Invalidation des résultats de l’ancien compte, absence de repli silencieux et tests isolés du coffre personnel.
+- [Guide des comptes GitHub](comptes-github.md).
+
 ## 1.4.0-beta.17 — choisir clairement l’agent d’une session
 
 - `+ Session`, `/session`, `/nouvelle` et le premier message sans conversation ouverte affichent le choix de l’agent avant de créer la session. Le projet, les agents disponibles et leur connexion sont indiqués.

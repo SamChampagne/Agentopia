@@ -7,6 +7,8 @@ import { c, couleurProjet, banniere } from './theme.js';
 import { tableau, titre, largeurVisible } from './affichage.js';
 import { chargerConfig } from './config.js';
 import { surPath } from './chemins.js';
+import { cleGitHub } from './compteGitHub.js';
+import { environnementGhLocal } from './githubLocal.js';
 
 const GH_DISPO = !!surPath('gh');
 
@@ -26,10 +28,13 @@ export function projetsRecents(projets: Projet[], max: number): { projet: Projet
 
 export const puce = (nom: string) => chalk.hex(couleurProjet(nom))('●');
 
-function blocPRs(): string {
+async function blocPRs(): Promise<string> {
     if (!GH_DISPO) return c.discret('  Installe GitHub CLI pour voir tes PR : winget install GitHub.cli');
+    let cle: string | undefined;
+    try { cle = await cleGitHub(); } catch { return c.discret('  Compte sélectionné indisponible : /compte github'); }
     const res = spawnSync('gh', ['search', 'prs', '--author', '@me', '--state', 'open',
-        '--json', 'repository,number,title,isDraft', '--limit', '10'], { encoding: 'utf-8', timeout: 8000 });
+        '--json', 'repository,number,title,isDraft', '--limit', '10'], { encoding: 'utf-8', timeout: 8000, windowsHide: true,
+        env: cle ? { ...environnementGhLocal(), GH_TOKEN: cle } : process.env });
     if (res.status !== 0) return c.discret('  PR indisponibles : lance "gh auth login"');
     const prs = JSON.parse(res.stdout) as { repository: { name: string }; number: number; title: string; isDraft: boolean }[];
     if (!prs.length) return c.discret('  Aucune PR ouverte');
@@ -65,7 +70,7 @@ export function entete(marge: number, largeur: number): string {
 }
 
 // Projets récents + PR (ce qui était sur l'ancien accueil), via /recents
-export function recents(projets: Projet[]): string {
+export async function recents(projets: Projet[]): Promise<string> {
     const lignes: string[] = [];
     lignes.push(titre('Projets récents'));
     lignes.push(tableau(projetsRecents(projets, 8).map(({ projet, date }) => {
@@ -83,6 +88,6 @@ export function recents(projets: Projet[]): string {
         ];
     }), { max: [2, 28, 14, 36] }));
     lignes.push(titre('Mes PR ouvertes'));
-    lignes.push(blocPRs());
+    lignes.push(await blocPRs());
     return lignes.join('\n');
 }
