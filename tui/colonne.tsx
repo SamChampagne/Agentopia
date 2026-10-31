@@ -8,6 +8,7 @@ import { limiteContexte } from '../dist/agents.js';
 import { ilYa } from '../dist/ui/Panneau.js';
 import { theme, fond, couleurProjet } from '../dist/theme.js';
 import { menuSession, menuServeur, menuDocker } from './menus.ts';
+import { nomAgentSession } from '../dist/ui/identiteSession.js';
 
 const VIOLET = '#a78bfa';
 const droit = (e: any) => e?.button === 2;
@@ -66,7 +67,7 @@ function Carte({ s, a, active, survole, largeur, tic, choisir, survoler, menu, l
         <box height={pause ? 4 : 5} flexShrink={0} onMouseDown={(e: any) => (droit(e) ? menu() : choisir())} onMouseOver={() => survoler(true)} onMouseOut={() => survoler(false)}>
             <box height={1} backgroundColor={bg} flexDirection="row">
                 <text fg={barre}>▌ </text>
-                <text flexGrow={1} truncate><span fg={couleurProjet(s.nom)}>● </span><span fg={fond.texte} attributes={GRAS}>{s.nom}</span><span fg={theme.secondaire}>{s.fournisseur ? ` · ${s.fournisseur}` : ''}</span></text>
+                <text flexGrow={1} truncate><span fg={couleurProjet(s.nom)}>● </span><span fg={theme.secondaire}>{`${nomAgentSession(s)} · `}</span><span fg={fond.texte} attributes={GRAS}>{s.nom}</span></text>
                 <text fg={couleur}>{`${icone} ${etat} `}</text>
             </box>
             <box height={1} backgroundColor={bg} flexDirection="row">

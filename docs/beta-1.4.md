@@ -1,5 +1,12 @@
 # Agentopia 1.4 — bêta Windows
 
+## 1.4.0-beta.17 — choisir clairement l’agent d’une session
+
+- `+ Session`, `/session`, `/nouvelle` et le premier message sans conversation ouverte affichent le choix de l’agent avant de créer la session. Le projet, les agents disponibles et leur connexion sont indiqués.
+- La préférence de Config présélectionne l’agent en premier. Choisir un autre agent pour une session ne change pas cette préférence. Les commandes explicites `/codex`, `/claude` et `/perplexity` conservent leur lancement direct.
+- L’en-tête du chat affiche **Agent : Codex**, **Claude**, **Perplexity** ou **Claude CLI**. L’identité apparaît avant les noms de projet longs, dans les deux interfaces. Les titres automatiques ne répètent plus le projet et le fournisseur.
+- Échap annule sans créer de session ni envoyer de message ; une première saisie annulée retrouve son brouillon. Les scénarios de création et les petits écrans sont couverts par des tests isolés, sans appel aux fournisseurs.
+
 ## 1.4.0-beta.16 — écran noir au lancement
 
 - Compatibilité du runtime JSX OpenTUI avec React en production, sans désactiver les optimisations du mode production. Le correctif de dépendance est versionné et réappliqué lors de la construction Windows.

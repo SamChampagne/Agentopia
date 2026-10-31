@@ -43,7 +43,7 @@ try {
         statut: 'bloquee', permission: { id: 'permission', titre: 'npm test', detail: 'fixture' }, fichier: path.join(dossier, 'conversation.jsonl') };
     root.render(<Conversation s={s} largeur={120} agir={() => {}} diff={false} />); await dessiner();
     const conversation = ui.captureCharFrame();
-    assert.match(conversation, /codex/); assert.match(conversation, /Répondre à l’agent/);
+    assert.match(conversation, /Agent : Codex/); assert.match(conversation, /Répondre à l’agent/);
     assert.match(conversation, /npm test/); assert.doesNotMatch(conversation, /À côté|Rejoindre/);
     for (const statut of ['travaille', 'bloquee']) {
         const carte = { s: { ...s, statut }, a: {}, largeur: 70, choisie: false, survolee: false, agir() {}, survoler() {} };

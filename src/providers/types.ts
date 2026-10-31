@@ -24,7 +24,7 @@ export const FOURNISSEURS: Record<Fournisseur, { nom: string; capacite: string; 
     perplexity: { nom: 'Perplexity', capacite: 'Recherche web avec sources · clé API Perplexity', code: CAPACITES.perplexity.code },
 };
 export function nomAgentDefaut(f?: Fournisseur | 'choisir'): string {
-    return f && f !== 'choisir' && Object.hasOwn(FOURNISSEURS, f) ? FOURNISSEURS[f].nom : 'Choisir à chaque fois';
+    return f && f !== 'choisir' && Object.hasOwn(FOURNISSEURS, f) ? FOURNISSEURS[f].nom : 'Aucune préférence';
 }
 export interface QuestionAgent { id: string; question: string; options?: string[] }
 export interface PermissionAgent {

@@ -134,7 +134,7 @@ export function lignesConfig({ config, git, jetons, raccourci, preparation, sess
         { type: 'reglage', label: 'Tâches planifiées', valeur: 'agent choisi · exécution par le moteur', commande: '/planifications', aide: 'gérer' },
         { type: 'reglage', label: 'Agents à utiliser', valeur: 'détecter, installer et connecter tes agents', commande: '/choisir-agents', aide: 'choisir' },
         ...(preparation?.ignores.length ? [{ type: 'reglage' as const, label: 'Agents reportés', valeur: preparation.ignores.map((f) => FOURNISSEURS[f].nom).join(', '), commande: '/preparer agents', aide: 'revoir mes choix' }] : []),
-        { type: 'reglage', label: 'Agent par défaut', valeur: nomAgentDefaut(config.fournisseurDefaut), commande: '/agent-defaut', aide: 'nouvelles conversations' },
+        { type: 'reglage', label: 'Agent par défaut', valeur: nomAgentDefaut(config.fournisseurDefaut), commande: '/agent-defaut', aide: 'proposé avant création' },
         { type: 'reglage', label: 'Agent maître', valeur: config.maitre.fournisseur === 'claude-cli' ? 'Claude CLI' : config.maitre.fournisseur && config.maitre.fournisseur !== 'auto' ? nomAgentDefaut(config.maitre.fournisseur) : 'Automatique · à la demande', commande: '/maitre-fournisseur', aide: 'organiser le travail' },
         { type: 'reglage', label: 'Historique des agents', valeur: 'conversations créées ici, tous fournisseurs', commande: '/historique-agents', aide: 'reprendre' },
         { type: 'reglage', label: 'Chercher une conversation', valeur: 'messages anciens, sessions actives et archivées', commande: '/chercher-conversations', aide: 'rechercher' },

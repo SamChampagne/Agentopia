@@ -3,6 +3,7 @@ import { terminaux } from '../dist/terminaux.js';
 import { copier } from '../dist/lanceurs.js';
 import { lignesJournal } from '../dist/ui/journal.js';
 import { actionsSession, commandeSession } from '../dist/ui/saisie.js';
+import { nomAgentSession } from '../dist/ui/identiteSession.js';
 
 // Menus du clic droit : les mêmes articles que l'interface Ink (App.tsx), selon ce qui est sous la souris.
 // valeur : une commande « /… » à lancer, ou une fonction de l'interface.
@@ -15,7 +16,7 @@ export const ici = (dossier: string): Article[] => terminaux().map((t: any) => (
 export const general = (parlerAuMaitre: () => void): Article[] => [
     { label: '◈ Parler au maître (Alt+M)', valeur: parlerAuMaitre },
     { label: '⚿ Connexions (comptes, serveurs, outils)', valeur: '/connexions' },
-    { label: '+ Nouvelle conversation', valeur: '/session' },
+    { label: '+ Session · choisir l’agent', valeur: '/session' },
     { label: '✦ Mission guidée', valeur: '/mission' },
     { label: '■ Tout mettre en pause', valeur: '/tout-arreter' },
     { label: '◆ Équipe avec plusieurs fournisseurs', valeur: '/equipe-mixte' },
@@ -28,7 +29,7 @@ export const general = (parlerAuMaitre: () => void): Article[] => [
 ];
 
 export function menuSession(s: any, ouvrir: () => void): Menu {
-    if (s.integree) return { titre: `${s.fournisseur} · ${s.nom}`, articles: [
+    if (s.integree) return { titre: `${nomAgentSession(s)} · ${s.nom}`, articles: [
         { label: '↵ Ouvrir la conversation', valeur: ouvrir },
         ...actionsSession(s).filter((a) => a.action !== 'fermer').map((a) => ({ label: a.label, valeur: commandeSession(a.action, s)!, description: a.aide })),
     ] };

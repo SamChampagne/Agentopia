@@ -1,5 +1,5 @@
 import { proposerPlan } from '../conseiller.js';
-import { nomAgentDefaut } from '../providers/types.js';
+import { indicationNouvelleSession, nomAgentSession } from './identiteSession.js';
 import { citerArgument } from '../ligneCommande.js';
 import { useBrouillon } from './useBrouillon.js';
 import { destinationBrouillon } from './brouillons.js';
@@ -640,9 +640,9 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
             if (!session.arrierePlan) return { texte: `${session.nom} tourne dans un onglet : écris-y, ou clique « ⑂ Continuer ici » pour lui écrire d'ici`, couleur: '#facc15' };
             if (session.statut === 'travaille') return { texte: `${session.nom} travaille : attends qu'il ait fini pour lui écrire, ou Entrée pour le rejoindre`, couleur: '#facc15' };
             if (session.statut === 'bloquee') return { texte: `${session.nom} attend une permission : Entrée pour le rejoindre et répondre`, couleur: '#fb923c' };
-            return { texte: `↳ envoyé à la conversation ${session.nom} (${session.titre || session.id})${t ? '' : ' · Entrée vide = la rejoindre'}`, couleur: couleurProjet(session.nom) };
+            return { texte: `↳ ${nomAgentSession(session)} · ${session.nom} (${session.titre || session.id})${t ? '' : ' · Entrée vide = la rejoindre'}`, couleur: couleurProjet(session.nom) };
         }
-        return { texte: `↳ nouvelle conversation · ${nomAgentDefaut(config.fournisseurDefaut)} · ${path.basename(statut.cwd)} · Ctrl+K pour tout le reste`, couleur: fond.discret };
+        return { texte: `↳ ${indicationNouvelleSession(config.fournisseurDefaut)} · ${path.basename(statut.cwd)}`, couleur: fond.discret };
     }
 
     function ouvrirCarte(index: number) {
@@ -674,7 +674,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
     const general = (): Article[] => [
         { label: '◈ Parler au maître (Alt+M)', valeur: () => setModeMaitre(true) },
         { label: '⚿ Connexions (comptes, serveurs, outils)', valeur: '/connexions' },
-        { label: '+ Nouvelle conversation', valeur: '/nouvelle' },
+        { label: '+ Session · choisir l’agent', valeur: '/nouvelle' },
         { label: '◆ Nouvelle équipe d\'agents', valeur: '/equipe nouvelle' },
         ...ici(statut.cwd),
     ];

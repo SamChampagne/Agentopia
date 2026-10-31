@@ -53,7 +53,7 @@ try {
     ui.mockInput.pressEnter(); await dessiner();
     assert.equal(JSON.parse(fs.readFileSync(CHEMINS.config, 'utf8')).fournisseurDefaut, 'codex');
     bus.emit('notice', ''); await dessiner();
-    assert.match(ui.captureCharFrame(), /nouvelle conversation · Codex/);
+    assert.match(ui.captureCharFrame(), /Nouvelle session · choisir l’agent \(Codex proposé\)/);
     await choisir('session-a');
     await ui.mockInput.typeText('brouillon alpha'); await dessiner();
     assert.match(ui.captureCharFrame(), /brouillon alpha/); assert.match(ui.captureCharFrame(), /1 pièce/);
