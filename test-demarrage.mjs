@@ -13,8 +13,19 @@ try {
     // Un projet appelant peut avoir son propre tsconfig ; le lanceur conserve
     // son dossier de travail tout en choisissant le runtime de l'interface.
     fs.writeFileSync(path.join(temporaire, 'tsconfig.json'), JSON.stringify({ compilerOptions: { jsx: 'react-jsx', jsxImportSource: 'fourni-par-le-projet-inexistant' } }));
-    const { surPath } = await import('./dist/chemins.js');
-    const bun = surPath('bun'); assert.ok(bun);
+    const { trouverBun } = await import('./dist/runtimeInterface.js');
+    const bun = trouverBun(); assert.ok(bun, 'Bun natif ou binaire installé par npm requis');
+    if (process.platform === 'win32') {
+        const prefixe = path.join(temporaire, 'npm avec & espaces');
+        const natif = path.join(prefixe, 'node_modules', 'bun', 'bin', 'bun.exe');
+        fs.mkdirSync(path.dirname(natif), { recursive: true });
+        try { fs.linkSync(bun, natif); } catch { fs.copyFileSync(bun, natif); }
+        const shim = path.join(prefixe, 'bun.cmd');
+        fs.writeFileSync(shim, '@echo off\r\necho Ce shim ne doit jamais etre execute\r\nexit /b 87\r\n');
+        assert.equal(trouverBun(shim), natif);
+        assert.equal(trouverBun(path.join(temporaire, 'installation-incomplete', 'bun.cmd')), undefined);
+        env.PATH = `${prefixe};${env.PATH}`;
+    }
     for (const mode of ['production', 'development']) {
         const r = spawnSync(bun, ['--jsx-import-source', '@opentui/react', path.join(racine, 'tui', 'verifier-installation.tsx')], {
             cwd: temporaire, env: { ...env, NODE_ENV: mode }, encoding: 'utf8', windowsHide: true, timeout: 30_000, maxBuffer: 2 * 1024 * 1024,
@@ -29,7 +40,7 @@ try {
     });
     assert.equal(r.status, 0, r.error?.message || r.stderr || r.stdout);
     assert.match(r.stdout, /moteurs, dépendances et interface vérifiés/);
-    console.log('✓ Démarrage : production, développement, tsconfig externe, saisie et récupération du rendu ; précontrôle du vrai lanceur');
+    console.log('✓ Démarrage : production, développement, tsconfig externe, saisie et récupération du rendu ; vrai lanceur avec Bun natif ou npm');
 } finally {
     const relatif = path.relative(os.tmpdir(), temporaire);
     if (relatif && !relatif.startsWith('..') && !path.isAbsolute(relatif) && path.basename(temporaire).startsWith('agentopia-demarrage-test-')) fs.rmSync(temporaire, { recursive: true, force: true });

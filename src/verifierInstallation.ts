@@ -2,12 +2,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { surPath } from './chemins.js';
+import { trouverBun } from './runtimeInterface.js';
 
 // Diagnostic sans scan du poste, sans connexion à un fournisseur et sans génération.
 export async function verifierInstallation(racine: string): Promise<void> {
     await Promise.all([import('ink'), import('@anthropic-ai/claude-agent-sdk'), import('ssh2')]);
-    const bun = surPath('bun');
+    const bun = trouverBun();
     if (!bun) throw new Error('Moteur de l’interface manquant');
     const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'agentopia-verification-'));
     try {
