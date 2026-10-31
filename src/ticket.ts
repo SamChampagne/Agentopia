@@ -1,4 +1,5 @@
 import type { Commande } from './commandes.js';
+import { cleGitHub } from './compteGitHub.js';
 import { Projet } from './projets.js';
 import { lireDepot, appel } from './git.js';
 import { jeton } from './jetons.js';
@@ -37,7 +38,7 @@ const texteHtml = (html = '') => html.replace(/<br\s*\/?>|<\/(p|div|li|h\d)>/gi,
 
 export async function lireTicket(s: Source): Promise<Ticket | string> {
     if (s.type === 'github') {
-        const cle = jeton('GitHub');
+        const cle = await cleGitHub();
         const r = await appel(`https://api.github.com/repos/${s.depot}/issues/${s.numero}`, {
             Accept: 'application/vnd.github+json', ...(cle ? { Authorization: `Bearer ${cle}` } : {}),
         });

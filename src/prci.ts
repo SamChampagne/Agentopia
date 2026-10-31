@@ -1,6 +1,6 @@
 import type { Commande } from './commandes.js';
 import { appel, Depot } from './git.js';
-import { jeton } from './jetons.js';
+import { cleGitHub as lireCleGitHub } from './compteGitHub.js';
 import { lireSynchro } from './synchro.js';
 import { choisirAgent } from './choixAgent.js';
 import { creerIntegree, envoyerIntegree } from './sessionsIntegrees.js';
@@ -23,8 +23,8 @@ async function choisirDepotGitHub(cle?: string): Promise<Depot> {
     return choisir('Quel dépôt GitHub ?', depots.map((d) => ({ label: d.projet.nom, valeur: d, description: `${d.depot}${d.prs?.length ? ` · ${d.prs.length} PR ouverte(s)` : ''}` })), true);
 }
 
-function cleGitHub(): string {
-    const cle = jeton('GitHub');
+async function cleGitHub(): Promise<string> {
+    const cle = await lireCleGitHub();
     if (!cle) throw new Error('GitHub n\'est pas connecté : /connecter github (ou /connexions)');
     return cle;
 }
@@ -52,7 +52,7 @@ export function commandesPrCi(): Commande[] {
             nom: 'pr-corriger', args: '[projet] [numéro]', groupe: 'Git',
             description: 'Corriger les commentaires d’une pull request GitHub avec l’agent choisi',
             executer: async ({ args }) => {
-                const cle = cleGitHub();
+                const cle = await cleGitHub();
                 const d = await choisirDepotGitHub(args[0]);
                 const prs = d.prs ?? [];
                 if (!prs.length) return console.log(c.alerte(`Aucune pull request ouverte sur ${d.depot}`));
@@ -85,7 +85,7 @@ Pour chaque commentaire : fais la correction demandée (ou explique pourquoi ell
             nom: 'ci-reparer', args: '[projet]', groupe: 'Git',
             description: 'Réparer le dernier pipeline GitHub Actions en échec avec l’agent choisi',
             executer: async ({ args }) => {
-                const cle = cleGitHub();
+                const cle = await cleGitHub();
                 const d = await choisirDepotGitHub(args[0]);
                 const base = `https://api.github.com/repos/${d.depot}`;
                 const runs = await tache('Lecture des pipelines GitHub Actions', () => appel(`${base}/actions/runs?per_page=20`, entetes(cle)));

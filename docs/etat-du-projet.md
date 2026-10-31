@@ -1,6 +1,8 @@
 # État d'Agentopia
 
-Relevé actualisé le 31 octobre 2026 : la [PR #2](https://github.com/SamChampagne/Agentopia/pull/2) a été fusionnée pendant le ménage. Main `7dc0c74655be` intègre désormais la bêta 16 (`e9f856d`), également publiée. Ses contrôles Windows ont réussi. La branche documentaire a été synchronisée avec ce nouveau main.
+Version **1.4.0-beta.18**, 31 octobre 2026 : [#12 — comptes GitHub locaux](https://github.com/SamChampagne/Agentopia/issues/12), sur la base main `325f45c` qui inclut le choix d’agent de la bêta 17 et le suivi GitHub v2. Le choix GitHub est propre à Agentopia ; voir [le périmètre et les limites](comptes-github.md). Validation locale : `test:ci` complet réussi (265 tests Node, démarrage, 2 parcours Ink et 14 parcours OpenTUI), 17 contrôles du standard/suivi et vérification en lecture seule des deux comptes locaux, sans changement du compte global. Les contrôles distants et la distribution sont suivis sur l’issue et sa PR.
+
+Historique du ménage du 31 octobre 2026 : la [PR #2](https://github.com/SamChampagne/Agentopia/pull/2) a intégré la bêta 16 (`e9f856d`) dans main `7dc0c74655be`. Ses contrôles Windows ont réussi.
 
 ## Structure
 

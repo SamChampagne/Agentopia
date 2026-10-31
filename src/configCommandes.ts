@@ -209,10 +209,18 @@ export function afficherDiagnostic(v: Verification[]): void {
 export function commandesConfig(config: Config): Commande[] {
     return [
         {
-            nom: 'compte', args: 'claude|git', groupe: 'Config',
-            description: 'Changer de compte Claude, ou l\'identité git des commits',
+            nom: 'compte', args: 'github|claude|git', groupe: 'Config',
+            description: 'Choisir un compte GitHub local, Claude CLI ou l’identité des commits',
             executer: async ({ args }) => {
-                const quoi = args[0] ?? await choisir('Quel compte ?', [{ label: 'Claude', valeur: 'claude' }, { label: 'Git (identité des commits)', valeur: 'git' }], false);
+                const quoi = args[0] ?? await choisir('Quel compte ?', [{ label: 'GitHub', valeur: 'github' }, { label: 'Claude', valeur: 'claude' }, { label: 'Git (identité des commits)', valeur: 'git' }], false);
+                if (quoi === 'github') {
+                    const { choisirCompteGitHub } = await import('./compteGitHubCommande.js');
+                    if (await choisirCompteGitHub(config) === 'jeton') {
+                        const { commandesConnexions } = await import('./connexionsCommandes.js');
+                        await commandesConnexions(config).find(c => c.nom === 'connecter')!.executer({ args: ['github', '--jeton'], reste: '', apresProjet: '' });
+                    }
+                    return;
+                }
                 if (quoi === 'git') {
                     const id = identiteGit();
                     const nom = await saisir('Nom pour les commits', id.nom);

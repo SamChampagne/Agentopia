@@ -7,14 +7,17 @@ import { compteClaude } from '../../dist/configCommandes.js';
 import { lireEtatConfig, lignesConfig } from '../../dist/ui/VueConfig.js';
 import { theme, fond } from '../../dist/theme.js';
 import { Titre } from './commun.tsx';
+import { etatCompteGitHub, type EtatCompteGitHub } from '../../dist/compteGitHub.js';
 
 // Configuration : les mêmes réglages que l'interface Ink ; clic ou Entrée lance la commande du réglage,
 // puis la vue se rouvre (pour enchaîner les réglages)
 export function VueConfig({ fermer }: { fermer: () => void }) {
     const [claude, setClaude] = useState<any>();
+    const [github, setGitHub] = useState<EtatCompteGitHub>();
+    useEffect(() => { let actif = true; void etatCompteGitHub().then(v => { if (actif) setGitHub(v); }); return () => { actif = false; }; }, []);
     useEffect(() => void compteClaude().then(setClaude), []);
     const [etat] = useState(lireEtatConfig);
-    const lignes = lignesConfig(etat, claude);
+    const lignes = lignesConfig(etat, claude, github);
     const reglages = lignes.map((l: any, i: number) => (l.type === 'reglage' ? i : -1)).filter((i: number) => i >= 0);
     const [index, setIndex] = useState(reglages[0]);
     const defilement = useRef<ScrollBoxRenderable>(null);

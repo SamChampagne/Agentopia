@@ -1,4 +1,5 @@
 import { spawnSync } from 'child_process';
+import { argumentsGitCompte } from './authGitReseau.js';
 import { Projet, brancheGit } from './projets.js';
 import { demanderAgentTexte } from './choixAgent.js';
 import { choisir, confirmer, saisir, tache } from './ui/bus.js';
@@ -8,7 +9,7 @@ import { boite, ligneMarkdown } from './affichage.js';
 const MAX_DIFF = 60_000;   // au-delà on tronque pour ne pas exploser le prompt
 
 function git(args: string[], cwd: string, entree?: string): { ok: boolean; sortie: string } {
-    const res = spawnSync('git', args, { cwd, encoding: 'utf-8', input: entree, maxBuffer: 50 * 1024 * 1024 });
+    const res = spawnSync('git', argumentsGitCompte(args), { cwd, encoding: 'utf-8', input: entree, maxBuffer: 50 * 1024 * 1024, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
     return { ok: res.status === 0, sortie: ((res.stdout || '') + (res.status !== 0 ? res.stderr || '' : '')).trim() };
 }
 
