@@ -5,6 +5,11 @@ on:
   pull_request_target:
     types: [opened, edited, synchronize, reopened, closed, ready_for_review, converted_to_draft]
   workflow_dispatch:
+    inputs:
+      check_destination_access:
+        description: Vérifier le jeton futur Intebec sans transférer de dépôt
+        type: boolean
+        default: false
 
 # All runs reconcile the current repository state, including events coalesced by concurrency.
 concurrency:
@@ -31,8 +36,14 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
+      - name: Vérifier l’accès futur Intebec (lecture seule)
+        if: github.event_name == 'workflow_dispatch' && inputs.check_destination_access
+        run: node .github/scripts/migration-audit.mjs destination-access
+        env:
+          PROJECTS_TOKEN_INTEBEC: ${{ secrets.PROJECTS_TOKEN_INTEBEC }}
       - name: Vérifier et synchroniser issues, estimations et PR
         run: node .github/scripts/project-workflow.mjs sync
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PROJECTS_TOKEN: ${{ secrets.PROJECTS_TOKEN }}
+          PROJECTS_TOKEN_INTEBEC: ${{ secrets.PROJECTS_TOKEN_INTEBEC }}

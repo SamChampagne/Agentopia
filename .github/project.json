@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "owner": "SamChampagne",
   "repository": "Agentopia",
   "number": 4,
@@ -22,5 +22,14 @@
   "estimateFieldId": "PVTF_lAHOBqtaac4BpjAKzhoBJrE",
   "estimateMaxHours": 80,
   "statusContext": "workflow-projet",
-  "adoptedAt": "2026-10-31T00:00:00Z"
+  "adoptedAt": "2026-10-31T00:00:00Z",
+  "repositoryId": 1436267735,
+  "migration": {
+    "destinationOwner": "Intebec",
+    "destinationAccount": "SamChampagneIntebec",
+    "allowedOwners": [
+      "SamChampagne",
+      "Intebec"
+    ]
+  }
 }

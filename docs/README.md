@@ -18,3 +18,6 @@
 - [sessions-multi-agents](sessions-multi-agents.md)
 - [validation-beta13](validation-beta13.md)
 - [verifier-un-resultat](verifier-un-resultat.md)
+
+
+Préparation du transfert futur vers Intebec : [procédure et vérifications](github-transfer-intebec.md). Aucun déplacement de dépôt ne doit être déduit de cette documentation seule.

@@ -46,3 +46,6 @@ Le contrôle complémentaire `workflow-projet` vérifie l'appartenance au projet
 - GitHub Issues/Projects : tâches et avancement courants; éviter un TODO parallèle.
 - `docs/maintenance/` : inventaires et traces de nettoyage datées.
 - Les guides et rapports existants conservent leurs chemins pour préserver les liens publiés. Un rapport daté décrit sa révision, pas nécessairement l'état actuel.
+
+
+Préparation du transfert futur vers Intebec : [procédure et vérifications](docs/github-transfer-intebec.md). Aucun déplacement de dépôt ne doit être déduit de cette documentation seule.
