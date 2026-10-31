@@ -1,6 +1,6 @@
 # Suivi obligatoire des tâches et PR
 
-Standard commun v2, 31 octobre 2026. Il s'applique aux agents et aux contributeurs de ce dépôt.
+Standard commun v3, 31 octobre 2026. Il s'applique aux agents et aux contributeurs de ce dépôt.
 
 ## Avant de modifier le dépôt
 
@@ -47,7 +47,7 @@ node .github/scripts/project-workflow.mjs sync
 
 ## Automatisation et droits
 
-`.github/project.json` contient le projet et les IDs de champs. Les champs de description restent dans l'issue (source de vérité); l'estimation et la priorité sont reflétées dans le tableau. Les anciennes tâches clôturées sont conservées sans inventer d'estimation historique.
+`.github/project.json` contient les IDs stables du dépôt, du projet et des champs. Les noms de propriétaire et URLs courants sont résolus via GitHub; les valeurs stockées sont le point de départ historique. Les champs de description restent dans l'issue (source de vérité); l'estimation et la priorité sont reflétées dans le tableau. Les anciennes tâches clôturées sont conservées sans inventer d'estimation historique.
 
 Le workflow **Suivi du projet** réagit aux issues et PR, et peut être lancé manuellement. Il réconcilie l'état courant, y compris lorsque plusieurs événements se regroupent. Les issues incomplètes reçoivent `workflow:needs-planning`. Une carte archivée doit être désarchivée explicitement avant de reprendre.
 
@@ -65,3 +65,6 @@ node --check .github/scripts/project-workflow.mjs
 ```
 
 Les tests couvrent refus des données manquantes, liens fictifs, mauvais projet/champs/statut, blocage, panne Projects, brouillons, clôtures et idempotence. Les tests produit propres au dépôt restent requis; ce standard ne les remplace pas.
+
+
+Préparation du transfert futur vers Intebec : [procédure et vérifications](github-transfer-intebec.md). Aucun déplacement de dépôt ne doit être déduit de cette documentation seule.

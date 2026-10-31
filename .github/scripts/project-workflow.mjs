@@ -1,8 +1,9 @@
-// Standard GitHub v2. No dependencies and no execution of issue/PR content.
+// Standard GitHub v3 — portable across the planned Intebec transfer. No dependencies and no execution of issue/PR content.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { repositoryIdentity, selectProjectAccess } from './github-identity.mjs';
 
 export const LABELS = {
   started: 'workflow:started',
@@ -137,11 +138,47 @@ export function validateTrackedPull(pr, issues, items, config, nativeNumbers) {
 }
 
 export class GitHub {
-  constructor(config, repoToken, projectToken) {
+  constructor(config, repoToken, projectToken, destinationProjectToken) {
     this.config = config;
     this.repoToken = repoToken;
     this.projectToken = projectToken;
+    this.projectCandidates = [
+      { name: 'PROJECTS_TOKEN_INTEBEC', token: destinationProjectToken },
+      { name: 'PROJECTS_TOKEN', token: projectToken },
+    ];
     this.repository = `${config.owner}/${config.repository}`;
+  }
+  async initialize(environment = process.env) {
+    if (!Number.isSafeInteger(this.config.repositoryId) || this.config.repositoryId <= 0)
+      throw new Error('repositoryId stable requis avant tout accès GitHub.');
+    const metadata = await this.request(`/repositories/${this.config.repositoryId}`);
+    Object.assign(this.config, repositoryIdentity(this.config, metadata, environment));
+    this.repository = `${this.config.owner}/${this.config.repository}`;
+    return metadata;
+  }
+  async resolveProjectAccess() {
+    if (this.projectAccessName) return;
+    const selected = await selectProjectAccess(
+      this.config,
+      this.projectCandidates,
+      async (token) => {
+        const response = await this.request(
+          '/graphql',
+          'POST',
+          {
+            query:
+              'query($id:ID!){node(id:$id){... on ProjectV2{id number url closed owner{__typename ... on User{login} ... on Organization{login}}}}}',
+            variables: { id: this.config.id },
+          },
+          token,
+        );
+        if (response.errors) throw new Error('Accès Projects refusé.');
+        return response.data?.node;
+      },
+    );
+    this.projectToken = selected.token;
+    this.projectAccessName = selected.name;
+    Object.assign(this.config, selected.identity);
   }
   async request(path, method = 'GET', body, token = this.repoToken) {
     if (!token) throw new Error('Accès GitHub manquant; impossible de confirmer le suivi.');
@@ -208,6 +245,7 @@ export class GitHub {
       .map((issue) => issue.number);
   }
   async project() {
+    await this.resolveProjectAccess();
     const query =
       'query($id:ID!,$cursor:String){node(id:$id){... on ProjectV2{id title closed fields(first:100){nodes{... on ProjectV2Field{id name dataType} ... on ProjectV2SingleSelectField{id name options{id name}}}} items(first:100,after:$cursor){nodes{id isArchived content{... on Issue{id number repository{nameWithOwner}}} fieldValues(first:50){nodes{... on ProjectV2ItemFieldNumberValue{number field{... on ProjectV2Field{id} ... on ProjectV2SingleSelectField{id}}} ... on ProjectV2ItemFieldSingleSelectValue{optionId field{... on ProjectV2Field{id} ... on ProjectV2SingleSelectField{id}}}}}} pageInfo{hasNextPage endCursor}}}}}';
     const items = new Map();
@@ -387,7 +425,9 @@ async function main() {
     config,
     process.env.GITHUB_TOKEN ?? cliToken,
     process.env.PROJECTS_TOKEN ?? (local ? cliToken : undefined),
+    process.env.PROJECTS_TOKEN_INTEBEC,
   );
+  await api.initialize();
   if (['start', 'block', 'create'].includes(action) && !local)
     throw new Error('Cette commande est réservée au poste de développement.');
   if (action === 'create') {

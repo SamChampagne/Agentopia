@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { sha256 } from './installation-windows.mjs';
 import { construireInstallateur } from './construire-installateur.mjs';
 import { signerSiConfigure } from './signature-windows.mjs';
+import { depotPublication } from './depot-publication.mjs';
+
+const depot = depotPublication();
 
 const racine = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ps = (s) => `'${s.replace(/['\u2018-\u201b]/g, (c) => c + c)}'`;
@@ -82,7 +85,7 @@ const script = `Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Com
 executer('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')]);
 const hash = sha256(zip);
 construireInstallateur(sortie, { version, id, sha256: hash, taille: fs.statSync(zip).size,
-    url: `https://github.com/SamChampagne/Agentopia/releases/download/agentopia-${version}/Agentopia-Windows-x64.zip` });
+    url: `https://github.com/${depot}/releases/download/agentopia-${version}/Agentopia-Windows-x64.zip` });
 const signature = signerSiConfigure(path.join(sortie, 'Agentopia-Setup.exe'));
 fs.writeFileSync(path.join(sortie, 'signature.json'), JSON.stringify(signature, null, 2));
 fs.writeFileSync(path.join(sortie, 'agentopia-release.json'), JSON.stringify({ format: 'agentopia-release-v1', id, version, plateforme: 'win32-x64', asset: 'Agentopia-Windows-x64.zip', sha256: hash }, null, 2));

@@ -1,6 +1,8 @@
 import { obtenirDistribution, lireJsonDistribution } from './telechargementDistribution.js';
 
 export const DEPOT_DISTRIBUTION = 'SamChampagne/Agentopia';
+export const DEPOT_DISTRIBUTION_ID = 1436267735;
+const DEPOTS_DISTRIBUTION_AUTORISES = [DEPOT_DISTRIBUTION, 'Intebec/Agentopia'] as const;
 type Release = { tag_name: string; draft?: boolean; prerelease?: boolean; assets?: { name: string; browser_download_url: string }[] };
 function version(s: string) {
     const m = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(s);
@@ -35,12 +37,17 @@ export function choisirRelease(releases: Release[], actuelle: string): Release |
     }).sort((a, b) => comparerVersions(b.tag_name.replace(/^agentopia-/, ''), a.tag_name.replace(/^agentopia-/, '')))[0];
 }
 export async function chercherMiseAJour(actuelle: string, obtenir: typeof fetch = fetch) {
-    const reponse = await obtenirDistribution(`https://api.github.com/repos/${DEPOT_DISTRIBUTION}/releases?per_page=100`, obtenir);
+    const reponse = await obtenirDistribution(`https://api.github.com/repositories/${DEPOT_DISTRIBUTION_ID}/releases?per_page=100`, obtenir);
     if (!reponse.ok) throw new Error('Vérification des mises à jour indisponible. Réessaie plus tard.');
     const releases = await lireJsonDistribution(reponse, 4 * 1024 * 1024);
     if (!Array.isArray(releases)) throw new Error('Réponse de mise à jour invalide');
     const release = choisirRelease(releases, actuelle); if (!release) return;
-    const prefixe = `https://github.com/${DEPOT_DISTRIBUTION}/releases/download/${release.tag_name}/`;
+    // Both assets must come from the same explicitly authorized owner of the stable repository.
+    const depot = DEPOTS_DISTRIBUTION_AUTORISES.find(d =>
+        ['agentopia-release.json', 'Agentopia-Windows-x64.zip'].every(nom =>
+            release.assets?.find(a => a.name === nom)?.browser_download_url === `https://github.com/${d}/releases/download/${release.tag_name}/${nom}`));
+    if (!depot) throw new Error('Téléchargement Windows incompatible');
+    const prefixe = `https://github.com/${depot}/releases/download/${release.tag_name}/`;
     const urlAsset = (nom: string) => {
         const url = release.assets?.find((a) => a.name === nom)?.browser_download_url;
         if (url !== prefixe + nom) throw new Error('Téléchargement Windows incompatible');
