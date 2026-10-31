@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 const racine = import.meta.dirname;
 const temporaire = fs.mkdtempSync(path.join(os.tmpdir(), 'agentopia-demarrage-test-'));
 try {
-    const env = { ...process.env, CLAUDETOPIA_DATA_DIR: temporaire, CLAUDETOPIA_TEST_UI: '1', CLAUDETOPIA_SANS_REPRISE: '1', AGENTOPIA_SANS_MOTEUR: '1' };
+    const env = { ...process.env, BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0', CLAUDETOPIA_DATA_DIR: temporaire, CLAUDETOPIA_TEST_UI: '1', CLAUDETOPIA_SANS_REPRISE: '1', AGENTOPIA_SANS_MOTEUR: '1' };
     process.env.CLAUDETOPIA_DATA_DIR = temporaire;
     fs.writeFileSync(path.join(temporaire, 'claudetopia.json'), JSON.stringify({ racines: [], extras: [], notifications: false, fetchAuto: false, maitre: { actif: false } }));
     // Un projet appelant peut avoir son propre tsconfig ; le lanceur conserve
@@ -27,7 +27,7 @@ try {
         env.PATH = `${prefixe};${env.PATH}`;
     }
     for (const mode of ['production', 'development']) {
-        const r = spawnSync(bun, ['--jsx-import-source', '@opentui/react', path.join(racine, 'tui', 'verifier-installation.tsx')], {
+        const r = spawnSync(bun, ['--tsconfig-override', path.join(racine, 'tui', 'tsconfig.json'), '--jsx-import-source', '@opentui/react', path.join(racine, 'tui', 'verifier-installation.tsx')], {
             cwd: temporaire, env: { ...env, NODE_ENV: mode }, encoding: 'utf8', windowsHide: true, timeout: 30_000, maxBuffer: 2 * 1024 * 1024,
         });
         assert.equal(r.status, 0, `${mode} : ${r.error?.message || r.stderr || r.stdout}`);
