@@ -1,5 +1,9 @@
 # État d'Agentopia
 
+Version **1.4.0-beta.19**, 1er novembre 2026 : [#17 — Git et Config](https://github.com/SamChampagne/Agentopia/issues/17), sur la base main `7cfb07c`. Commit manuel ou proposé par un agent, commandes Git asynchrones et interrompables, contrôle index/HEAD/branche et recherche des réglages commune aux deux interfaces. [Guide et limites](git-et-config.md). Les preuves de validation complète et de distribution sont suivies sur l’issue et sa PR. La signature Windows et la qualification sur une machine propre restent suivies dans #5 ; le transfert vers Intebec n’est pas effectué.
+
+Validation locale de cette version : `npm run test:ci` réussi (278 tests Node, démarrage, 3 parcours Ink et 15 parcours OpenTUI) ; 24 tests du standard, de l’identité GitHub et du suivi réussis. Dépôts, profils et distant Git temporaires ; aucun modèle réel ni push dans un projet personnel. Les nouveaux tests couvrent également les hooks lents, l’interruption de push, le message manuel multiligne et la recherche Config à 40/60/80/130 colonnes.
+
 Version **1.4.0-beta.18**, 31 octobre 2026 : [#12 — comptes GitHub locaux](https://github.com/SamChampagne/Agentopia/issues/12), sur la base main `325f45c` qui inclut le choix d’agent de la bêta 17 et le suivi GitHub v2. Le choix GitHub est propre à Agentopia ; voir [le périmètre et les limites](comptes-github.md). Validation locale : `test:ci` complet réussi (265 tests Node, démarrage, 2 parcours Ink et 14 parcours OpenTUI), 17 contrôles du standard/suivi et vérification en lecture seule des deux comptes locaux, sans changement du compte global. Les contrôles distants et la distribution sont suivis sur l’issue et sa PR.
 
 Historique du ménage du 31 octobre 2026 : la [PR #2](https://github.com/SamChampagne/Agentopia/pull/2) a intégré la bêta 16 (`e9f856d`) dans main `7dc0c74655be`. Ses contrôles Windows ont réussi.

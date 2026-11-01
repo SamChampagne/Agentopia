@@ -3,22 +3,29 @@ import { citerPowerShell } from './lancementsWindows.js';
 import { surPath } from './chemins.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { argumentsGitCompte } from './authGitReseau.js';
+import { StringDecoder } from 'node:string_decoder';
 
-export interface OptionsExecution { signal?: AbortSignal; timeoutMs?: number; maxOctets?: number; progression?: (texte: string) => void }
-export interface ResultatExecution { ok: boolean; sortie: string; code: number | null }
-const operations = new Set<AbortController>();
+export interface OptionsExecution { signal?: AbortSignal; timeoutMs?: number; maxOctets?: number; progression?: (texte: string) => void; entree?: string }
+export interface ResultatExecution { ok: boolean; sortie: string; code: number | null; stdout?: string; stderr?: string }
+const operations = new Map<AbortController, Promise<void>>();
 const contexte = new AsyncLocalStorage<AbortSignal>();
 export function dansOperationGit<T>(signal: AbortSignal, action: () => T): T { return contexte.run(signal, action); }
 /** Annule uniquement les processus créés par ce module, jamais un PID lu sur disque. */
-export function annulerOperationsGit(): void { for (const c of operations) c.abort(); }
+export async function annulerOperationsGit(): Promise<void> {
+    const enCours = [...operations];
+    for (const [c] of enCours) c.abort();
+    await Promise.all(enCours.map(([, fin]) => fin));
+}
 export async function executerProcessus(programme: string, args: string[], cwd: string, options: OptionsExecution = {}): Promise<ResultatExecution> {
-    const control = new AbortController(); operations.add(control);
+    const control = new AbortController();
+    let terminer!: () => void;
+    operations.set(control, new Promise<void>(r => { terminer = r; }));
     const externe = options.signal || contexte.getStore();
     const signal = externe ? AbortSignal.any([externe, control.signal]) : control.signal;
     try {
         signal.throwIfAborted();
         return await new Promise<ResultatExecution>((resolve, reject) => {
-            let fini = false, sorti = false, interrompu = false, sortie = '', octets = 0;
+            let fini = false, sorti = false, interrompu = false, sortie = '', stdout = '', stderr = '', octets = 0;
             let enfant: ChildProcess;
             if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(programme)) {
                 const texte = `& ${citerPowerShell(programme)} ${args.map(citerPowerShell).join(' ')}; exit $LASTEXITCODE`;
@@ -27,7 +34,7 @@ export async function executerProcessus(programme: string, args: string[], cwd: 
             const finir = (err?: Error, code: number | null = null) => {
                 if (fini) return; fini = true; clearTimeout(timer); signal.removeEventListener('abort', annuler);
                 enfant.stdin?.destroy(); enfant.stdout?.destroy(); enfant.stderr?.destroy(); enfant.unref();
-                if (err) reject(err); else resolve({ ok: code === 0, code, sortie: sortie.trim() });
+                if (err) reject(err); else resolve({ ok: code === 0, code, sortie: sortie.trim(), stdout, stderr });
             };
             const arreter = (raison: string) => {
                 if (fini || interrompu) return; interrompu = true;
@@ -45,19 +52,28 @@ export async function executerProcessus(programme: string, args: string[], cwd: 
             const annuler = () => arreter('Opération annulée');
             const timer = setTimeout(() => arreter('Durée maximale atteinte'), options.timeoutMs ?? 30_000);
             signal.addEventListener('abort', annuler, { once: true });
-            const lire = (b: Buffer) => {
-                octets += b.length;
-                if (octets > (options.maxOctets ?? 2 * 1024 * 1024)) { arreter('Sortie maximale atteinte'); return; }
-                const texte = b.toString('utf8'); sortie += texte;
+            const publier = (texte: string, erreur: boolean) => {
+                if (fini || interrompu || !texte) return;
+                sortie += texte;
+                if (erreur) stderr += texte; else stdout += texte;
                 try { options.progression?.(texte); }
                 catch { arreter('Écriture du journal impossible'); }
             };
-            enfant.stdout?.on('data', lire); enfant.stderr?.on('data', lire);
+            for (const [flux, erreur] of [[enfant.stdout, false], [enfant.stderr, true]] as const) {
+                const decoder = new StringDecoder('utf8');
+                flux?.on('data', (b: Buffer) => {
+                    octets += b.length;
+                    if (octets > (options.maxOctets ?? 2 * 1024 * 1024)) { arreter('Sortie maximale atteinte'); return; }
+                    publier(decoder.write(b), erreur);
+                });
+                flux?.on('end', () => publier(decoder.end(), erreur));
+            }
+            enfant.stdin?.on('error', (e: NodeJS.ErrnoException) => { if (e.code !== 'EPIPE' && e.code !== 'ERR_STREAM_DESTROYED') arreter('Entrée de la commande indisponible'); });
             enfant.once('error', (e) => finir(e)); enfant.once('exit', () => { sorti = true; });
             enfant.once('close', (code) => { if (!interrompu) finir(undefined, code); });
-            if (signal.aborted) annuler();
+            if (signal.aborted) annuler(); else enfant.stdin?.end(options.entree);
         });
-    } finally { operations.delete(control); }
+    } finally { operations.delete(control); terminer(); }
 }
 export function gitExecution(args: string[], cwd: string, options: OptionsExecution = {}): Promise<ResultatExecution> {
     return executerProcessus('git', argumentsGitCompte(args), cwd, options);

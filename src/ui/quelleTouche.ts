@@ -34,7 +34,7 @@ export const ARBRE: Groupe = {
         g: {
             nom: 'Git', enfants: {
                 g: { nom: 'Vue Git', commande: '/git' },
-                c: { nom: 'Commit (IA)', commande: '/commit' },
+                c: { nom: 'Préparer un commit', commande: '/commit' },
                 r: { nom: 'Revue du diff', commande: '/revue' },
                 p: { nom: 'Pull', commande: '/pull' },
                 e: { nom: 'PR : corriger la revue', commande: '/pr-corriger' },

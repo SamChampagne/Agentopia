@@ -2,6 +2,7 @@ import { proposerPlan } from '../dist/conseiller.js';
 import { indicationNouvelleSession, nomAgentSession } from '../dist/ui/identiteSession.js';
 import { preparationAReprendre } from '../dist/preparation.js';
 import { installerDiagnostics } from '../dist/diagnostics.js';
+import { annulerOperationsGit } from '../dist/gitExecution.js';
 // Agentopia sous OpenTUI : même style que l'interface Ink, avec les mêmes données et les mêmes commandes.
 // Lancer : bun tui/app.tsx   (Ctrl+C pour quitter)
 import * as fs from 'fs';
@@ -945,7 +946,11 @@ if (import.meta.main) {
         await renderer.resume();
         activerEntreeVT();
     });
-    const quitter = () => {
+    let fermetureEnCours = false;
+    const quitter = async () => {
+        if (fermetureEnCours) return;
+        fermetureEnCours = true;
+        await annulerOperationsGit();
         renderer.destroy();
         restaurerConsole();
         process.exit(0);
