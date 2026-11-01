@@ -36,7 +36,8 @@ try {
     ui.mockInput.pressEnter(); ui.mockInput.pressEnter(); await dessiner();
     assert.equal(actions.length, 1, 'une seule activation pour un double appui');
     assert.deepEqual(actions.pop(), ['/compte github', '/config']); assert.equal(fermetures, 1);
-    root.render(<VueConfig key="nouvelle-ouverture" fermer={() => fermetures++} />); await dessiner();
+    root.render(<VueConfig fermer={() => fermetures++} />); await dessiner();
+    ui.mockInput.pressEscape(); await dessiner();
     ui.mockInput.typeText('/'); ui.mockInput.typeText('inexistantq'); await dessiner();
     assert.ok(ui.captureCharFrame().includes('Aucun réglage trouvé')); assert.equal(fermetures, 1, 'q dans une recherche ne ferme pas');
     ui.mockInput.pressEnter(); await dessiner(); assert.equal(actions.length, 0);

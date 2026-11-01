@@ -26,8 +26,10 @@ export function creerUseConfig(hooks: Pick<typeof import('react'), 'useEffect' |
         const [github, setGitHub] = useState<EtatCompteGitHub>();
         const [recherche, setRecherche] = useState(''), [edition, setEdition] = useState(false), [position, setPosition] = useState(0);
         const texteClavier = useRef(''), editionClavier = useRef(false), positionClavier = useRef(0);
-        const fermee = useRef(false);
-        const quitter = () => { if (!fermee.current) { fermee.current = true; fermer(); } };
+        // Une nouvelle demande peut réutiliser le composant dans la même frame React.
+        const fermetureDemandee = useRef<(() => void) | undefined>(undefined);
+        const estFermee = () => fermetureDemandee.current === fermer;
+        const quitter = () => { if (!estFermee()) { fermetureDemandee.current = fermer; fermer(); } };
         useEffect(() => {
             let actif = true;
             void compteClaude().then(v => { if (actif) setClaude(v); }).catch(() => { if (actif) setClaude({ connecte: false }); });
@@ -43,7 +45,7 @@ export function creerUseConfig(hooks: Pick<typeof import('react'), 'useEffect' |
         const filtrer = (t: string) => { texteClavier.current = t.slice(0, 120); setRecherche(texteClavier.current); deplacer(0); };
         const editer = (v: boolean) => { editionClavier.current = v; setEdition(v); };
         const activer = (index?: number) => {
-            if (fermee.current) return;
+            if (estFermee()) return;
             const actuelles = filtrerConfig(refLignes.current, texteClavier.current);
             const choix = actuelles.filter(l => l.type === 'reglage');
             const l = index === undefined ? choix[Math.min(positionClavier.current, choix.length - 1)] : actuelles[index];
@@ -51,12 +53,12 @@ export function creerUseConfig(hooks: Pick<typeof import('react'), 'useEffect' |
             quitter(); bus.emit('lancer', [l.commande, '/config']);
         };
         const naviguer = (delta: number) => {
-            if (fermee.current) return;
+            if (estFermee()) return;
             const n = filtrerConfig(refLignes.current, texteClavier.current).filter(l => l.type === 'reglage').length;
             deplacer(Math.max(0, Math.min(n - 1, positionClavier.current + delta)));
         };
         const clavier = (texte: string, touche: string, ctrl = false, meta = false) => {
-            if (fermee.current) return;
+            if (estFermee()) return;
             if (touche === 'escape') {
                 if (editionClavier.current || texteClavier.current) { editer(false); filtrer(''); } else quitter();
                 return;
