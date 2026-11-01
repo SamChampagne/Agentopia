@@ -695,7 +695,7 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
                 { label: '⎘ Copier le dernier bloc de code', valeur: `/copier-code ${s.sessionId}` },
                 { label: '⎘ Copier la dernière réponse', valeur: `/copier-reponse ${s.sessionId}` },
                 { label: '⌕ Revue du diff', valeur: `/revue ${citerArgument(s.cwd)}` },
-                { label: '✓ Commit avec message IA', valeur: `/commit ${citerArgument(s.cwd)}` },
+                { label: '✓ Préparer un commit', valeur: `/commit ${citerArgument(s.cwd)}` },
                 { label: '◧ VS Code', valeur: `/code ${citerArgument(s.cwd)}` },
                 { label: '▤ Explorateur', valeur: `/ouvrir ${citerArgument(s.cwd)}` },
                 ...ici(s.cwd),

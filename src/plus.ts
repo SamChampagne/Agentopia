@@ -16,7 +16,7 @@ async function vue<P extends object>(module: Promise<Record<string, unknown>>, n
 // ─── Palette (Ctrl+K) : tout ce qu'on peut faire, une recherche floue ────────
 
 const ACTIONS_PROJET: [string, string][] = [
-    ['✦ Mission guidée', '/mission'], ['✻ Nouvelle conversation', '/session'], ['✓ Commit avec un agent', '/commit'], ['⌕ Revue du diff', '/revue'], ['⇣ Pull', '/pull'],
+    ['✦ Mission guidée', '/mission'], ['✻ Nouvelle conversation', '/session'], ['✓ Préparer un commit', '/commit'], ['⌕ Revue du diff', '/revue'], ['⇣ Pull', '/pull'],
     ['◧ VS Code', '/code'], ['❯ Terminal', '/terminal defaut'], ['◆ Équipe guidée', '/equipe nouvelle'], ['▤ Explorateur', '/ouvrir'], ['≡ Toutes les actions', '/actions'],
 ];
 

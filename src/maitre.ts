@@ -37,7 +37,7 @@ const COMMANDES_MAITRE: Record<string, string> = {
     '/equipe <idEquipe>': 'ouvrir une équipe',
     '/terminal <pwsh|cmd|bash|wsl> <projet>': 'ouvrir un terminal dans un projet',
     '/code <projet>': 'ouvrir dans VS Code',
-    '/commit <projet>': 'commit avec message IA',
+    '/commit <projet>': 'préparer un commit, message manuel ou proposé par un agent',
     '/revue <projet>': 'revue du diff par l’agent choisi',
     '/pull <projet>': 'git pull',
     '/section <docker|ssh>': 'afficher / masquer une section de la colonne de gauche',

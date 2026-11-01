@@ -33,17 +33,20 @@ try {
         assert.ok(ecran.includes('@SamChampagneIntebec'), `valeur lisible à ${largeur}`);
         assert.ok(!ecran.includes('Compte Claude CLI'));
     }
-    ui.mockInput.pressEnter(); await dessiner();
+    ui.mockInput.pressEnter(); ui.mockInput.pressEnter(); await dessiner();
+    assert.equal(actions.length, 1, 'une seule activation pour un double appui');
     assert.deepEqual(actions.pop(), ['/compte github', '/config']); assert.equal(fermetures, 1);
-    ui.mockInput.pressEscape(); await dessiner();
+    root.render(<VueConfig key="nouvelle-ouverture" fermer={() => fermetures++} />); await dessiner();
     ui.mockInput.typeText('/'); ui.mockInput.typeText('inexistantq'); await dessiner();
     assert.ok(ui.captureCharFrame().includes('Aucun réglage trouvé')); assert.equal(fermetures, 1, 'q dans une recherche ne ferme pas');
     ui.mockInput.pressEnter(); await dessiner(); assert.equal(actions.length, 0);
     ui.mockInput.pressKey('u', { ctrl: true }); await dessiner();
     assert.ok(!ui.captureCharFrame().includes('Aucun réglage trouvé'), 'Ctrl+U vide la recherche');
     ui.mockInput.pressEscape(); await dessiner(); assert.equal(fermetures, 1);
-    ui.mockInput.pressArrow('down'); ui.mockInput.pressEnter(); await dessiner();
+    ui.mockInput.pressArrow('down'); ui.mockInput.pressEnter(); ui.mockInput.pressEnter(); await dessiner();
+    assert.equal(actions.length, 1);
     assert.deepEqual(actions.pop(), ['/connexions', '/config'], 'flèche puis Entrée sans attendre un rendu');
+    root.render(<VueConfig key="derniere-ouverture" fermer={() => fermetures++} />); await dessiner();
     ui.mockInput.pressEscape(); await dessiner(); assert.equal(fermetures, 3);
     const equipes = filtrerConfig(lignesConfig(lireEtatConfig()), 'modeles equipe');
     assert.ok(equipes.some(l => l.type === 'reglage' && l.commande === '/modeles-equipes'));

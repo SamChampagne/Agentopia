@@ -291,7 +291,7 @@ async function menu(projetChoisi?: Projet): Promise<void> {
         { label: '» Continuer la dernière session Claude CLI', valeur: 'reprendre' },
         { label: '✦ Mission guidée : corriger, développer, analyser', valeur: 'mission' },
         { label: '⌕ Revue du diff par un agent', valeur: 'revue' },
-        { label: '✓ Commit avec message IA', valeur: 'commit' },
+        { label: '✓ Préparer un commit', valeur: 'commit' },
         { label: '⎇ Nouvelle branche (worktree)', valeur: 'branche' },
         { label: '− Nettoyer les worktrees', valeur: 'nettoyer' },
         { label: '⇄ Serveurs SSH du projet', valeur: 'serveurs' },

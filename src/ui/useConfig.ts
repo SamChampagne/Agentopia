@@ -26,6 +26,8 @@ export function creerUseConfig(hooks: Pick<typeof import('react'), 'useEffect' |
         const [github, setGitHub] = useState<EtatCompteGitHub>();
         const [recherche, setRecherche] = useState(''), [edition, setEdition] = useState(false), [position, setPosition] = useState(0);
         const texteClavier = useRef(''), editionClavier = useRef(false), positionClavier = useRef(0);
+        const fermee = useRef(false);
+        const quitter = () => { if (!fermee.current) { fermee.current = true; fermer(); } };
         useEffect(() => {
             let actif = true;
             void compteClaude().then(v => { if (actif) setClaude(v); }).catch(() => { if (actif) setClaude({ connecte: false }); });
@@ -41,19 +43,22 @@ export function creerUseConfig(hooks: Pick<typeof import('react'), 'useEffect' |
         const filtrer = (t: string) => { texteClavier.current = t.slice(0, 120); setRecherche(texteClavier.current); deplacer(0); };
         const editer = (v: boolean) => { editionClavier.current = v; setEdition(v); };
         const activer = (index?: number) => {
+            if (fermee.current) return;
             const actuelles = filtrerConfig(refLignes.current, texteClavier.current);
             const choix = actuelles.filter(l => l.type === 'reglage');
             const l = index === undefined ? choix[Math.min(positionClavier.current, choix.length - 1)] : actuelles[index];
             if (l?.type !== 'reglage') return;
-            fermer(); bus.emit('lancer', [l.commande, '/config']);
+            quitter(); bus.emit('lancer', [l.commande, '/config']);
         };
         const naviguer = (delta: number) => {
+            if (fermee.current) return;
             const n = filtrerConfig(refLignes.current, texteClavier.current).filter(l => l.type === 'reglage').length;
             deplacer(Math.max(0, Math.min(n - 1, positionClavier.current + delta)));
         };
         const clavier = (texte: string, touche: string, ctrl = false, meta = false) => {
+            if (fermee.current) return;
             if (touche === 'escape') {
-                if (editionClavier.current || texteClavier.current) { editer(false); filtrer(''); } else fermer();
+                if (editionClavier.current || texteClavier.current) { editer(false); filtrer(''); } else quitter();
                 return;
             }
             if (touche === 'up') return naviguer(-1);
@@ -61,7 +66,7 @@ export function creerUseConfig(hooks: Pick<typeof import('react'), 'useEffect' |
             if (touche === 'return') return activer();
             if (!editionClavier.current) {
                 if (texte === '/') editer(true);
-                else if (texte === 'q') fermer();
+                else if (texte === 'q') quitter();
                 return;
             }
             if (touche === 'backspace' || touche === 'delete') return filtrer(Array.from(texteClavier.current).slice(0, -1).join(''));

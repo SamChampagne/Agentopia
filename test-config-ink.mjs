@@ -27,8 +27,8 @@ try {
         assert.ok(ui.lastFrame().includes('@SamChampagneIntebec'), `valeur lisible à ${largeur}`);
         assert.ok(ui.lastFrame().includes('Compte GitHub')); assert.ok(!ui.lastFrame().includes('Compte Claude CLI'));
     }
-    ui.stdin.write('\r'); await attendre(); assert.deepEqual(actions.pop(), ['/compte github', '/config']);
-    ui.stdin.write('\u001b'); await attendre();
+    ui.stdin.write('\r'); ui.stdin.write('\r'); await attendre(); assert.equal(actions.length, 1); assert.deepEqual(actions.pop(), ['/compte github', '/config']);
+    ui.rerender(React.createElement(VueConfig, { key: 'nouvelle-ouverture', fermer: () => fermetures++ })); await attendre();
     ui.stdin.write('/'); await attendre(); ui.stdin.write('inexistantq'); await attendre();
     assert.ok(ui.lastFrame().includes('Aucun réglage trouvé')); assert.equal(fermetures, 1);
     ui.stdin.write('\r'); await attendre(); assert.equal(actions.length, 0);
