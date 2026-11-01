@@ -770,7 +770,7 @@ export const COMMANDES: Commande[] = [
     },
     {
         nom: 'commit', projet: true, args: '[projet]', groupe: 'Git',
-        description: 'Commit avec un message écrit par l’agent choisi',
+        description: 'Commit avec message manuel ou proposé par un agent, à valider avant envoi',
         executer: ({ projet }) => commit(projet!),
     },
     {

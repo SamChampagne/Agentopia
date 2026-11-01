@@ -1,4 +1,5 @@
 import { proposerPlan } from '../conseiller.js';
+import { annulerOperationsGit } from '../gitExecution.js';
 import { indicationNouvelleSession, nomAgentSession } from './identiteSession.js';
 import { citerArgument } from '../ligneCommande.js';
 import { useBrouillon } from './useBrouillon.js';
@@ -452,7 +453,11 @@ export function App({ commandeInitiale, auDemarrage }: { commandeInitiale?: stri
         return dedans ? actionsS[by - 3] : undefined;
     };
 
-    function quitter() {
+    const fermetureEnCours = useRef(false);
+    async function quitter() {
+        if (fermetureEnCours.current) return;
+        fermetureEnCours.current = true;
+        await annulerOperationsGit();
         quitterEcran();
         process.exit(0);
     }

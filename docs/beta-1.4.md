@@ -1,5 +1,14 @@
 # Agentopia 1.4 — bêta Windows
 
+## 1.4.0-beta.19 — Git réactif et réglages accessibles
+
+- Message de commit manuel sans fournisseur, avec proposition par un agent toujours disponible et confirmation explicite.
+- Relecture, commit et push asynchrones et bornés ; indexation, commit et push interrompables. Un échec de commit ne déclenche jamais l’envoi.
+- Contrôle de l’index, de HEAD et de la branche avant de créer le commit ; un changement depuis l’aperçu demande de recommencer.
+- Recherche dans Config avec `/`, accents facultatifs, navigation au clavier et valeur sélectionnée lisible dans les petites fenêtres.
+- Logique de Config commune aux deux rendus ; gestion UTF-8 et fermeture de l’entrée standard dans l’exécuteur de processus commun.
+- [Utilisation et limites](git-et-config.md). Les tests utilisent des dépôts et profils temporaires, des fournisseurs simulés et un distant Git local.
+
 ## 1.4.0-beta.18 — choisir son compte GitHub local
 
 - Sélecteur dans Config, Connexions et `/compte github`, avec compte choisi visible et annulation sans changement.
