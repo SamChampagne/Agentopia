@@ -5,7 +5,7 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { CHEMINS } from './chemins.js';
-import { trouverBun } from './runtimeInterface.js';
+import { lancementInterface, trouverBun } from './runtimeInterface.js';
 import { installerDiagnostics } from './diagnostics.js';
 installerDiagnostics();
 
@@ -18,10 +18,11 @@ if (process.argv.includes('--verifier-installation')) {
 // Nouvelle interface (OpenTUI, sous Bun) : utilisée dès que Bun et ses dépendances sont là.
 // CLAUDETOPIA_INK=1 garde l'ancienne interface (Ink) ; si Bun ne démarre pas, on y revient aussi.
 const RACINE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const TUI = path.join(RACINE, 'tui', 'app.tsx');
+const TUI = path.join(RACINE, 'tui', 'lancer.ts');
 const bun = !process.env.CLAUDETOPIA_INK && fs.existsSync(path.join(RACINE, 'tui', 'node_modules', '@opentui', 'core')) ? trouverBun() : undefined;
 if (bun && fs.existsSync(TUI)) {
-    const res = spawnSync(bun, ['--tsconfig-override', path.join(RACINE, 'tui', 'tsconfig.json'), '--jsx-import-source', '@opentui/react', TUI, ...process.argv.slice(2)], { stdio: 'inherit', env: { ...process.env, NODE_ENV: process.env.NODE_ENV ?? 'production' } });
+    const lancement = lancementInterface(RACINE, process.argv.slice(2));
+    const res = spawnSync(bun, lancement.args, { stdio: 'inherit', cwd: lancement.cwd, env: lancement.env });
     if (!res.error) process.exit(res.status ?? 0);
     console.error(`Nouvelle interface indisponible (${res.error.message}) : démarrage de l'ancienne.`);
 }
