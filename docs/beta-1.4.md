@@ -1,5 +1,13 @@
 # Agentopia 1.4 — bêta Windows
 
+## 1.4.0-beta.20 — fermeture Windows sans diagnostic Bun
+
+- Suppression de l’option de lancement qui provoquait le diagnostic `directory mismatch` de Bun à la fermeture, sans masquer les erreurs.
+- Préparation du lanceur et du contrôle d’installation centralisée : configuration JSX d’Agentopia chargée au démarrage, puis retour au dossier du projet avant les imports applicatifs.
+- Contrôle d’installation renforcé : un diagnostic interne n’est plus accepté sur la seule base d’un code de sortie 0.
+- Régression couverte en production et développement, avec trois configurations TypeScript externes et un cache froid puis réutilisé.
+- [Reproduction, correctif et vérifications](fermeture-windows.md). Aucun changement de disposition des écrans ni de version du runtime.
+
 ## 1.4.0-beta.19 — Git réactif et réglages accessibles
 
 - Message de commit manuel sans fournisseur, avec proposition par un agent toujours disponible et confirmation explicite.

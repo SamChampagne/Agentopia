@@ -9,6 +9,7 @@
 
 ## Guides et rapports existants
 
+- [Fermeture Windows — bêta 20](fermeture-windows.md)
 - [Commits Git et recherche des réglages](git-et-config.md)
 - [Choisir son compte GitHub local](comptes-github.md)
 - [ameliorations-mn](ameliorations-mn.md)

@@ -911,7 +911,7 @@ export function App({ quitter, commandeInitiale, auDemarrage, accueil = false, l
     );
 }
 
-if (import.meta.main) {
+export async function demarrerInterface() {
     installerDiagnostics();
     // « sp commit saniplan » : exécute la commande dans l'interface puis quitte
     const commandeInitiale = process.argv.slice(2).join(' ').trim() || undefined;
@@ -957,3 +957,5 @@ if (import.meta.main) {
     };
     createRoot(renderer).render(<App quitter={quitter} commandeInitiale={commandeInitiale} auDemarrage={auDemarrage} accueil={!commandeInitiale && !auDemarrage} />);
 }
+
+if (import.meta.main) await demarrerInterface();
